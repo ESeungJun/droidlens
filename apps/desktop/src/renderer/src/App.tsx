@@ -8,6 +8,8 @@ import { LibsTab } from './tabs/LibsTab';
 import { AppInfoTab } from './tabs/AppInfoTab';
 import { ScenariosTab } from './tabs/ScenariosTab';
 import { SettingsTab } from './tabs/SettingsTab';
+import { NetworkTab } from './tabs/NetworkTab';
+import { AppDataTab } from './tabs/AppDataTab';
 
 interface Ctx {
   serial: string | null;
@@ -25,6 +27,8 @@ const TABS = [
   ['inspect', '뷰 계층'],
   ['flow', '화면 흐름'],
   ['logs', '로그'],
+  ['network', '네트워크'],
+  ['data', '앱 데이터'],
   ['libs', '라이브러리'],
   ['info', '앱 정보'],
   ['scen', '시나리오'],
@@ -32,15 +36,17 @@ const TABS = [
 ] as const;
 type TabId = (typeof TABS)[number][0];
 
+const initial = new URLSearchParams(location.hash.slice(1));
+
 export function App() {
   const [devices, setDevices] = useState<DeviceSummary[]>([]);
   const [serial, setSerial] = useState<string | null>(null);
   const [pkgs, setPkgs] = useState<PackageSummary[]>([]);
-  const [pkg, setPkg] = useState<string | null>(null);
+  const [pkg, setPkg] = useState<string | null>(initial.get('pkg'));
   const [fgPkg, setFgPkg] = useState<string>('');
   const [filter, setFilter] = useState('');
   const [thirdOnly, setThirdOnly] = useState(true);
-  const [tab, setTab] = useState<TabId>('screen');
+  const [tab, setTab] = useState<TabId>((initial.get('tab') as TabId) || 'screen');
   const [toastMsg, setToastMsg] = useState<{ msg: string; err?: boolean } | null>(null);
   const [adbOk, setAdbOk] = useState<boolean | null>(null);
   const [agent, setAgent] = useState<AgentStatus | null>(null);
@@ -102,7 +108,11 @@ export function App() {
     return () => clearInterval(t);
   }, [serial]);
 
-  const shown = useMemo(() => pkgs.filter((p) => p.packageName.includes(filter.trim())), [pkgs, filter]);
+  // DroidLens 온디바이스 에이전트 자체는 분석 대상이 아니므로 숨긴다
+  const shown = useMemo(
+    () => pkgs.filter((p) => p.packageName !== 'io.github.eseungjun.droidlens.agent' && p.packageName.includes(filter.trim())),
+    [pkgs, filter],
+  );
   const ctx = useMemo<Ctx>(() => ({ serial, pkg, setPkg, toast, run }), [serial, pkg, toast, run]);
 
   return (
@@ -208,6 +218,8 @@ export function App() {
                   {tab === 'inspect' && <InspectorTab />}
                   {tab === 'flow' && <FlowTab />}
                   {tab === 'logs' && <LogTab />}
+                  {tab === 'network' && <NetworkTab />}
+                  {tab === 'data' && <AppDataTab />}
                   {tab === 'libs' && <LibsTab />}
                   {tab === 'info' && <AppInfoTab />}
                   {tab === 'scen' && <ScenariosTab />}

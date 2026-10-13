@@ -27,8 +27,21 @@ function createWindow(): void {
       sandbox: false,
     },
   });
-  if (process.env.ELECTRON_RENDERER_URL) win.loadURL(process.env.ELECTRON_RENDERER_URL);
-  else win.loadFile(join(__dirname, '../renderer/index.html'));
+  // 개발용: DROIDLENS_OPEN="tab=network&pkg=com.example"로 시작 탭/앱 지정,
+  // DROIDLENS_SNAPSHOT=<png 경로>면 로드 후 화면을 캡처해 저장하고 종료 (UI 자동 확인용)
+  const hash = process.env.DROIDLENS_OPEN ?? '';
+  if (process.env.ELECTRON_RENDERER_URL) win.loadURL(`${process.env.ELECTRON_RENDERER_URL}#${hash}`);
+  else win.loadFile(join(__dirname, '../renderer/index.html'), { hash });
+  const snapshotPath = process.env.DROIDLENS_SNAPSHOT;
+  if (snapshotPath) {
+    win.webContents.once('did-finish-load', () => {
+      setTimeout(async () => {
+        const img = await win!.webContents.capturePage();
+        await import('node:fs/promises').then((fs) => fs.writeFile(snapshotPath, img.toPNG()));
+        app.quit();
+      }, Number(process.env.DROIDLENS_SNAPSHOT_DELAY ?? 8000));
+    });
+  }
   win.on('closed', () => (win = null));
 }
 
@@ -170,6 +183,15 @@ handle('explore', async (s: string, pkg: string, maxSteps: number, maxDepth: num
   return { steps: r.steps, skipped: r.skipped, errors: r.errors };
 });
 handle('exploreStop', async () => exploreAbort?.abort());
+
+// ---------- 앱 SDK ----------
+const SDK_METHODS = ['info', 'network', 'networkDetail', 'clearNetwork', 'prefs', 'setPref', 'removePref', 'databases', 'query', 'events'] as const;
+handle('sdkApps', (s: string) => dl.listSdkApps(dev(s)));
+handle('sdk', async (s: string, pkg: string, method: (typeof SDK_METHODS)[number], ...args: unknown[]) => {
+  if (!SDK_METHODS.includes(method)) throw new Error(`지원하지 않는 SDK 메서드: ${method}`);
+  const c = await dl.sdkFor(dev(s), pkg);
+  return (c[method] as (...a: unknown[]) => Promise<unknown>).apply(c, args);
+});
 
 // ---------- 기타 ----------
 handle('reveal', async (p: string) => shell.showItemInFolder(p));

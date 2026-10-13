@@ -1,0 +1,41 @@
+plugins {
+    id 'com.android.library'
+    id 'maven-publish'
+}
+
+android {
+    namespace 'io.github.eseungjun.droidlens.sdk.noop'
+    compileSdk 34
+
+    defaultConfig {
+        minSdk 21
+    }
+
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_1_8
+        targetCompatibility JavaVersion.VERSION_1_8
+    }
+
+    publishing {
+        singleVariant('release') { withSourcesJar() }
+    }
+}
+
+dependencies {
+    // 앱이 OkHttp를 쓸 때만 네트워크 인스펙터를 붙인다 (SDK가 버전을 강제하지 않음)
+    compileOnly 'com.squareup.okhttp3:okhttp:4.12.0'
+}
+
+afterEvaluate {
+    publishing {
+        publications {
+            release(MavenPublication) {
+                from components.release
+                groupId = 'com.github.ESeungJun.droidlens'
+                artifactId = 'sdk-noop'
+                version = rootProject.ext.sdkVersion
+            }
+        }
+    }
+}

@@ -23,11 +23,11 @@
 - [x] **온디바이스 에이전트 APK**: 뷰 계층 0.03~0.3초, 접근성 이벤트 기반 Activity 추적, 한글 입력, idle 대기
 - [x] 자동 탐색: CLEAR_TASK 실행, 구조 안정 판정, ANR/크래시 대화상자 처리
 - [ ] **scrcpy 연동** 고프레임 미러링 (현재 screencap 폴링 2~4fps)
-- [ ] **선택형 Kotlin SDK** (`debugImplementation`), `adb forward`로 데스크톱과 WebSocket 연결
-  - 네트워크 인스펙터 (OkHttp Interceptor): 요청/응답, 타이밍, 목킹
-  - DB 브라우저 (Room/SQLite), SharedPreferences/DataStore 편집
-  - Compose 트리 상세 (recomposition 횟수, modifier, semantics)
-  - 커스텀 이벤트/로그 채널
+- [x] **선택형 SDK** (v0.2.0, JitPack, `debugImplementation` + `sdk-noop`), localabstract 소켓 + `adb forward`
+  - [x] 네트워크 인스펙터 (OkHttp Interceptor): 요청/응답 헤더·본문, 타이밍, 실패
+  - [x] DB 브라우저 (SQLite/Room) + SQL, SharedPreferences 조회·편집
+  - [x] 커스텀 이벤트
+  - [ ] 네트워크 목킹/응답 조작, DataStore, Compose 트리 상세(recomposition)
 - [ ] 자동 탐색 개선: 스크롤 영역 탐색, 입력 폼 더미 값, 로그인 시나리오 프리셋 후 탐색
 - [ ] 화면 그래프 레이아웃 개선 (dagre/elk), 그래프 diff (버전 간 화면 변화)
 

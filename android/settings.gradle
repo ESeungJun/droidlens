@@ -13,4 +13,4 @@ dependencyResolutionManagement {
     }
 }
 rootProject.name = 'droidlens-android'
-include ':agent'
+include ':agent', ':sdk', ':sdk-noop', ':sample'

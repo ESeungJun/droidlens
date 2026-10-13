@@ -1,0 +1,5 @@
+# JitPack: com.github.ESeungJun.droidlens:sdk:<태그>, com.github.ESeungJun.droidlens:sdk-noop:<태그>
+jdk:
+  - openjdk17
+install:
+  - cd android && ./gradlew :sdk:publishToMavenLocal :sdk-noop:publishToMavenLocal --no-daemon

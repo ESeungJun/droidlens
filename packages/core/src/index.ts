@@ -8,3 +8,4 @@ export * from './scenario.js';
 export * from './workspace.js';
 export * from './image.js';
 export * from './agent.js';
+export * from './sdk.js';
