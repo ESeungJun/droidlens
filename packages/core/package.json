@@ -4,17 +4,25 @@
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
-  "exports": { ".": { "types": "./dist/index.d.ts", "default": "./dist/index.js" } },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
     "fast-xml-parser": "^5.2.5",
-    "fflate": "^0.8.2"
+    "fflate": "^0.8.2",
+    "pngjs": "^7.0.0",
+    "jpeg-js": "^0.4.4"
   },
   "devDependencies": {
     "@types/node": "^22.10.0",
-    "typescript": "~5.9.3"
+    "typescript": "~5.9.3",
+    "@types/pngjs": "^6.0.5"
   }
 }

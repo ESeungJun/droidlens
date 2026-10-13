@@ -2,11 +2,14 @@
   "name": "@droidlens/mcp",
   "version": "0.1.0",
   "type": "module",
-  "bin": { "droidlens-mcp": "dist/index.js" },
+  "bin": {
+    "droidlens-mcp": "dist/index.js"
+  },
   "main": "dist/index.js",
   "scripts": {
-    "build": "tsc -p tsconfig.json",
-    "typecheck": "tsc -p tsconfig.json --noEmit"
+    "build": "tsc -p tsconfig.json && pnpm run bundle",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "bundle": "esbuild src/index.ts --bundle --platform=node --format=esm --target=node20 --outfile=dist/droidlens-mcp.mjs --banner:js=\"import { createRequire as __cr } from 'module'; const require = __cr(import.meta.url);\""
   },
   "dependencies": {
     "@droidlens/core": "workspace:*",
@@ -15,6 +18,7 @@
   },
   "devDependencies": {
     "@types/node": "^22.10.0",
-    "typescript": "~5.9.3"
+    "typescript": "~5.9.3",
+    "esbuild": "^0.28.2"
   }
 }

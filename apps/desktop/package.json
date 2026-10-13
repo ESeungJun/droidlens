@@ -8,10 +8,9 @@
     "dev": "electron-vite dev",
     "build": "electron-vite build",
     "start": "electron-vite preview",
-    "typecheck": "tsc --noEmit -p tsconfig.json"
-  },
-  "dependencies": {
-    "@droidlens/core": "workspace:*"
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "dist": "electron-vite build && electron-builder",
+    "dist:mac": "electron-vite build && electron-builder --mac"
   },
   "devDependencies": {
     "@types/node": "^22.10.0",
@@ -24,6 +23,10 @@
     "react": "^19.3.0",
     "react-dom": "^19.3.0",
     "typescript": "~5.9.3",
-    "vite": "^7.3.7"
-  }
+    "vite": "^7.3.7",
+    "@droidlens/core": "workspace:*",
+    "electron-builder": "^26.15.3"
+  },
+  "author": "ESeungJun",
+  "homepage": "https://github.com/ESeungJun/droidlens"
 }
