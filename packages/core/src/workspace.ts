@@ -20,7 +20,8 @@ export function timestamp(d = new Date()): string {
 }
 
 export function safeName(s: string): string {
-  return s.replace(/[^\w.-]+/g, '_').slice(0, 80) || 'unnamed';
+  // 한글 등 유니코드 글자는 살리고 경로에 위험한 문자만 바꾼다
+  return s.replace(/[^\p{L}\p{N}._-]+/gu, '_').replace(/^\.+/, '_').slice(0, 80) || 'unnamed';
 }
 
 export async function readJson<T>(path: string): Promise<T | undefined> {

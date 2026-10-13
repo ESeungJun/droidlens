@@ -1,7 +1,7 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import * as dl from '@droidlens/core';
-import { device, hasSelector, resolveNode, text, serialArg, selectorShape, pickSelector, describeNode, readOnly, acts } from '../common.js';
+import { device, hasSelector, resolveNode, recordStep, cleanSelector, text, serialArg, selectorShape, pickSelector, describeNode, readOnly, acts } from '../common.js';
 
 export function register(server: McpServer): void {
   // ---------- 조작 ----------
@@ -33,6 +33,13 @@ export function register(server: McpServer): void {
       if (x === undefined || y === undefined) throw new Error('셀렉터나 x/y 중 하나가 필요합니다');
       if (a.long) await dl.longPress(dev, x, y);
       else await dl.tap(dev, x, y);
+      // 녹화: 셀렉터로 눌렀으면 셀렉터를, 아니면 좌표를 남긴다 (셀렉터 쪽이 해상도·레이아웃 변화에 강하다)
+      const target = hasSelector(sel) ? cleanSelector(sel) : undefined;
+      recordStep(
+        target
+          ? ((a.long ? { longPress: target } : { tap: target }) as dl.ScriptStep)
+          : { tapAt: { x: Math.round(x), y: Math.round(y) } },
+      );
       return text(`${a.long ? 'long-pressed' : 'tapped'}: ${what}`);
     },
   );
@@ -56,6 +63,7 @@ export function register(server: McpServer): void {
       const dev = await device(a.serial);
       if (a.direction) {
         await dl.swipeDirection(dev, a.direction, a.durationMs);
+        recordStep({ swipe: a.direction });
         return text(`swiped ${a.direction}`);
       }
       if ([a.x1, a.y1, a.x2, a.y2].some((v) => v === undefined)) throw new Error('direction 또는 x1,y1,x2,y2가 필요합니다');
@@ -83,12 +91,14 @@ export function register(server: McpServer): void {
         const agent = await dl.ensureAgent(dev);
         if (agent) {
           await dl.replaceText(dev, a.value);
+          recordStep({ type: { text: a.value, clear: true, ...(hasSelector(sel) ? { into: cleanSelector(sel) } : {}) } } as dl.ScriptStep);
           return text(`replaced with ${a.value.length} chars`);
         }
         await dl.pressKey(dev, 123); // MOVE_END
         await dev.shell(`input keyevent ${Array(60).fill(67).join(' ')}`);
       }
       await dl.typeText(dev, a.value);
+      recordStep({ type: { text: a.value, ...(hasSelector(sel) ? { into: cleanSelector(sel) } : {}) } } as dl.ScriptStep);
       return text(`typed ${a.value.length} chars`);
     },
   );
@@ -102,6 +112,7 @@ export function register(server: McpServer): void {
     },
     async ({ serial, key }) => {
       await dl.pressKey(await device(serial), key);
+      recordStep({ key });
       return text(`pressed ${key}`);
     },
   );
@@ -122,6 +133,7 @@ export function register(server: McpServer): void {
         if (h) {
           const found = dl.findNodes(h.root, sel);
           if (a.gone ? found.length === 0 : found.length > 0) {
+            recordStep({ wait: { ...cleanSelector(sel), ...(a.gone ? { gone: true } : {}), ...(a.timeoutMs ? { timeout: a.timeoutMs } : {}) } } as dl.ScriptStep);
             return text(a.gone ? '사라짐 확인' : `발견: ${describeNode(found[0])}`);
           }
         }

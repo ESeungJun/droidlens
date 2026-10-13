@@ -1,0 +1,23 @@
+# DroidLens 시나리오 스크립트 예시 — android/sample 앱 (SDK 포함 debug 빌드)
+# 실행: droidlens-mcp run examples/scripts   또는 MCP script_run / 데스크톱 시나리오 탭
+name: 샘플 앱 — 메모·네트워크·이벤트
+app: io.github.eseungjun.droidlens.sample
+description: 메모 추가 후 DB 저장, 커스텀 이벤트, 설정 저장을 확인한다
+setup:
+  restart: true
+steps:
+  - wait: { desc: btn_db }
+  - tap: { desc: btn_db }
+  - assert: { visible: { textContains: "note #" } }
+  - assert: { db: { db: sample.db, sql: "SELECT COUNT(*) > 0 FROM notes", equals: 1 } }
+
+  - tap: { desc: btn_event }
+  - assert: { event: button_clicked }
+
+  - tap: { desc: btn_prefs }
+  - assert: { pref: { file: settings, key: nickname, equals: 냥이 } }
+
+  # 화면에 없을 수도 있는 요소는 optional
+  - tap: { text: "다시 보지 않기", optional: true, timeout: 1000 }
+  - back
+  - assert: { noCrash: true }

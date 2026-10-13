@@ -1,7 +1,7 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import * as dl from '@droidlens/core';
-import { device, text, json, serialArg, readOnly, acts } from '../common.js';
+import { device, text, json, serialArg, readOnly, acts, recordStep } from '../common.js';
 
 export function register(server: McpServer): void {
   // ---------- 앱 ----------
@@ -42,6 +42,7 @@ export function register(server: McpServer): void {
       } else {
         s = await dl.launchAndSettle(dev, packageName, { restart });
       }
+      recordStep({ launch: restart ? { restart: true } : null });
       return text(`launched ${packageName} → ${s.screen.activity}`);
     },
   );
@@ -71,7 +72,11 @@ export function register(server: McpServer): void {
   server.registerTool(
     'open_deeplink',
     { description: '딥링크/URL을 VIEW 인텐트로 열기', inputSchema: { ...serialArg, uri: z.string(), packageName: z.string().optional() }, annotations: acts },
-    async ({ serial, uri, packageName }) => text(await dl.openDeepLink(await device(serial), uri, packageName)),
+    async ({ serial, uri, packageName }) => {
+      const out = await dl.openDeepLink(await device(serial), uri, packageName);
+      recordStep({ deeplink: uri });
+      return text(out);
+    },
   );
 
   server.registerTool(
