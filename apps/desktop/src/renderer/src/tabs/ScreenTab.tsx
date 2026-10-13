@@ -1,11 +1,16 @@
 import { useEffect, useRef, useState } from 'react';
 import { api, type CurrentScreen, type DeviceInfo } from '../api';
 import { useApp } from '../App';
+import { MirrorCanvas } from '../MirrorCanvas';
 
 export function ScreenTab() {
   const { serial, pkg, toast, run } = useApp();
   const [img, setImg] = useState<string>('');
   const [live, setLive] = useState(true);
+  // stream: scrcpy 고프레임(H.264 + WebCodecs), snapshot: screencap 폴링(2~4fps, 대체 경로)
+  const [mode, setMode] = useState<'stream' | 'snapshot'>('stream');
+  const [fps, setFps] = useState(0);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
   const [info, setInfo] = useState<DeviceInfo | null>(null);
   const [screen, setScreen] = useState<CurrentScreen | null>(null);
   const [recAt, setRecAt] = useState<number | null>(null);
@@ -19,7 +24,7 @@ export function ScreenTab() {
 
   // 미러링 루프: 이전 프레임이 끝나야 다음 요청
   useEffect(() => {
-    if (!serial || !live) return;
+    if (!serial || !live || mode !== 'snapshot') return;
     let stop = false;
     (async () => {
       while (!stop) {
@@ -36,7 +41,7 @@ export function ScreenTab() {
     return () => {
       stop = true;
     };
-  }, [serial, live]);
+  }, [serial, live, mode]);
 
   useEffect(() => {
     if (!serial) return;
@@ -53,12 +58,16 @@ export function ScreenTab() {
     return () => clearInterval(t);
   }, [recAt]);
 
+  /** 화면 요소 좌표 → 기기 좌표. 스트림은 축소된 영상이라 기기 해상도 비율을 곱한다 */
   const toDevice = (clientX: number, clientY: number) => {
-    const el = imgRef.current!;
+    const el = (mode === 'stream' ? canvasRef.current : imgRef.current)!;
     const r = el.getBoundingClientRect();
+    const w = el instanceof HTMLCanvasElement ? el.width : el.naturalWidth;
+    const h = el instanceof HTMLCanvasElement ? el.height : el.naturalHeight;
+    const scale = el instanceof HTMLCanvasElement && info ? Math.max(info.screen.width, info.screen.height) / Math.max(w, h) : 1;
     return {
-      x: ((clientX - r.left) / r.width) * el.naturalWidth,
-      y: ((clientY - r.top) / r.height) * el.naturalHeight,
+      x: ((clientX - r.left) / r.width) * w * scale,
+      y: ((clientY - r.top) / r.height) * h * scale,
     };
   };
 
@@ -134,7 +143,27 @@ export function ScreenTab() {
   return (
     <div className="mirror-wrap">
       <div className="mirror-stage">
-        {img ? (
+        {mode === 'stream' && serial ? (
+          <div className="device-frame">
+            <MirrorCanvas
+              key={serial}
+              ref={(h) => {
+                canvasRef.current = h?.canvas ?? null;
+              }}
+              serial={serial}
+              onFps={setFps}
+              onError={(msg) => {
+                toast(`${msg} — 스냅샷 모드로 전환합니다`, true);
+                setMode('snapshot');
+              }}
+              onMouseDown={onDown}
+              onMouseUp={onUp}
+              onMouseLeave={() => (drag.current = null)}
+              className="mirror-canvas"
+              style={{ opacity: busy ? 0.6 : 1 }}
+            />
+          </div>
+        ) : img ? (
           <div className="device-frame">
             <img
               ref={imgRef}
@@ -157,7 +186,14 @@ export function ScreenTab() {
             <button className="btn sm" onClick={() => key('back')}>◀ 뒤로</button>
             <button className="btn sm" onClick={() => key('home')}>● 홈</button>
             <button className="btn sm" onClick={() => key('recents')}>■ 최근</button>
-            <button className="btn sm" onClick={() => setLive((v) => !v)}>{live ? '⏸ 일시정지' : '▶ 실시간'}</button>
+            {mode === 'snapshot' && (
+              <button className="btn sm" onClick={() => setLive((v) => !v)}>{live ? '⏸ 일시정지' : '▶ 실시간'}</button>
+            )}
+          </div>
+          <div className="keys" style={{ marginTop: 6 }}>
+            <button className={`btn sm ${mode === 'stream' ? 'primary' : ''}`} onClick={() => setMode('stream')}>고프레임</button>
+            <button className={`btn sm ${mode === 'snapshot' ? 'primary' : ''}`} onClick={() => setMode('snapshot')}>스냅샷</button>
+            {mode === 'stream' && <span className="faint" style={{ fontSize: 11, alignSelf: 'center' }}>{fps} fps</span>}
           </div>
           <div className="faint" style={{ fontSize: 11, marginTop: 6 }}>클릭 = 탭 · 드래그 = 스와이프 · 0.6초 이상 = 길게 누르기</div>
         </div>

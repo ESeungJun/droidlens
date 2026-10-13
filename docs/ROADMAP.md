@@ -22,7 +22,8 @@
 
 - [x] **온디바이스 에이전트 APK**: 뷰 계층 0.03~0.3초, 접근성 이벤트 기반 Activity 추적, 한글 입력, idle 대기
 - [x] 자동 탐색: CLEAR_TASK 실행, 구조 안정 판정, ANR/크래시 대화상자 처리
-- [ ] **scrcpy 연동** 고프레임 미러링 (현재 screencap 폴링 2~4fps)
+- [x] **scrcpy 연동** 고프레임 미러링 (v0.3.0, scrcpy v5 서버 + WebCodecs H.264 디코딩, 최대 60fps)
+- [ ] scrcpy 컨트롤 소켓으로 입력 지연 단축, 오디오
 - [x] **선택형 SDK** (v0.2.0, JitPack, `debugImplementation` + `sdk-noop`), localabstract 소켓 + `adb forward`
   - [x] 네트워크 인스펙터 (OkHttp Interceptor): 요청/응답 헤더·본문, 타이밍, 실패
   - [x] DB 브라우저 (SQLite/Room) + SQL, SharedPreferences 조회·편집

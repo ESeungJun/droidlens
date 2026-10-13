@@ -43,10 +43,15 @@ function createWindow(): void {
     });
   }
   win.on('closed', () => (win = null));
+  if (process.env.DROIDLENS_DEBUG) win.webContents.on('console-message', (e) => debug('renderer', e.level, e.message));
 }
 
 const dev = (serial: string) => adb.device(serial);
-const send = (channel: string, payload: unknown) => win?.webContents.send(channel, payload);
+const debug = process.env.DROIDLENS_DEBUG ? (...a: unknown[]) => console.log('[droidlens]', ...a) : () => undefined;
+const send = (channel: string, payload: unknown) => {
+  if (channel !== 'mirror:packet') debug('send', channel, JSON.stringify(payload)?.slice(0, 200));
+  win?.webContents.send(channel, payload);
+};
 
 /** 핸들러 에러를 { error } 로 감싸 렌더러가 메시지를 보여줄 수 있게 한다 */
 function handle<A extends unknown[], R>(channel: string, fn: (...args: A) => Promise<R>): void {
@@ -89,6 +94,38 @@ handle('longPress', (s: string, x: number, y: number) => dl.longPress(dev(s), x,
 handle('swipe', (s: string, x1: number, y1: number, x2: number, y2: number, ms?: number) => dl.swipe(dev(s), x1, y1, x2, y2, ms));
 handle('key', (s: string, key: keyof typeof dl.KEYCODES) => dl.pressKey(dev(s), key));
 handle('typeText', (s: string, t: string) => dl.typeText(dev(s), t));
+
+// ---------- 고프레임 미러링 (scrcpy) ----------
+let mirror: { serial: string; m: dl.Mirror } | null = null;
+const scrcpyServer = () =>
+  app.isPackaged ? resourcePath('scrcpy', 'scrcpy-server') : resourcePath('vendor', 'scrcpy', 'scrcpy-server');
+handle('mirrorStart', async (s: string, maxSize?: number) => {
+  debug('mirrorStart', s, maxSize);
+  mirror?.m.stop();
+  mirror = null;
+  if (!existsSync(scrcpyServer())) throw new Error('scrcpy 서버 파일이 없습니다 (node scripts/fetch-scrcpy.mjs)');
+  const m = await dl.startMirror(
+    dev(s),
+    {
+      onSession: (width, height) => send('mirror:session', { width, height }),
+      // Buffer는 구조화 복제로 Uint8Array가 된다
+      onPacket: (p) => (debug('packet', p.data.length, p.config ? 'config' : '', p.key ? 'key' : ''), send('mirror:packet', { data: p.data, config: p.config, key: p.key, pts: Number(p.pts) })),
+      onClose: (reason) => {
+        if (mirror?.m === m) mirror = null;
+        send('mirror:closed', { reason });
+      },
+    },
+    { serverPath: scrcpyServer(), maxSize: maxSize ?? 1280 },
+  );
+  mirror = { serial: s, m };
+  debug('mirror connected');
+  return true;
+});
+handle('mirrorStop', async () => {
+  debug('mirrorStop');
+  mirror?.m.stop();
+  mirror = null;
+});
 
 // ---------- 녹화 ----------
 const recs = new Map<string, dl.Recording>();
@@ -312,5 +349,6 @@ app.whenReady().then(() => {
 });
 app.on('window-all-closed', () => {
   logStream?.stop();
+  mirror?.m.stop();
   app.quit();
 });

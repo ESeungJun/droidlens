@@ -107,6 +107,12 @@ export const api = {
   agentStatus: (s: string) => call<AgentStatus>('agentStatus', s),
   agentStart: (s: string) => call<AgentStatus>('agentStart', s),
   agentStop: (s: string) => call<AgentStatus>('agentStop', s),
+  mirrorStart: (s: string, maxSize?: number) => call<boolean>('mirrorStart', s, maxSize),
+  mirrorStop: () => call<void>('mirrorStop'),
+  onMirrorSession: (fn: (p: { width: number; height: number }) => void) => window.dl.on('mirror:session', (p) => fn(p as never)),
+  onMirrorPacket: (fn: (p: { data: Uint8Array; config: boolean; key: boolean; pts: number }) => void) =>
+    window.dl.on('mirror:packet', (p) => fn(p as never)),
+  onMirrorClosed: (fn: (p: { reason?: string }) => void) => window.dl.on('mirror:closed', (p) => fn(p as never)),
   sdkApps: (s: string) => call<string[]>('sdkApps', s),
   sdk: <T,>(s: string, pkg: string, method: string, ...args: unknown[]) => call<T>('sdk', s, pkg, method, ...args),
   appVersion: () => call<string>('appVersion'),
