@@ -7,6 +7,7 @@ import { LogTab } from './tabs/LogTab';
 import { LibsTab } from './tabs/LibsTab';
 import { AppInfoTab } from './tabs/AppInfoTab';
 import { ScenariosTab } from './tabs/ScenariosTab';
+import { SettingsTab } from './tabs/SettingsTab';
 
 interface Ctx {
   serial: string | null;
@@ -27,6 +28,7 @@ const TABS = [
   ['libs', '라이브러리'],
   ['info', '앱 정보'],
   ['scen', '시나리오'],
+  ['settings', '설정·연동'],
 ] as const;
 type TabId = (typeof TABS)[number][0];
 
@@ -40,6 +42,11 @@ export function App() {
   const [thirdOnly, setThirdOnly] = useState(true);
   const [tab, setTab] = useState<TabId>('screen');
   const [toastMsg, setToastMsg] = useState<{ msg: string; err?: boolean } | null>(null);
+  const [adbOk, setAdbOk] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    api.adbStatus().then((s) => setAdbOk(s.ok)).catch(() => setAdbOk(false));
+  }, []);
 
   const toast = useCallback((msg: string, err?: boolean) => {
     setToastMsg({ msg, err });
@@ -143,11 +150,23 @@ export function App() {
               ))}
             </nav>
             <section className="content">
-              {!serial && tab !== 'scen' ? (
+              {!serial && tab !== 'scen' && tab !== 'settings' ? (
                 <div className="empty">
-                  연결된 기기가 없습니다.
-                  <br />
-                  USB 디버깅을 켜거나 에뮬레이터를 실행하세요.
+                  {adbOk === false ? (
+                    <div>
+                      adb를 찾지 못했습니다.
+                      <br />
+                      <button className="btn primary" style={{ marginTop: 10 }} onClick={() => setTab('settings')}>
+                        설정에서 adb 연결하기
+                      </button>
+                    </div>
+                  ) : (
+                    <div>
+                      연결된 기기가 없습니다.
+                      <br />
+                      USB 디버깅을 켜거나 에뮬레이터를 실행하세요.
+                    </div>
+                  )}
                 </div>
               ) : (
                 <>
@@ -158,6 +177,7 @@ export function App() {
                   {tab === 'libs' && <LibsTab />}
                   {tab === 'info' && <AppInfoTab />}
                   {tab === 'scen' && <ScenariosTab />}
+                  {tab === 'settings' && <SettingsTab onAdbChange={(a) => setAdbOk(a.ok)} />}
                 </>
               )}
             </section>

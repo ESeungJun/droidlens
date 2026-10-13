@@ -1,18 +1,39 @@
 import { execFile, spawn, type ChildProcess } from 'node:child_process';
-import { existsSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 
-/** adb 실행 파일 위치: ADB_PATH > ANDROID_HOME/ANDROID_SDK_ROOT > macOS 기본 SDK > PATH */
-export function findAdb(): string {
-  const candidates = [
+function configuredAdb(): string | undefined {
+  try {
+    const home = process.env.DROIDLENS_HOME ?? join(homedir(), '.droidlens');
+    const cfg = JSON.parse(readFileSync(join(home, 'config.json'), 'utf8')) as { adbPath?: string };
+    return cfg.adbPath || undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/** adb 후보 경로. 앞에서부터 존재하는 첫 파일을 쓴다 */
+export function adbCandidates(): string[] {
+  const exe = process.platform === 'win32' ? 'adb.exe' : 'adb';
+  const sdkTools = (root: string | undefined) => root && join(root, 'platform-tools', exe);
+  return [
     process.env.ADB_PATH,
-    process.env.ANDROID_HOME && join(process.env.ANDROID_HOME, 'platform-tools', 'adb'),
-    process.env.ANDROID_SDK_ROOT && join(process.env.ANDROID_SDK_ROOT, 'platform-tools', 'adb'),
-    join(homedir(), 'Library', 'Android', 'sdk', 'platform-tools', 'adb'),
-    join(homedir(), 'Android', 'Sdk', 'platform-tools', 'adb'),
+    configuredAdb(),
+    sdkTools(process.env.ANDROID_HOME),
+    sdkTools(process.env.ANDROID_SDK_ROOT),
+    sdkTools(join(homedir(), 'Library', 'Android', 'sdk')), // macOS Android Studio
+    sdkTools(join(homedir(), 'Android', 'Sdk')), // Linux Android Studio
+    process.env.LOCALAPPDATA && sdkTools(join(process.env.LOCALAPPDATA, 'Android', 'Sdk')), // Windows
+    '/opt/homebrew/bin/adb', // brew (Apple Silicon) — GUI 앱은 셸 PATH를 물려받지 않는다
+    '/usr/local/bin/adb',
+    '/usr/bin/adb',
   ].filter((p): p is string => !!p);
-  return candidates.find((p) => existsSync(p)) ?? 'adb';
+}
+
+/** adb 실행 파일 위치: ADB_PATH > ~/.droidlens/config.json > ANDROID_HOME > 기본 SDK 경로 > brew > PATH */
+export function findAdb(): string {
+  return adbCandidates().find((p) => existsSync(p)) ?? 'adb';
 }
 
 export class AdbError extends Error {
@@ -63,6 +84,16 @@ export class Adb {
 
   spawn(args: string[]): ChildProcess {
     return spawn(this.bin, args, { stdio: ['ignore', 'pipe', 'pipe'] });
+  }
+
+  /** adb 사용 가능 여부와 버전 */
+  async version(): Promise<{ ok: boolean; path: string; version?: string; error?: string }> {
+    try {
+      const out = await this.text(['version'], { timeoutMs: 5000 });
+      return { ok: true, path: this.bin, version: /version ([\d.]+)/.exec(out)?.[1] };
+    } catch (e) {
+      return { ok: false, path: this.bin, error: (e as Error).message };
+    }
   }
 }
 

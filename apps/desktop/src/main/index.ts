@@ -1,9 +1,15 @@
-import { app, BrowserWindow, ipcMain, shell } from 'electron';
-import { readFile } from 'node:fs/promises';
-import { join } from 'node:path';
+import { app, BrowserWindow, clipboard, ipcMain, shell } from 'electron';
+import { exec, execFile } from 'node:child_process';
+import { existsSync } from 'node:fs';
+import { copyFile, mkdir, readdir, readFile } from 'node:fs/promises';
+import { homedir } from 'node:os';
+import { join, resolve } from 'node:path';
+import { promisify } from 'node:util';
 import * as dl from '@droidlens/core';
 
-const adb = new dl.Adb();
+let adb = new dl.Adb();
+const run = promisify(execFile);
+const runShell = promisify(exec);
 let win: BrowserWindow | null = null;
 
 function createWindow(): void {
@@ -182,6 +188,80 @@ handle('scenarios', async () => {
 handle('scenarioImage', async (dir: string, file: string) =>
   `data:image/png;base64,${(await readFile(join(dir, file))).toString('base64')}`,
 );
+
+// ---------- 설정 / Claude Code 연동 ----------
+const resourcePath = (...p: string[]) =>
+  app.isPackaged ? join(process.resourcesPath, ...p) : resolve(app.getAppPath(), '../..', ...p);
+const mcpScript = () =>
+  app.isPackaged ? resourcePath('mcp', 'droidlens-mcp.mjs') : resourcePath('packages', 'mcp', 'dist', 'droidlens-mcp.mjs');
+const agentsSrc = () => resourcePath('agents');
+const agentsDst = () => join(homedir(), '.claude', 'agents');
+const q = (s: string) => (process.platform === 'win32' ? `"${s}"` : `'${s.replace(/'/g, `'\\''`)}'`);
+
+function mcpAddArgs(): string[] {
+  return ['mcp', 'add', '--scope', 'user', 'droidlens', '-e', 'ELECTRON_RUN_AS_NODE=1', '--', process.execPath, mcpScript()];
+}
+
+/** GUI 앱은 로그인 셸 PATH를 못 받으므로 로그인 셸을 거쳐 claude를 실행한다 */
+async function runClaude(args: string[]): Promise<string> {
+  if (process.platform === 'win32') {
+    // cmd.exe가 해석하므로 공백·따옴표가 있는 인자만 큰따옴표로 감싼다
+    const line = ['claude', ...args].map((a) => (/[\s"]/.test(a) ? `"${a.replace(/"/g, '\\"')}"` : a)).join(' ');
+    const { stdout } = await runShell(line, { timeout: 30_000 });
+    return stdout;
+  }
+  // -i: .zshrc/.bashrc에 PATH를 둔 경우까지 반영
+  const sh = process.env.SHELL || '/bin/zsh';
+  const { stdout } = await run(sh, ['-ilc', ['claude', ...args].map(q).join(' ')], { timeout: 30_000 });
+  return stdout;
+}
+
+handle('appVersion', async () => app.getVersion());
+handle('adbStatus', async () => ({ ...(await adb.version()), candidates: dl.adbCandidates() }));
+handle('setAdbPath', async (p: string) => {
+  const cfgPath = join(dl.droidlensHome(), 'config.json');
+  const cfg = (await dl.readJson<Record<string, unknown>>(cfgPath)) ?? {};
+  cfg.adbPath = p || undefined;
+  await dl.ensureDir();
+  await dl.writeJson(cfgPath, cfg);
+  adb = new dl.Adb();
+  return adb.version();
+});
+handle('integration', async () => {
+  const src = agentsSrc();
+  const agents = existsSync(src) ? (await readdir(src)).filter((f) => f.endsWith('.md')) : [];
+  let claudeVersion: string | null = null;
+  let registered = false;
+  try {
+    claudeVersion = (await runClaude(['--version'])).trim();
+    registered = /droidlens/.test(await runClaude(['mcp', 'list']).catch(() => ''));
+  } catch {
+    /* claude CLI 없음 */
+  }
+  return {
+    mcpScript: mcpScript(),
+    mcpScriptExists: existsSync(mcpScript()),
+    command: ['claude', ...mcpAddArgs()].map((a) => (/[\s'"]/.test(a) ? q(a) : a)).join(' '),
+    claudeVersion,
+    registered,
+    agents: agents.map((f) => ({ file: f, installed: existsSync(join(agentsDst(), f)) })),
+    agentsDir: agentsDst(),
+  };
+});
+handle('registerMcp', async () => {
+  await runClaude(['mcp', 'remove', '--scope', 'user', 'droidlens']).catch(() => undefined);
+  return runClaude(mcpAddArgs());
+});
+handle('installAgents', async () => {
+  await mkdir(agentsDst(), { recursive: true });
+  const files = (await readdir(agentsSrc())).filter((f) => f.endsWith('.md'));
+  for (const f of files) await copyFile(join(agentsSrc(), f), join(agentsDst(), f));
+  return files;
+});
+handle('copy', async (t: string) => clipboard.writeText(t));
+handle('openExternal', async (url: string) => {
+  if (/^https:\/\//.test(url)) await shell.openExternal(url);
+});
 
 app.whenReady().then(createWindow);
 app.on('window-all-closed', () => {
