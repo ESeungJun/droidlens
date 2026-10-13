@@ -3,7 +3,7 @@ import { exec, execFile } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { copyFile, mkdir, readdir, readFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
-import { join, resolve } from 'node:path';
+import { basename, join, resolve, sep } from 'node:path';
 import { promisify } from 'node:util';
 import * as dl from '@droidlens/core';
 
@@ -24,7 +24,8 @@ function createWindow(): void {
     webPreferences: {
       preload: join(__dirname, '../preload/index.cjs'),
       contextIsolation: true,
-      sandbox: false,
+      sandbox: true,
+      nodeIntegration: false,
     },
   });
   // 개발용: DROIDLENS_OPEN="tab=network&pkg=com.example"로 시작 탭/앱 지정,
@@ -43,6 +44,12 @@ function createWindow(): void {
     });
   }
   win.on('closed', () => (win = null));
+  // 앱 화면 밖으로의 이동·새 창을 막는다 (외부 링크는 openExternal IPC로만, https만 허용)
+  win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
+  win.webContents.on('will-navigate', (e, url) => {
+    const allowed = process.env.ELECTRON_RENDERER_URL ? url.startsWith(process.env.ELECTRON_RENDERER_URL) : url.startsWith('file://');
+    if (!allowed) e.preventDefault();
+  });
   if (process.env.DROIDLENS_DEBUG) win.webContents.on('console-message', (e) => debug('renderer', e.level, e.message));
 }
 
@@ -187,7 +194,7 @@ handle('logcatStop', async () => {
 handle('graphGet', async (pkg: string) => (await dl.ScreenGraph.open(pkg)).toJSON());
 handle('graphImage', async (pkg: string, file: string) => {
   const g = await dl.ScreenGraph.open(pkg);
-  return `data:image/png;base64,${(await readFile(join(g.dir, file))).toString('base64')}`;
+  return `data:image/png;base64,${(await readFile(join(g.dir, basename(file)))).toString('base64')}`;
 });
 handle('graphRecordTap', async (s: string, pkg: string, x: number, y: number, label?: string) => {
   const g = await dl.ScreenGraph.open(pkg);
@@ -231,8 +238,19 @@ handle('sdk', async (s: string, pkg: string, method: (typeof SDK_METHODS)[number
 });
 
 // ---------- 기타 ----------
-handle('reveal', async (p: string) => shell.showItemInFolder(p));
-handle('openPath', async (p: string) => shell.openPath(p));
+/** 렌더러가 넘긴 경로는 DroidLens 데이터 폴더 안쪽만 허용 (openPath는 실행 파일도 열 수 있으므로) */
+function insideHome(p: string): string {
+  const full = resolve(p);
+  const home = resolve(dl.droidlensHome());
+  if (full !== home && !full.startsWith(home + sep)) throw new Error('DroidLens 데이터 폴더 밖의 경로는 열 수 없습니다');
+  return full;
+}
+handle('reveal', async (p: string) => shell.showItemInFolder(insideHome(p)));
+handle('openPath', async (p: string) => {
+  const full = insideHome(p);
+  if (!/\.(html|png|mp4|json|mmd|apk)$/i.test(full) && full !== resolve(dl.droidlensHome())) throw new Error('열 수 없는 파일 형식입니다');
+  return shell.openPath(full);
+});
 handle('home', async () => dl.droidlensHome());
 handle('scenarios', async () => {
   const fs = await import('node:fs/promises');
@@ -246,7 +264,7 @@ handle('scenarios', async () => {
   return out;
 });
 handle('scenarioImage', async (dir: string, file: string) =>
-  `data:image/png;base64,${(await readFile(join(dir, file))).toString('base64')}`,
+  `data:image/png;base64,${(await readFile(insideHome(join(dir, basename(file))))).toString('base64')}`,
 );
 
 // ---------- 설정 / Claude Code 연동 ----------

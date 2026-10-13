@@ -3,19 +3,16 @@ package io.github.eseungjun.droidlens.agent;
 import android.app.Instrumentation;
 import android.app.UiAutomation;
 import android.graphics.Rect;
+import android.net.LocalServerSocket;
+import android.net.LocalSocket;
 import android.os.Bundle;
 import android.os.Process;
 import android.util.Log;
 import android.view.accessibility.AccessibilityNodeInfo;
 import android.view.accessibility.AccessibilityWindowInfo;
 
-import java.io.BufferedReader;
 import java.io.InputStream;
-import java.io.InputStreamReader;
 import java.io.OutputStream;
-import java.net.InetAddress;
-import java.net.ServerSocket;
-import java.net.Socket;
 import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
@@ -28,60 +25,61 @@ final class AgentServer {
     private final Instrumentation instrumentation;
     private final UiAutomation ui;
     private final ActivityTracker tracker;
-    private final int port;
+    private final String socketName;
 
-    AgentServer(Instrumentation instrumentation, UiAutomation ui, ActivityTracker tracker, int port) {
+    AgentServer(Instrumentation instrumentation, UiAutomation ui, ActivityTracker tracker, String socketName) {
         this.instrumentation = instrumentation;
         this.ui = ui;
         this.tracker = tracker;
-        this.port = port;
+        this.socketName = socketName;
     }
 
+    /**
+     * localabstract 유닉스 소켓으로만 연다. TCP(127.0.0.1)로 열면 기기의 다른 앱이 접속해
+     * UiAutomation 권한(화면 읽기·텍스트 주입)을 빌려 쓸 수 있으므로, 접속한 상대의 UID를 확인해
+     * adb를 거친 연결(shell 2000 / root 0)만 받는다.
+     */
     void serveForever() throws Exception {
-        try (ServerSocket server = new ServerSocket(port, 8, InetAddress.getByName("127.0.0.1"))) {
-            server.setReuseAddress(true);
-            Log.i(AgentInstrumentation.TAG, "listening on 127.0.0.1:" + port);
-            while (true) {
-                try (Socket s = server.accept()) {
-                    s.setSoTimeout(15_000);
-                    handle(s);
-                } catch (Exception e) {
-                    Log.w(AgentInstrumentation.TAG, "request failed", e);
+        LocalServerSocket server = new LocalServerSocket(socketName);
+        Log.i(AgentInstrumentation.TAG, "listening on localabstract:" + socketName);
+        while (true) {
+            try (LocalSocket s = server.accept()) {
+                int uid = s.getPeerCredentials().getUid();
+                if (uid != 0 && uid != 2000) {
+                    Log.w(AgentInstrumentation.TAG, "rejected connection from uid " + uid);
+                    continue;
                 }
+                s.setSoTimeout(15_000);
+                handle(s);
+            } catch (Exception e) {
+                Log.w(AgentInstrumentation.TAG, "request failed", e);
             }
         }
     }
 
-    private void handle(Socket s) throws Exception {
+    private void handle(LocalSocket s) throws Exception {
         InputStream in = s.getInputStream();
-        BufferedReader reader = new BufferedReader(new InputStreamReader(in, StandardCharsets.UTF_8));
-        String requestLine = reader.readLine();
-        if (requestLine == null) return;
-        String[] parts = requestLine.split(" ");
+        String head = readHead(in);
+        if (head == null) return;
+        String[] lines = head.split("\r\n");
+        String[] parts = lines[0].split(" ");
         String method = parts[0];
         String target = parts.length > 1 ? parts[1] : "/";
         int contentLength = 0;
-        String line;
-        while ((line = reader.readLine()) != null && !line.isEmpty()) {
-            int idx = line.indexOf(':');
-            if (idx > 0 && line.substring(0, idx).trim().equalsIgnoreCase("content-length")) {
-                contentLength = Integer.parseInt(line.substring(idx + 1).trim());
+        for (int i = 1; i < lines.length; i++) {
+            int idx = lines[i].indexOf(':');
+            if (idx > 0 && lines[i].substring(0, idx).trim().equalsIgnoreCase("content-length")) {
+                contentLength = Math.min(Integer.parseInt(lines[i].substring(idx + 1).trim()), 1 << 20);
             }
         }
-        char[] bodyChars = new char[0];
-        if (contentLength > 0) {
-            // Content-Length는 바이트 수지만 UTF-8 본문을 문자로 읽으므로 넉넉히 읽고 남는 건 무시
-            char[] buf = new char[contentLength];
-            int read = 0;
-            while (read < contentLength) {
-                int n = reader.read(buf, read, contentLength - read);
-                if (n < 0) break;
-                read += n;
-                if (!reader.ready()) break;
-            }
-            bodyChars = java.util.Arrays.copyOf(buf, read);
+        byte[] bodyBytes = new byte[contentLength];
+        int read = 0;
+        while (read < contentLength) {
+            int n = in.read(bodyBytes, read, contentLength - read);
+            if (n < 0) break;
+            read += n;
         }
-        String body = new String(bodyChars);
+        String body = new String(bodyBytes, 0, read, StandardCharsets.UTF_8);
 
         String path = target;
         Map<String, String> query = new HashMap<>();
@@ -129,6 +127,20 @@ final class AgentServer {
             response = "{\"error\":" + json(String.valueOf(t)) + "}";
         }
         write(s.getOutputStream(), status, contentType, response);
+    }
+
+    /** 빈 줄(\r\n\r\n)까지 헤더를 바이트 단위로 읽는다 (본문은 Content-Length 바이트만큼 따로 읽음) */
+    private static String readHead(InputStream in) throws Exception {
+        java.io.ByteArrayOutputStream buf = new java.io.ByteArrayOutputStream();
+        int state = 0;
+        int b;
+        while ((b = in.read()) != -1) {
+            buf.write(b);
+            state = (b == '\r' && (state == 0 || state == 2)) ? state + 1 : (b == '\n' && (state == 1 || state == 3)) ? state + 1 : 0;
+            if (state == 4) return buf.toString("UTF-8");
+            if (buf.size() > 64 * 1024) throw new IllegalStateException("헤더가 너무 큽니다");
+        }
+        return null;
     }
 
     private static long parseLong(String v, long def) {

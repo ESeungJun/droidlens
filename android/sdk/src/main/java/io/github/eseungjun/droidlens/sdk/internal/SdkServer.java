@@ -25,7 +25,7 @@ import io.github.eseungjun.droidlens.sdk.BuildConfig;
 /**
  * localabstract:droidlens_sdk_&lt;패키지&gt; 에서 동작하는 최소 HTTP/1.1 서버.
  * 호스트는 `adb forward tcp:N localabstract:droidlens_sdk_&lt;패키지&gt;`로 연결한다.
- * 유닉스 소켓이라 INTERNET 권한이 필요 없고, 기기 밖에서는 adb 없이 접근할 수 없다.
+ * 유닉스 소켓이라 INTERNET 권한이 필요 없다. 접속 UID를 검사해 adb 경유(shell)·root·앱 자신만 받는다.
  */
 public final class SdkServer {
     public static final String SOCKET_PREFIX = "droidlens_sdk_";
@@ -58,6 +58,13 @@ public final class SdkServer {
             while (true) {
                 try {
                     final LocalSocket s = server.accept();
+                    // 같은 기기의 다른 앱도 abstract 소켓에 연결할 수 있으므로 adb(shell)·root·자기 자신만 허용
+                    int uid = s.getPeerCredentials().getUid();
+                    if (uid != 0 && uid != 2000 && uid != Process.myUid()) {
+                        Log.w(TAG, "rejected connection from uid " + uid);
+                        s.close();
+                        continue;
+                    }
                     pool.execute(() -> handle(s));
                 } catch (Exception e) {
                     Log.w(TAG, "accept failed", e);
@@ -82,7 +89,7 @@ public final class SdkServer {
             for (int i = 1; i < lines.length; i++) {
                 int idx = lines[i].indexOf(':');
                 if (idx > 0 && lines[i].substring(0, idx).trim().equalsIgnoreCase("content-length")) {
-                    contentLength = Integer.parseInt(lines[i].substring(idx + 1).trim());
+                    contentLength = Math.min(Integer.parseInt(lines[i].substring(idx + 1).trim()), 1 << 20);
                 }
             }
             byte[] body = new byte[contentLength];

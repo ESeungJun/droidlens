@@ -3,7 +3,7 @@ import { writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { DeviceAdb, sleep } from './adb.js';
 import { ensureAgent } from './agent.js';
-import { currentScreen, launchApp, topFragments, type CurrentScreen } from './app.js';
+import { assertPackage, currentScreen, launchApp, topFragments, type CurrentScreen } from './app.js';
 import { pressKey, screenshot, swipe, tap } from './device.js';
 import {
   center,
@@ -90,6 +90,7 @@ function fixPackage(s: Snapshot): Snapshot {
 
 /** 앱 실행 후 해당 패키지가 포그라운드에 그려지고, 스플래시가 지나 화면이 안정될 때까지 대기 */
 export async function launchAndSettle(dev: DeviceAdb, pkg: string, opts: { restart?: boolean; timeoutMs?: number } = {}): Promise<Snapshot> {
+  assertPackage(pkg);
   if (opts.restart) await dev.shell(`am force-stop ${pkg}`);
   await launchApp(dev, pkg);
   const deadline = Date.now() + (opts.timeoutMs ?? 15_000);
@@ -410,6 +411,7 @@ export interface ExploreResult {
  */
 export async function explore(dev: DeviceAdb, opts: ExploreOptions): Promise<ExploreResult> {
   const pkg = opts.packageName;
+  assertPackage(pkg);
   const maxSteps = opts.maxSteps ?? 40;
   const maxDepth = opts.maxDepth ?? 4;
   const graph = await ScreenGraph.open(pkg);

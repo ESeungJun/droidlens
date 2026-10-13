@@ -120,6 +120,17 @@ export class DeviceAdb {
   spawn(args: string[]): ChildProcess {
     return this.adb.spawn(['-s', this.serial, ...args]);
   }
+
+  /** 호스트 tcp 포트 → 기기 remote(예: localabstract:name) 포워딩. 이미 걸려 있으면 그 포트를 재사용 */
+  async forward(remote: string): Promise<number> {
+    const list = await this.adb.text(['forward', '--list']).catch(() => '');
+    const existing = list
+      .split('\n')
+      .map((l) => l.trim().split(/\s+/))
+      .find(([s, , r]) => s === this.serial && r === remote);
+    if (existing) return Number(existing[1].replace('tcp:', ''));
+    return Number((await this.text(['forward', 'tcp:0', remote])).trim());
+  }
 }
 
 /** 기기 sh에 넘길 인자를 작은따옴표로 감싼다 */

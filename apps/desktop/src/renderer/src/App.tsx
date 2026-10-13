@@ -1,5 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
-import { api, type AgentStatus, type DeviceSummary, type PackageSummary } from './api';
+import { api, type AgentStatus, type CurrentScreen, type DeviceSummary, type PackageSummary } from './api';
 import { ScreenTab } from './tabs/ScreenTab';
 import { InspectorTab } from './tabs/InspectorTab';
 import { FlowTab } from './tabs/FlowTab';
@@ -15,6 +15,8 @@ interface Ctx {
   serial: string | null;
   pkg: string | null;
   setPkg(p: string | null): void;
+  /** 현재 포그라운드 화면 (App 한 곳에서 2초 간격으로 폴링해 모든 탭이 공유) */
+  screen: CurrentScreen | null;
   toast(msg: string, err?: boolean): void;
   run<T>(p: Promise<T>): Promise<T | undefined>;
 }
@@ -43,7 +45,8 @@ export function App() {
   const [serial, setSerial] = useState<string | null>(null);
   const [pkgs, setPkgs] = useState<PackageSummary[]>([]);
   const [pkg, setPkg] = useState<string | null>(initial.get('pkg'));
-  const [fgPkg, setFgPkg] = useState<string>('');
+  const [screen, setScreen] = useState<CurrentScreen | null>(null);
+  const fgPkg = screen?.packageName ?? '';
   const [filter, setFilter] = useState('');
   const [thirdOnly, setThirdOnly] = useState(true);
   const [tab, setTab] = useState<TabId>((initial.get('tab') as TabId) || 'screen');
@@ -99,13 +102,18 @@ export function App() {
     run(api.packages(serial, thirdOnly)).then((p) => setPkgs(p ?? []));
   }, [serial, thirdOnly, run]);
 
-  // 포그라운드 앱 표시
+  // 포그라운드 화면: 여기서만 폴링하고 컨텍스트로 공유 (탭마다 따로 폴링하면 기기 부하가 커진다)
   useEffect(() => {
+    setScreen(null);
     if (!serial) return;
-    const tick = () => api.currentScreen(serial).then((s) => setFgPkg(s.packageName)).catch(() => undefined);
+    let alive = true;
+    const tick = () => api.currentScreen(serial).then((s) => alive && setScreen(s)).catch(() => undefined);
     tick();
-    const t = setInterval(tick, 3000);
-    return () => clearInterval(t);
+    const t = setInterval(tick, 2000);
+    return () => {
+      alive = false;
+      clearInterval(t);
+    };
   }, [serial]);
 
   // DroidLens 온디바이스 에이전트 자체는 분석 대상이 아니므로 숨긴다
@@ -113,7 +121,7 @@ export function App() {
     () => pkgs.filter((p) => p.packageName !== 'io.github.eseungjun.droidlens.agent' && p.packageName.includes(filter.trim())),
     [pkgs, filter],
   );
-  const ctx = useMemo<Ctx>(() => ({ serial, pkg, setPkg, toast, run }), [serial, pkg, toast, run]);
+  const ctx = useMemo<Ctx>(() => ({ serial, pkg, setPkg, screen, toast, run }), [serial, pkg, screen, toast, run]);
 
   return (
     <AppCtx.Provider value={ctx}>
