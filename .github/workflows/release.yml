@@ -69,3 +69,5 @@ jobs:
           cd agents && zip ../droidlens-agents.zip *.md && cd ..
           cp android/agent/build/outputs/apk/release/agent-release.apk droidlens-agent.apk
           gh release upload "${GITHUB_REF_NAME}" packages/mcp/dist/droidlens-mcp.mjs droidlens-agent.apk droidlens-agents.zip --clobber
+          # electron-builder가 만든 초안을 공개로 전환
+          gh release edit "${GITHUB_REF_NAME}" --draft=false --latest
