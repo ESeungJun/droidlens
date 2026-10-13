@@ -37,6 +37,8 @@ jobs:
         working-directory: android
         shell: bash
         run: ./gradlew :agent:assembleRelease --no-daemon
+      - name: Fetch scrcpy server (SHA256 검증)
+        run: node scripts/fetch-scrcpy.mjs
       - name: Package & publish
         working-directory: apps/desktop
         env:

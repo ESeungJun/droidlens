@@ -94,6 +94,7 @@ label.chk { display: inline-flex; gap: 6px; align-items: center; color: var(--fg
 .mirror-wrap { display: grid; grid-template-columns: 1fr 320px; height: 100%; min-height: 0; }
 .mirror-stage { display: grid; place-items: center; padding: 16px; min-height: 0; overflow: hidden; background: radial-gradient(circle at 50% 40%, #171a20, var(--bg)); }
 .device-frame { position: relative; max-height: 100%; border-radius: 22px; padding: 8px; background: #050506; box-shadow: 0 0 0 1px var(--line-2), 0 20px 60px rgba(0,0,0,.5); }
+.device-frame canvas.mirror-canvas { display: block; max-height: calc(100vh - 150px); max-width: 100%; border-radius: 14px; cursor: crosshair; }
 .device-frame img { display: block; max-height: calc(100vh - 150px); max-width: 100%; border-radius: 14px; user-select: none; -webkit-user-drag: none; cursor: crosshair; }
 .side { border-left: 1px solid var(--line); overflow: auto; padding: 12px; display: grid; gap: 14px; align-content: start; }
 .side h4 { margin: 0 0 6px; font-size: 11px; text-transform: uppercase; letter-spacing: .08em; color: var(--fg-faint); }

@@ -1,15 +1,16 @@
 {
   "name": "droidlens",
   "private": true,
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Android 앱 분석·디버깅·시나리오 검증 툴 (adb 기반 + 선택형 SDK)",
   "scripts": {
     "build": "pnpm -r --filter \"./packages/*\" run build",
-    "dev": "pnpm build && pnpm --filter @droidlens/desktop dev",
+    "dev": "pnpm build && pnpm fetch:scrcpy && pnpm --filter @droidlens/desktop dev",
     "mcp": "node packages/mcp/dist/index.js",
     "typecheck": "pnpm -r run typecheck",
-    "dist": "pnpm build && pnpm build:agent && pnpm --filter @droidlens/desktop dist",
-    "build:agent": "cd android && ./gradlew :agent:assembleRelease"
+    "dist": "pnpm build && pnpm build:agent && pnpm fetch:scrcpy && pnpm --filter @droidlens/desktop dist",
+    "build:agent": "cd android && ./gradlew :agent:assembleRelease",
+    "fetch:scrcpy": "node scripts/fetch-scrcpy.mjs"
   },
   "packageManager": "pnpm@10.0.0",
   "pnpm": {
