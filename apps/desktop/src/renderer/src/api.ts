@@ -35,6 +35,13 @@ export interface SnapshotDTO {
   image: string;
 }
 
+export interface AgentStatus {
+  installed?: number;
+  running: boolean;
+  apk?: string;
+  disabled: boolean;
+}
+
 export interface AdbStatus {
   ok: boolean;
   path: string;
@@ -97,6 +104,9 @@ export const api = {
   home: () => call<string>('home'),
   scenarios: () => call<ScenarioData[]>('scenarios'),
   scenarioImage: (dir: string, file: string) => call<string>('scenarioImage', dir, file),
+  agentStatus: (s: string) => call<AgentStatus>('agentStatus', s),
+  agentStart: (s: string) => call<AgentStatus>('agentStart', s),
+  agentStop: (s: string) => call<AgentStatus>('agentStop', s),
   appVersion: () => call<string>('appVersion'),
   adbStatus: () => call<AdbStatus>('adbStatus'),
   setAdbPath: (p: string) => call<AdbStatus>('setAdbPath', p),

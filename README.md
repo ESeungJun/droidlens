@@ -81,12 +81,24 @@ Claude Code를 재시작한 뒤 이렇게 요청하세요.
 | `scenarios/<id>/` | 시나리오 검증 `report.html`, `scenario.json`, 단계별 스크린샷 |
 | `apks/<패키지>/` | 분석용 APK |
 
+## 온디바이스 에이전트
+
+기기를 연결하면 DroidLens가 작은 에이전트 앱(`io.github.eseungjun.droidlens.agent`, 13KB)을 자동으로 설치·실행합니다. 상단 바의 **⚡ 에이전트** 표시로 상태를 확인하고 끄고 켤 수 있습니다.
+
+| | 에이전트 없음 (uiautomator) | 에이전트 |
+| --- | --- | --- |
+| 뷰 계층 덤프 | 1.5~3초 | 0.03~0.3초 |
+| 현재 Activity | dumpsys 1~7초 | 즉시 (접근성 이벤트 추적) |
+| 텍스트 입력 | ASCII만 | 한글 등 유니코드 |
+| 화면 안정 판정 | 스크린샷 비교 | 접근성 idle + 구조 비교 |
+
+에이전트는 UI 테스트 도구(Appium, uiautomator)와 같은 Instrumentation 권한으로만 동작하고 네트워크는 기기 내부 `127.0.0.1`에서만 엽니다. 쓰지 않으려면 `DROIDLENS_AGENT=0`.
+
 ## 알려진 한계
 
-- `uiautomator dump`가 한 번에 1.5~3초 걸려 자동 탐색이 스텝당 5~15초 — 온디바이스 에이전트로 개선 예정
-- 텍스트 입력은 ASCII만 지원 (한글은 온디바이스 에이전트에서 지원 예정)
 - 네트워크·DB·SharedPreferences 같은 앱 내부 정보는 선택형 SDK가 필요 (개발 예정)
 - WebView·Flutter·게임 엔진 화면은 접근성 노드가 적어 분석이 제한적
+- Appium 등 다른 UiAutomation 도구와 동시에 쓸 수 없음 (상단 바에서 에이전트를 끄면 됨)
 
 ## 개발
 
@@ -94,12 +106,14 @@ Claude Code를 재시작한 뒤 이렇게 요청하세요.
 pnpm install
 pnpm build                              # core + mcp
 pnpm dev                                # 데스크톱 앱 (개발 모드)
+pnpm build:agent                        # 에이전트 APK (JDK 17 + Android SDK 필요)
 pnpm dist                               # 현재 OS용 설치 파일 → apps/desktop/release/
 ```
 
 ```
 packages/core     adb 엔진 (기기·입력·캡처, 뷰 계층, 화면 그래프·자동 탐색, 라이브러리 탐지, 시나리오)
 packages/mcp      MCP 서버 (단일 파일 번들 droidlens-mcp.mjs)
+android/agent     온디바이스 에이전트 APK (Instrumentation + HTTP)
 apps/desktop      Electron + React
 agents/           Claude Code 에이전트 정의
 ```

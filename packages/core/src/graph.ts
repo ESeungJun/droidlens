@@ -2,7 +2,8 @@ import { createHash } from 'node:crypto';
 import { writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { DeviceAdb, sleep } from './adb.js';
-import { currentScreen, launchApp, type CurrentScreen } from './app.js';
+import { ensureAgent } from './agent.js';
+import { currentScreen, launchApp, topFragments, type CurrentScreen } from './app.js';
 import { pressKey, screenshot, swipe, tap } from './device.js';
 import {
   center,
@@ -39,6 +40,27 @@ export async function captureSnapshot(dev: DeviceAdb, opts: { screenshot?: boole
  * 안정되면 뷰 계층·Activity를 한 번만 가져온다. 커서 깜빡임 등으로 계속 변하면 timeout에서 멈춘다.
  */
 export async function waitForSettle(dev: DeviceAdb, opts: { timeoutMs?: number; intervalMs?: number } = {}): Promise<Snapshot> {
+  // 에이전트가 있으면 접근성 이벤트가 잠잠해질 때까지 기다리는 쪽이 훨씬 빠르고 정확하다
+  const agent = await ensureAgent(dev);
+  if (agent) {
+    const deadline = Date.now() + (opts.timeoutMs ?? 5000);
+    await sleep(150);
+    await agent.waitIdle(300, opts.timeoutMs ?? 4000).catch(() => undefined);
+    // 프래그먼트 전환 애니메이션은 접근성 이벤트를 거의 내지 않아 idle이 일찍 끝날 수 있다:
+    // 덤프(~50ms)를 반복해 구조 시그니처가 연속 두 번 같을 때까지 확인
+    let hierarchy = await dumpHierarchy(dev);
+    let sig = structureSignature(hierarchy.root);
+    while (Date.now() < deadline) {
+      await sleep(250);
+      const next = await dumpHierarchy(dev);
+      const nextSig = structureSignature(next.root);
+      hierarchy = next;
+      if (nextSig === sig) break;
+      sig = nextSig;
+    }
+    const [screen, png] = await Promise.all([currentScreen(dev), screenshot(dev)]);
+    return fixPackage({ screen, hierarchy, signature: sig, png });
+  }
   const deadline = Date.now() + (opts.timeoutMs ?? 5000);
   await sleep(opts.intervalMs ?? 250);
   let png = await screenshot(dev);
@@ -52,14 +74,18 @@ export async function waitForSettle(dev: DeviceAdb, opts: { timeoutMs?: number; 
     hash = h;
   }
   const [screen, hierarchy] = await Promise.all([currentScreen(dev), dumpHierarchy(dev)]);
-  // 앱 전환 직후 dumpsys의 포커스 정보가 이전 앱을 가리킬 수 있어, 실제 그려진 뷰의 패키지를 우선한다
-  const drawnPkg = hierarchy.root.children.at(-1)?.packageName;
-  if (drawnPkg && drawnPkg !== screen.packageName && drawnPkg !== 'com.android.systemui') {
-    screen.packageName = drawnPkg;
-    screen.activity = '';
-    screen.fragments = [];
+  return fixPackage({ screen, hierarchy, signature: structureSignature(hierarchy.root), png });
+}
+
+/** 앱 전환 직후 dumpsys의 포커스 정보가 이전 앱을 가리킬 수 있어, 실제 그려진 뷰의 패키지를 우선한다 */
+function fixPackage(s: Snapshot): Snapshot {
+  const drawnPkg = s.hierarchy.root.children.at(-1)?.packageName;
+  if (drawnPkg && drawnPkg !== s.screen.packageName && drawnPkg !== 'com.android.systemui') {
+    s.screen.packageName = drawnPkg;
+    s.screen.activity = '';
+    s.screen.fragments = [];
   }
-  return { screen, hierarchy, signature: structureSignature(hierarchy.root), png };
+  return s;
 }
 
 /** 앱 실행 후 해당 패키지가 포그라운드에 그려지고, 스플래시가 지나 화면이 안정될 때까지 대기 */
@@ -67,16 +93,35 @@ export async function launchAndSettle(dev: DeviceAdb, pkg: string, opts: { resta
   if (opts.restart) await dev.shell(`am force-stop ${pkg}`);
   await launchApp(dev, pkg);
   const deadline = Date.now() + (opts.timeoutMs ?? 15_000);
-  let snap = await waitForSettle(dev);
+  const agent = await ensureAgent(dev);
+  // 준비 판정은 스크린샷 없이 (뷰 계층 + 현재 Activity만) 빠르게 반복하고, 끝나면 한 번만 전체 스냅샷
   while (Date.now() < deadline) {
-    const drawn = snap.hierarchy.root.children.some((c) => c.packageName === pkg);
-    // 스플래시는 클릭 가능한 요소가 거의 없다: 인앱 + 활동명 확인 + 클릭 요소 1개 이상이면 준비 완료로 본다
-    const ready = drawn && snap.screen.packageName === pkg && snap.screen.activity !== '' && candidateActions(snap, pkg).length > 0;
-    if (ready) return snap;
-    await sleep(700);
-    snap = await waitForSettle(dev);
+    if (agent) await agent.waitIdle(300, 2000).catch(() => undefined);
+    else await sleep(700);
+    const [screen, hierarchy] = await Promise.all([currentScreen(dev), dumpHierarchy(dev)]);
+    const s = fixPackage({ screen, hierarchy, signature: structureSignature(hierarchy.root) });
+    if (await dismissSystemDialog(dev, s)) continue;
+    const drawn = hierarchy.root.children.some((c) => c.packageName === pkg);
+    // 스플래시는 클릭 가능한 요소가 거의 없다: 인앱 + Activity 확인 + 클릭 요소 1개 이상이면 준비 완료
+    if (drawn && s.screen.packageName === pkg && s.screen.activity !== '' && candidateActions(s, pkg).length > 0) break;
   }
-  return snap;
+  return waitForSettle(dev);
+}
+
+/**
+ * 시스템 ANR/크래시 대화상자 처리. ANR("응답하지 않음")은 '대기', 크래시("중지됨")는 '닫기'를 누른다.
+ * 처리했으면 무엇이었는지 반환 (탐색·시나리오에서 오류로 기록).
+ */
+export async function dismissSystemDialog(dev: DeviceAdb, s: Snapshot): Promise<'anr' | 'crash' | undefined> {
+  const nodes = flatten(s.hierarchy.root);
+  const wait = nodes.find((n) => n.resourceId === 'android:id/aerr_wait');
+  const close = nodes.find((n) => n.resourceId === 'android:id/aerr_close');
+  if (!wait && !close) return undefined;
+  const target = wait ?? close!;
+  const { x, y } = center(target);
+  await tap(dev, x, y);
+  await sleep(500);
+  return wait ? 'anr' : 'crash';
 }
 
 // ---------- 화면 그래프 ----------
@@ -167,10 +212,16 @@ export class ScreenGraph {
     return g;
   }
 
-  /** 스냅샷을 그래프 노드로 등록(이미 있으면 방문 수 증가). 스크린샷은 최초 1회 저장 */
-  async addSnapshot(s: Snapshot): Promise<ScreenNode> {
+  /**
+   * 스냅샷을 그래프 노드로 등록(이미 있으면 방문 수 증가). 스크린샷은 최초 1회 저장.
+   * dev를 주면 새 화면일 때만 Fragment 목록을 조회해 라벨에 붙인다 (느린 조회라 재방문 때는 생략).
+   */
+  async addSnapshot(s: Snapshot, dev?: DeviceAdb): Promise<ScreenNode> {
     const id = screenId(s);
     let node = this.nodes.get(id);
+    if (!node && dev && !s.screen.fragments.length && s.screen.packageName === this.packageName) {
+      s.screen.fragments = await topFragments(dev).catch(() => []);
+    }
     if (!node) {
       let shot: string | undefined;
       if (s.png) {
@@ -288,10 +339,10 @@ export async function recordTransition(
   before?: Snapshot,
 ): Promise<{ from: ScreenNode; to: ScreenNode; edge: ScreenEdge; after: Snapshot }> {
   const b = before ?? (await captureSnapshot(dev));
-  const from = await graph.addSnapshot(b);
+  const from = await graph.addSnapshot(b, dev);
   await performAction(dev, action, graph.packageName);
   const after = await waitForSettle(dev);
-  const to = await graph.addSnapshot(after);
+  const to = await graph.addSnapshot(after, dev);
   const edge = graph.addEdge(from.id, to.id, action);
   await graph.save();
   return { from, to, edge, after };
@@ -369,7 +420,7 @@ export async function explore(dev: DeviceAdb, opts: ExploreOptions): Promise<Exp
   const log = (message: string, screen?: string) => opts.onProgress?.({ step: steps, message, screen });
 
   let snap = opts.relaunch !== false ? await launchAndSettle(dev, pkg, { restart: true }) : await waitForSettle(dev);
-  const root = await graph.addSnapshot(snap);
+  const root = await graph.addSnapshot(snap, dev);
   log(`시작 화면: ${root.label}`, root.id);
 
   const replay = async (path: GraphAction[]): Promise<Snapshot> => {
@@ -416,13 +467,19 @@ export async function explore(dev: DeviceAdb, opts: ExploreOptions): Promise<Exp
       steps++;
       try {
         await performAction(dev, action, pkg);
-        const after = await waitForSettle(dev);
+        let after = await waitForSettle(dev);
+        const dialog = await dismissSystemDialog(dev, after);
+        if (dialog) {
+          errors.push(`${hereId} "${cand.label}": ${dialog === 'anr' ? 'ANR (응답 없음)' : '크래시'} 대화상자`);
+          log(`"${cand.label}" → ${dialog === 'anr' ? 'ANR' : '크래시'} 감지, 기록 후 계속`);
+          after = await waitForSettle(dev);
+        }
         if (after.screen.packageName && after.screen.packageName !== pkg) {
           log(`"${cand.label}" → 앱 밖(${after.screen.packageName}), 복귀`);
           await returnTo(hereId, path);
           continue;
         }
-        const to = await graph.addSnapshot(after);
+        const to = await graph.addSnapshot(after, dev);
         graph.addEdge(hereId, to.id, action);
         await graph.save();
         if (to.id === hereId) {

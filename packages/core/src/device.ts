@@ -1,4 +1,5 @@
 import { Adb, DeviceAdb, quoteShell, sleep } from './adb.js';
+import { ensureAgent } from './agent.js';
 
 export interface DeviceSummary {
   serial: string;
@@ -62,7 +63,7 @@ export async function getDeviceInfo(dev: DeviceAdb): Promise<DeviceInfo> {
 
 /** PNG 스크린샷 */
 export async function screenshot(dev: DeviceAdb): Promise<Buffer> {
-  return dev.execOut('screencap -p', { timeoutMs: 15_000 });
+  return dev.execOut('screencap -p', { timeoutMs: 30_000 });
 }
 
 // ---------- 입력 ----------
@@ -90,12 +91,27 @@ export async function swipe(
   );
 }
 
-/** input text는 공백을 %s로 받아야 하고 한글 등 비ASCII는 지원하지 않는다 */
+/**
+ * 포커스된 입력창에 텍스트를 이어서 입력한다.
+ * 에이전트가 있으면 ACTION_SET_TEXT(유니코드 지원), 없으면 adb input text(ASCII만, 공백은 %s).
+ */
 export async function typeText(dev: DeviceAdb, text: string): Promise<void> {
+  const agent = await ensureAgent(dev);
+  if (agent) {
+    await agent.setText(text, true);
+    return;
+  }
   if (/[^\x20-\x7e]/.test(text)) {
-    throw new Error('adb input text는 ASCII만 지원합니다. 한글 입력은 ADBKeyboard 같은 IME가 필요합니다.');
+    throw new Error('온디바이스 에이전트 없이는 ASCII만 입력할 수 있습니다 (adb input text 제약).');
   }
   await dev.shell(`input text ${quoteShell(text.replace(/ /g, '%s'))}`);
+}
+
+/** 포커스된 입력창의 내용을 통째로 바꾼다 (에이전트 필요) */
+export async function replaceText(dev: DeviceAdb, text: string): Promise<void> {
+  const agent = await ensureAgent(dev);
+  if (!agent) throw new Error('텍스트 교체에는 온디바이스 에이전트가 필요합니다');
+  await agent.setText(text, false);
 }
 
 export const KEYCODES = {
