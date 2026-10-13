@@ -23,6 +23,6 @@ jobs:
       - name: Build on-device agent APK
         working-directory: android
         shell: bash
-        run: ./gradlew :agent:assembleRelease --no-daemon
+        run: ./gradlew :agent:assembleRelease :sdk:assembleRelease :sdk-noop:assembleRelease :sample:assembleDebug --no-daemon
       - run: pnpm --filter @droidlens/desktop typecheck
       - run: pnpm --filter @droidlens/desktop build

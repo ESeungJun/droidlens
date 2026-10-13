@@ -107,6 +107,8 @@ export const api = {
   agentStatus: (s: string) => call<AgentStatus>('agentStatus', s),
   agentStart: (s: string) => call<AgentStatus>('agentStart', s),
   agentStop: (s: string) => call<AgentStatus>('agentStop', s),
+  sdkApps: (s: string) => call<string[]>('sdkApps', s),
+  sdk: <T,>(s: string, pkg: string, method: string, ...args: unknown[]) => call<T>('sdk', s, pkg, method, ...args),
   appVersion: () => call<string>('appVersion'),
   adbStatus: () => call<AdbStatus>('adbStatus'),
   setAdbPath: (p: string) => call<AdbStatus>('setAdbPath', p),
@@ -120,4 +122,4 @@ export const api = {
 };
 
 export type { ApkAnalysis, AppInfo, CurrentScreen, DeviceInfo, DeviceSummary, GraphData, Hierarchy, LogLine, PackageSummary, ScenarioData };
-export type { ViewNode, ScreenNode } from '@droidlens/core';
+export type { ViewNode, ScreenNode, NetworkEntry, NetworkDetail, PrefsFile, DbInfo, QueryResult, SdkEvent, SdkInfo } from '@droidlens/core';

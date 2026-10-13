@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <application>
+        <!-- 앱 시작 시 자동 초기화. 끄려면 앱 매니페스트에서 tools:node="remove" 후 DroidLens.init() 직접 호출 -->
+        <provider
+            android:name="io.github.eseungjun.droidlens.sdk.DroidLensInitProvider"
+            android:authorities="${applicationId}.droidlens-init"
+            android:exported="false"
+            android:initOrder="1000" />
+    </application>
+</manifest>

@@ -21,13 +21,18 @@ model: inherit
 3. **각 단계 반복**
    - `view_hierarchy(interactiveOnly=true)`로 화면을 파악한다 (스크린샷은 레이아웃·이미지 확인이 꼭 필요할 때만 - 토큰 절약).
    - 셀렉터로 조작한다: `tap(id=…)` > `tap(text=…)` > `tap(desc=…)` > 좌표 순서로 선호. 여러 개 매칭되면 index를 지정한다.
-   - 텍스트 입력은 `type_text` (ASCII만 지원. 한글이 필요하면 blocked 사유로 보고).
+   - 텍스트 입력은 `type_text`. 온디바이스 에이전트가 실행 중이면 한글도 된다 (`agent_status`로 확인, 안 되면 `agent_status(start=true)`). 에이전트 없이 한글이 필요하면 blocked 사유로 보고.
    - 화면 전환 후에는 `wait_for`로 기대 요소가 나타나는지 확인한다. 고정 대기 대신 wait_for를 쓴다.
    - 리스트에서 대상이 안 보이면 `swipe(direction="up")`로 스크롤하며 찾는다 (최대 8회).
    - 기대 결과를 확인하면 `scenario_step(status="pass")`, 다르면 `fail` + detail.
 4. **이상 징후 점검**: 앱이 갑자기 사라지거나(현재 패키지 변경) 에러 화면이 보이면 `crashes`와 `logcat(packageName, minLevel="E")`를 확인해 detail에 스택트레이스 핵심을 남긴다.
-5. **화면 경로도 남기기 (선택)**: 사용자가 화면 흐름도 원하면 조작을 `tap` 대신 `graph_record(action=…)`로 해서 화면 그래프에 전이를 쌓는다.
-6. **종료**: `scenario_finish(verdict, summary)` → 리포트 경로를 사용자에게 알려준다.
+5. **앱 내부 검증 (SDK가 있을 때)**: `sdk_apps`로 대상 앱에 DroidLens SDK가 있으면 화면 밖의 기대 결과도 확인한다.
+   - API 호출: `network_requests`(failedOnly로 실패 요청), `network_request_detail`로 요청 파라미터·응답 본문 확인
+   - 저장 상태: `prefs_get`, `db_list`/`db_query`(읽기)로 데이터가 실제로 저장됐는지 확인
+   - 분석 이벤트: `app_events`로 기대한 이벤트가 기록됐는지 확인
+   - 테스트 조건 만들기: `prefs_set`으로 플래그를 바꿀 수 있지만, 시나리오가 요구할 때만 쓰고 detail에 기록한다. `db_query(write=true)`는 사용자가 허용한 경우에만.
+6. **화면 경로도 남기기 (선택)**: 사용자가 화면 흐름도 원하면 조작을 `tap` 대신 `graph_record(action=…)`로 해서 화면 그래프에 전이를 쌓는다.
+7. **종료**: `scenario_finish(verdict, summary)` → 리포트 경로를 사용자에게 알려준다.
 
 ## 최종 보고 형식
 
