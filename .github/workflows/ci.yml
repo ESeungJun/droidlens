@@ -18,7 +18,6 @@ jobs:
         with:
           distribution: temurin
           java-version: 17
-      - uses: android-actions/setup-android@v3
       - run: pnpm install --frozen-lockfile
       - run: pnpm build
       - name: Build on-device agent APK
