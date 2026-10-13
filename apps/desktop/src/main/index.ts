@@ -59,6 +59,7 @@ handle('saveScreenshot', async (s: string, label?: string) => {
 handle('hierarchy', (s: string) => dl.dumpHierarchy(dev(s)));
 handle('snapshot', async (s: string) => {
   const snap = await dl.captureSnapshot(dev(s));
+  snap.screen.fragments = await dl.topFragments(dev(s)).catch(() => []);
   return {
     screen: snap.screen,
     hierarchy: snap.hierarchy,
@@ -67,7 +68,7 @@ handle('snapshot', async (s: string) => {
     image: `data:image/png;base64,${snap.png!.toString('base64')}`,
   };
 });
-handle('currentScreen', (s: string) => dl.currentScreen(dev(s)));
+handle('currentScreen', (s: string, fragments?: boolean) => dl.currentScreen(dev(s), { fragments }));
 
 // ---------- 입력 ----------
 handle('tap', (s: string, x: number, y: number) => dl.tap(dev(s), x, y));
@@ -150,7 +151,7 @@ handle('graphRecordKey', async (s: string, pkg: string, key: string) => {
 });
 handle('graphRecordHere', async (s: string, pkg: string) => {
   const g = await dl.ScreenGraph.open(pkg);
-  const n = await g.addSnapshot(await dl.captureSnapshot(dev(s)));
+  const n = await g.addSnapshot(await dl.captureSnapshot(dev(s)), dev(s));
   await g.save();
   return n.id;
 });
@@ -263,7 +264,30 @@ handle('openExternal', async (url: string) => {
   if (/^https:\/\//.test(url)) await shell.openExternal(url);
 });
 
-app.whenReady().then(createWindow);
+/** 번들된 에이전트 APK를 ~/.droidlens/agent로 복사해 MCP 서버(별도 프로세스)도 쓸 수 있게 한다 */
+async function installAgentApk(): Promise<void> {
+  const src = app.isPackaged
+    ? resourcePath('agent', 'droidlens-agent.apk')
+    : resourcePath('android', 'agent', 'build', 'outputs', 'apk', 'release', 'agent-release.apk');
+  if (!existsSync(src)) return;
+  const dir = await dl.ensureDir('agent');
+  await copyFile(src, join(dir, 'droidlens-agent.apk'));
+}
+
+handle('agentStatus', (s: string) => dl.agentStatus(dev(s)));
+handle('agentStart', async (s: string) => {
+  await dl.ensureAgent(dev(s), { force: true });
+  return dl.agentStatus(dev(s));
+});
+handle('agentStop', async (s: string) => {
+  await dl.stopAgent(dev(s));
+  return dl.agentStatus(dev(s));
+});
+
+app.whenReady().then(() => {
+  installAgentApk().catch(() => undefined);
+  createWindow();
+});
 app.on('window-all-closed', () => {
   logStream?.stop();
   app.quit();

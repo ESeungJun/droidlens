@@ -12,9 +12,16 @@
 - [x] 시나리오 기록 + HTML 리포트
 - [x] MCP 서버 28개 도구, 에이전트 2종
 
+## 배포 (v0.1.0)
+
+- [x] electron-builder: macOS arm64/x64, Windows x64/arm64, Linux AppImage
+- [x] MCP 서버 단일 파일 번들을 앱에 내장, 설정·연동 탭에서 원클릭 등록
+- [x] GitHub Actions: CI, 태그 푸시 시 릴리스 자동 빌드
+
 ## 2단계 — 속도와 깊이
 
-- [ ] **온디바이스 에이전트 APK** (instrumentation + 소켓 서버): 뷰 계층 100~200ms, 화면 변화 이벤트 푸시, 한글 입력
+- [x] **온디바이스 에이전트 APK**: 뷰 계층 0.03~0.3초, 접근성 이벤트 기반 Activity 추적, 한글 입력, idle 대기
+- [x] 자동 탐색: CLEAR_TASK 실행, 구조 안정 판정, ANR/크래시 대화상자 처리
 - [ ] **scrcpy 연동** 고프레임 미러링 (현재 screencap 폴링 2~4fps)
 - [ ] **선택형 Kotlin SDK** (`debugImplementation`), `adb forward`로 데스크톱과 WebSocket 연결
   - 네트워크 인스펙터 (OkHttp Interceptor): 요청/응답, 타이밍, 목킹

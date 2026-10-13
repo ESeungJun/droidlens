@@ -1,0 +1,73 @@
+name: Release
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  desktop:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-latest
+            target: --mac
+          - os: windows-latest
+            target: --win
+          - os: ubuntu-latest
+            target: --linux
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+      - uses: android-actions/setup-android@v3
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build
+      - name: Build on-device agent APK
+        working-directory: android
+        shell: bash
+        run: ./gradlew :agent:assembleRelease --no-daemon
+      - name: Package & publish
+        working-directory: apps/desktop
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: pnpm exec electron-vite build && pnpm exec electron-builder ${{ matrix.target }} --publish always
+
+  mcp-standalone:
+    runs-on: ubuntu-latest
+    needs: desktop
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+      - uses: android-actions/setup-android@v3
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build
+      - name: Build on-device agent APK
+        working-directory: android
+        run: ./gradlew :agent:assembleRelease --no-daemon
+      - name: Attach standalone MCP server & agents
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          cd agents && zip ../droidlens-agents.zip *.md && cd ..
+          cp android/agent/build/outputs/apk/release/agent-release.apk droidlens-agent.apk
+          gh release upload "${GITHUB_REF_NAME}" packages/mcp/dist/droidlens-mcp.mjs droidlens-agent.apk droidlens-agents.zip --clobber

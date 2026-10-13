@@ -11,6 +11,8 @@ npmRebuild: false
 extraResources:
   - from: ../../packages/mcp/dist/droidlens-mcp.mjs
     to: mcp/droidlens-mcp.mjs
+  - from: ../../android/agent/build/outputs/apk/release/agent-release.apk
+    to: agent/droidlens-agent.apk
   - from: ../../agents
     to: agents
     filter: ['*.md']

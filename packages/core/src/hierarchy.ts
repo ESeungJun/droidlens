@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import { XMLParser } from 'fast-xml-parser';
 import { DeviceAdb, sleep } from './adb.js';
+import { ensureAgent, stopAgent } from './agent.js';
 
 export type Bounds = [left: number, top: number, right: number, bottom: number];
 
@@ -103,10 +104,20 @@ export function parseHierarchyXml(xml: string): Hierarchy {
 const REMOTE_DUMP = '/sdcard/droidlens_ui.xml';
 
 /**
- * uiautomator dump. 애니메이션 중에는 "could not get idle state"로 실패할 수 있어 재시도한다.
+ * 뷰 계층 덤프. 온디바이스 에이전트가 있으면 그것을 쓰고(0.1~0.3초), 없으면 uiautomator dump.
+ * uiautomator dump는 애니메이션 중에는 "could not get idle state"로 실패할 수 있어 재시도한다.
  * 다른 uiautomator 세션(예: Appium)이 떠 있으면 실패한다.
  */
 export async function dumpHierarchy(dev: DeviceAdb, retries = 3): Promise<Hierarchy> {
+  const agent = await ensureAgent(dev);
+  if (agent) {
+    try {
+      return parseHierarchyXml(await agent.hierarchyXml());
+    } catch {
+      // 에이전트가 UiAutomation을 쥐고 있으면 uiautomator dump가 실패하므로 내리고 대체한다
+      await stopAgent(dev);
+    }
+  }
   let lastErr: unknown;
   for (let i = 0; i < retries; i++) {
     try {

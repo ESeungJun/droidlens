@@ -182,7 +182,7 @@ export function ScreenTab() {
               setText('');
             }}
           >
-            <input className="input" style={{ flex: 1 }} value={text} onChange={(e) => setText(e.target.value)} placeholder="포커스된 입력창에 입력 (ASCII)" />
+            <input className="input" style={{ flex: 1 }} value={text} onChange={(e) => setText(e.target.value)} placeholder="포커스된 입력창에 입력 (에이전트 실행 시 한글 가능)" />
             <button className="btn sm">입력</button>
           </form>
         </div>
