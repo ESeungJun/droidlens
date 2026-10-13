@@ -1,0 +1,33 @@
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { existsSync } from 'node:fs';
+import { homedir } from 'node:os';
+import { join } from 'node:path';
+
+/** 모든 산출물(스크린샷, 녹화, 화면 그래프, 시나리오 리포트, APK 캐시)의 루트. DROIDLENS_HOME으로 변경 가능 */
+export function droidlensHome(): string {
+  return process.env.DROIDLENS_HOME ?? join(homedir(), '.droidlens');
+}
+
+export async function ensureDir(...parts: string[]): Promise<string> {
+  const dir = join(droidlensHome(), ...parts);
+  await mkdir(dir, { recursive: true });
+  return dir;
+}
+
+export function timestamp(d = new Date()): string {
+  const p = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}-${p(d.getHours())}${p(d.getMinutes())}${p(d.getSeconds())}`;
+}
+
+export function safeName(s: string): string {
+  return s.replace(/[^\w.-]+/g, '_').slice(0, 80) || 'unnamed';
+}
+
+export async function readJson<T>(path: string): Promise<T | undefined> {
+  if (!existsSync(path)) return undefined;
+  return JSON.parse(await readFile(path, 'utf8')) as T;
+}
+
+export async function writeJson(path: string, data: unknown): Promise<void> {
+  await writeFile(path, JSON.stringify(data, null, 2));
+}
