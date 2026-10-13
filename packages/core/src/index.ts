@@ -6,3 +6,4 @@ export * from './libraries.js';
 export * from './graph.js';
 export * from './scenario.js';
 export * from './workspace.js';
+export * from './image.js';

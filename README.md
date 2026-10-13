@@ -1,61 +1,111 @@
-# DroidLens
+<p align="center"><img src="apps/desktop/build/icon.png" width="120" alt="DroidLens"></p>
 
-개인용 Android 앱 분석·디버깅·시나리오 검증 툴. Flipper(2025년 아카이브)를 대체하는 것을 목표로 하며, **SDK 없이 adb만으로 모든 앱**을 분석하고, 선택형 SDK로 내 앱은 더 깊게 본다. 같은 기능을 Electron 데스크톱 앱과 MCP 서버로 함께 제공해서 Claude Code 에이전트가 직접 기기를 조작하고 검증할 수 있다.
+<h1 align="center">DroidLens</h1>
 
-```
-packages/core     adb 엔진 — 기기, 스크린샷/녹화, 뷰 계층, 화면 그래프·자동 탐색, APK 라이브러리 탐지, 시나리오 기록
-packages/mcp      core를 MCP 도구 28개로 노출 (stdio)
-apps/desktop      Electron + React UI
-agents/           Claude Code 전용 에이전트 (droidlens-verifier, droidlens-analyst)
-sdk/android       (2단계) 선택형 Kotlin SDK — 네트워크·DB·SharedPreferences·Compose 상세
-```
+<p align="center">Android 앱을 들여다보는 렌즈 — 분석 · 디버깅 · 화면 흐름 · 시나리오 검증<br>
+SDK 없이 adb만으로 <b>모든 앱</b>을 분석하고, Claude Code 에이전트가 직접 기기를 조작해 검증합니다.</p>
 
-## 실행
+<p align="center"><a href="https://github.com/ESeungJun/droidlens/releases/latest"><b>⬇ 최신 버전 다운로드</b></a></p>
 
+---
+
+Meta의 [Flipper](https://github.com/facebook/flipper)(2025년 아카이브)를 대체하는 것을 목표로 합니다. 앱에 아무것도 심지 않아도 화면 미러링, 뷰 계층, 화면 이동 경로, 사용 라이브러리를 볼 수 있고, 내장 MCP 서버로 Claude Code 에이전트가 같은 기능을 그대로 사용합니다.
+
+## 설치
+
+[Releases](https://github.com/ESeungJun/droidlens/releases/latest)에서 운영체제에 맞는 파일을 받으세요.
+
+| 운영체제 | 파일 |
+| --- | --- |
+| macOS (Apple 칩 M1~) | `DroidLens-x.y.z-mac-arm64.dmg` |
+| macOS (Intel) | `DroidLens-x.y.z-mac-x64.dmg` |
+| Windows (x64) | `DroidLens-x.y.z-win-x64.exe` |
+| Windows (ARM) | `DroidLens-x.y.z-win-arm64.exe` |
+| Linux | `DroidLens-x.y.z-linux-x86_64.AppImage` |
+
+**macOS 첫 실행**: 코드 서명 인증서가 없어 "손상되었기 때문에 열 수 없습니다"가 뜰 수 있습니다. 앱을 응용 프로그램 폴더로 옮긴 뒤 터미널에서 한 번 실행하세요.
 ```bash
-pnpm install
-pnpm build                              # core + mcp
-pnpm --filter @droidlens/desktop dev    # 데스크톱 앱
+xattr -dr com.apple.quarantine /Applications/DroidLens.app
 ```
+**Windows 첫 실행**: SmartScreen 경고가 뜨면 "추가 정보 → 실행"을 누르세요.
 
-adb는 `ADB_PATH` → `ANDROID_HOME` → `~/Library/Android/sdk/platform-tools/adb` → PATH 순서로 찾는다. 산출물은 모두 `~/.droidlens/`(`DROIDLENS_HOME`로 변경 가능)에 쌓인다.
+### 준비물: adb
+Android Studio가 설치되어 있으면 자동으로 찾습니다. 없다면 platform-tools만 설치하세요.
+```
+macOS    brew install --cask android-platform-tools
+Windows  winget install Google.PlatformTools
+Linux    sudo apt install adb
+```
+그다음 기기에서 **개발자 옵션 → USB 디버깅**을 켜고 연결하거나 에뮬레이터를 실행하면 됩니다. adb 경로는 앱의 **설정·연동** 탭에서 직접 지정할 수도 있습니다.
+
+## 기능
+
+| 탭 | 내용 |
+| --- | --- |
+| **화면** | 실시간 미러링 (클릭 = 탭, 드래그 = 스와이프, 길게 = 롱프레스), 하드웨어 키, 텍스트 입력, 스크린샷, 녹화(최대 180초) |
+| **뷰 계층** | 스크린샷 ↔ 트리 양방향 선택, 속성·셀렉터, 깊이별 노드 수, Compose 추정, **3D 깊이 분해도** |
+| **화면 흐름** | 화면 그래프 (썸네일 + 동작 라벨), **자동 탐색**(결제·삭제·로그아웃·전송 버튼은 누르지 않음), 화면별 진입·진출 경로 |
+| **로그** | 실시간 logcat (앱 PID 필터, 레벨, 검색), 최근 크래시 |
+| **라이브러리** | APK의 DEX·네이티브 lib로 100여 개 라이브러리·프레임워크 탐지, 난독화 추정 |
+| **앱 정보** | 버전·SDK·권한·Activity, 실행/재시작/종료, 딥링크 |
+| **시나리오** | 에이전트가 남긴 검증 기록(단계별 스크린샷·판정)을 실시간 확인 |
+| **설정·연동** | adb 경로, Claude Code MCP 원클릭 등록, 전용 에이전트 설치 |
+
+## Claude Code 연동
+
+앱의 **설정·연동** 탭에서 버튼 두 개만 누르면 됩니다.
+
+1. **MCP 자동 등록** — 앱에 내장된 MCP 서버(도구 28개)를 `claude mcp add --scope user`로 등록합니다. Node를 따로 설치할 필요가 없습니다.
+2. **에이전트 설치** — 전용 에이전트를 `~/.claude/agents/`에 복사합니다.
+
+| 에이전트 | 하는 일 |
+| --- | --- |
+| `droidlens-verifier` | 자연어 시나리오를 실제 기기에서 단계별로 검증하고, 스크린샷이 포함된 HTML 리포트를 남깁니다 |
+| `droidlens-analyst` | 기술 스택, UI 구조(View/Compose), 화면 지도를 분석합니다. [REA](https://github.com/morluto/rea)가 있으면 코드 수준까지 추적합니다 |
+
+Claude Code를 재시작한 뒤 이렇게 요청하세요.
+> droidlens-verifier로 쇼핑 앱에서 검색 → 상품 상세 → 찜하기 시나리오 검증해줘
+>
+> droidlens-analyst로 이 앱 기술 스택이랑 화면 구조 분석해줘
+
+앱 없이 MCP만 쓰려면 Releases의 `droidlens-mcp.mjs`(Node 20+)를 받아 `claude mcp add --scope user droidlens -- node /path/to/droidlens-mcp.mjs`로 등록하세요.
+
+## 산출물
+
+모두 `~/.droidlens/`에 저장됩니다 (`DROIDLENS_HOME`으로 변경 가능).
 
 | 폴더 | 내용 |
 | --- | --- |
 | `screenshots/`, `recordings/` | 스크린샷 PNG, 녹화 mp4 |
-| `graphs/<패키지>/` | 화면 그래프 `graph.json`, `graph.mmd`, 화면별 스크린샷 |
-| `scenarios/<id>/` | 시나리오 검증 `scenario.json`, `report.html`, 단계별 스크린샷 |
-| `apks/<패키지>/` | 분석용으로 내려받은 APK (REA 분석에 재사용) |
+| `graphs/<패키지>/` | 화면 그래프 `graph.json`, `graph.mmd`(mermaid), 화면별 스크린샷 |
+| `scenarios/<id>/` | 시나리오 검증 `report.html`, `scenario.json`, 단계별 스크린샷 |
+| `apks/<패키지>/` | 분석용 APK |
 
-## 데스크톱 앱 기능
+## 알려진 한계
 
-- **화면**: 실시간 미러링(클릭=탭, 드래그=스와이프, 길게=롱프레스), 하드웨어 키, 텍스트 입력, 스크린샷, 녹화(최대 180초), 조작을 화면 그래프에 기록
-- **뷰 계층**: 스크린샷 ↔ 트리 양방향 선택, 속성·셀렉터, 깊이별 노드 수, Compose 추정, **3D 깊이 분해도**(드래그 회전·간격 조절)
-- **화면 흐름**: 화면 그래프(썸네일 노드 + 동작 라벨 엣지), 자동 탐색(DFS, 위험 버튼 회피), 화면별 진입/진출 경로
-- **로그**: 실시간 logcat(앱 PID 필터, 레벨, 검색), 최근 크래시
-- **라이브러리**: APK의 DEX 클래스·네이티브 lib로 100여 개 라이브러리/프레임워크 탐지, 난독화 추정, 시그니처에 없는 패키지
-- **앱 정보**: 버전·SDK·권한·Activity·실행/재시작/종료·딥링크
-- **시나리오**: 에이전트가 남긴 검증 기록을 실시간으로 확인
+- `uiautomator dump`가 한 번에 1.5~3초 걸려 자동 탐색이 스텝당 5~15초 — 온디바이스 에이전트로 개선 예정
+- 텍스트 입력은 ASCII만 지원 (한글은 온디바이스 에이전트에서 지원 예정)
+- 네트워크·DB·SharedPreferences 같은 앱 내부 정보는 선택형 SDK가 필요 (개발 예정)
+- WebView·Flutter·게임 엔진 화면은 접근성 노드가 적어 분석이 제한적
 
-## Claude Code 연동
-
-이 폴더에서 Claude Code를 열면 `.mcp.json`과 `.claude/agents/`가 자동으로 잡힌다. 다른 폴더에서도 쓰려면 직접 등록한다.
+## 개발
 
 ```bash
-claude mcp add --scope user droidlens -- node <droidlens 경로>/packages/mcp/dist/index.js
-cp agents/*.md ~/.claude/agents/
+pnpm install
+pnpm build                              # core + mcp
+pnpm dev                                # 데스크톱 앱 (개발 모드)
+pnpm dist                               # 현재 OS용 설치 파일 → apps/desktop/release/
 ```
 
-사용 예:
-- "droidlens-verifier로 쇼핑 앱에서 검색 → 상품 상세 → 찜하기 시나리오 검증해줘"
-- "droidlens-analyst로 이 앱 기술 스택이랑 화면 구조 분석해줘"
+```
+packages/core     adb 엔진 (기기·입력·캡처, 뷰 계층, 화면 그래프·자동 탐색, 라이브러리 탐지, 시나리오)
+packages/mcp      MCP 서버 (단일 파일 번들 droidlens-mcp.mjs)
+apps/desktop      Electron + React
+agents/           Claude Code 에이전트 정의
+```
 
-## 알려진 한계 (adb 모드)
+`v*` 태그를 푸시하면 GitHub Actions가 macOS(arm64/x64)·Windows(x64/arm64)·Linux 설치 파일을 빌드해 Releases에 올립니다. 로드맵은 [docs/ROADMAP.md](docs/ROADMAP.md).
 
-- `uiautomator dump`가 한 번에 1.5~3초 걸려 자동 탐색이 스텝당 5~15초. → 2단계 온디바이스 에이전트 APK로 개선 예정
-- `input text`는 ASCII만 지원 (한글 입력은 IME 필요)
-- 네트워크·DB·SharedPreferences 같은 앱 내부 정보는 SDK가 필요 (2단계)
-- Compose 화면은 semantics가 노출된 노드만 보인다
-- WebView/Flutter/게임 엔진 화면 내부는 접근성 노드가 적어 분석이 제한적
+## 라이선스
 
-로드맵은 [docs/ROADMAP.md](docs/ROADMAP.md).
+MIT

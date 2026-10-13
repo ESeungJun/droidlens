@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#1b1f27"/><stop offset="1" stop-color="#0b0c0f"/>
+    </linearGradient>
+    <radialGradient id="glass" cx="0.42" cy="0.38" r="0.7">
+      <stop offset="0" stop-color="#9ff0c6"/><stop offset="0.55" stop-color="#4fbf8a"/><stop offset="1" stop-color="#1f6b4a"/>
+    </radialGradient>
+  </defs>
+  <rect x="64" y="64" width="896" height="896" rx="200" fill="url(#bg)"/>
+  <!-- layered views (depth) -->
+  <g fill="none" stroke="#7dd3a8" stroke-width="18" stroke-linejoin="round" opacity="0.35">
+    <rect x="250" y="250" width="380" height="380" rx="40" transform="translate(-40 -40)"/>
+  </g>
+  <g fill="none" stroke="#7dd3a8" stroke-width="18" stroke-linejoin="round" opacity="0.6">
+    <rect x="250" y="250" width="380" height="380" rx="40"/>
+  </g>
+  <!-- lens -->
+  <circle cx="480" cy="480" r="190" fill="url(#glass)" stroke="#e6f7ee" stroke-width="30"/>
+  <path d="M400 430 a90 90 0 0 1 90 -70" fill="none" stroke="#ffffff" stroke-opacity="0.7" stroke-width="22" stroke-linecap="round"/>
+  <line x1="620" y1="620" x2="790" y2="790" stroke="#e6f7ee" stroke-width="64" stroke-linecap="round"/>
+  <!-- android antenna hint -->
+  <g stroke="#0b1a12" stroke-width="16" stroke-linecap="round">
+    <line x1="425" y1="455" x2="400" y2="415"/><line x1="535" y1="455" x2="560" y2="415"/>
+  </g>
+  <path d="M395 520 a85 85 0 0 1 170 0 z" fill="#0b1a12"/>
+  <circle cx="445" cy="495" r="9" fill="#7dd3a8"/><circle cx="515" cy="495" r="9" fill="#7dd3a8"/>
+</svg>

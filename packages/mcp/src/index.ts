@@ -1,14 +1,11 @@
 #!/usr/bin/env node
-import { execFile } from 'node:child_process';
-import { readFile, writeFile } from 'node:fs/promises';
+import { writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { promisify } from 'node:util';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { z } from 'zod';
 import * as dl from '@droidlens/core';
 
-const run = promisify(execFile);
 const adb = new dl.Adb();
 const server = new McpServer({ name: 'droidlens', version: '0.1.0' });
 
@@ -28,15 +25,10 @@ async function device(serial?: string): Promise<dl.DeviceAdb> {
 const text = (t: string) => ({ content: [{ type: 'text' as const, text: t }] });
 const json = (v: unknown) => text(JSON.stringify(v, null, 2));
 
-/** 토큰 절약을 위해 macOS sips로 축소한 JPEG를 돌려준다 (실패 시 원본 PNG) */
+/** 토큰 절약을 위해 축소한 JPEG를 돌려준다 (실패 시 원본 PNG) */
 async function imageContent(png: Buffer, maxEdge = 900): Promise<{ type: 'image'; data: string; mimeType: string }> {
   try {
-    const dir = await dl.ensureDir('tmp');
-    const src = join(dir, `shot-${process.pid}.png`);
-    const dst = join(dir, `shot-${process.pid}.jpg`);
-    await writeFile(src, png);
-    await run('sips', ['-Z', String(maxEdge), '-s', 'format', 'jpeg', '-s', 'formatOptions', '70', src, '--out', dst]);
-    return { type: 'image', data: (await readFile(dst)).toString('base64'), mimeType: 'image/jpeg' };
+    return { type: 'image', data: dl.downscaleToJpeg(png, maxEdge).toString('base64'), mimeType: 'image/jpeg' };
   } catch {
     return { type: 'image', data: png.toString('base64'), mimeType: 'image/png' };
   }

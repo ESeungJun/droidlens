@@ -7,13 +7,15 @@
     "build": "pnpm -r --filter \"./packages/*\" run build",
     "dev": "pnpm build && pnpm --filter @droidlens/desktop dev",
     "mcp": "node packages/mcp/dist/index.js",
-    "typecheck": "pnpm -r run typecheck"
+    "typecheck": "pnpm -r run typecheck",
+    "dist": "pnpm build && pnpm --filter @droidlens/desktop dist"
   },
   "packageManager": "pnpm@10.0.0",
   "pnpm": {
     "onlyBuiltDependencies": [
       "electron",
-      "esbuild"
+      "esbuild",
+      "electron-winstaller"
     ]
   }
 }

@@ -35,6 +35,24 @@ export interface SnapshotDTO {
   image: string;
 }
 
+export interface AdbStatus {
+  ok: boolean;
+  path: string;
+  version?: string;
+  error?: string;
+  candidates?: string[];
+}
+
+export interface Integration {
+  mcpScript: string;
+  mcpScriptExists: boolean;
+  command: string;
+  claudeVersion: string | null;
+  registered: boolean;
+  agents: { file: string; installed: boolean }[];
+  agentsDir: string;
+}
+
 export interface Progress {
   kind: 'libs' | 'explore';
   message: string;
@@ -79,6 +97,14 @@ export const api = {
   home: () => call<string>('home'),
   scenarios: () => call<ScenarioData[]>('scenarios'),
   scenarioImage: (dir: string, file: string) => call<string>('scenarioImage', dir, file),
+  appVersion: () => call<string>('appVersion'),
+  adbStatus: () => call<AdbStatus>('adbStatus'),
+  setAdbPath: (p: string) => call<AdbStatus>('setAdbPath', p),
+  integration: () => call<Integration>('integration'),
+  registerMcp: () => call<string>('registerMcp'),
+  installAgents: () => call<string[]>('installAgents'),
+  copy: (t: string) => call<void>('copy', t),
+  openExternal: (url: string) => call<void>('openExternal', url),
   onLogcat: (fn: (lines: LogLine[]) => void) => window.dl.on('logcat', (p) => fn(p as LogLine[])),
   onProgress: (fn: (p: Progress) => void) => window.dl.on('progress', (p) => fn(p as Progress)),
 };
