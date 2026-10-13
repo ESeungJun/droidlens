@@ -1,0 +1,258 @@
+import { createHash } from 'node:crypto';
+import { XMLParser } from 'fast-xml-parser';
+import { DeviceAdb, sleep } from './adb.js';
+
+export type Bounds = [left: number, top: number, right: number, bottom: number];
+
+export interface ViewNode {
+  /** 트리 내 경로 기반 id (예: 0.2.1) */
+  id: string;
+  depth: number;
+  className: string;
+  resourceId: string;
+  text: string;
+  contentDesc: string;
+  packageName: string;
+  bounds: Bounds;
+  clickable: boolean;
+  longClickable: boolean;
+  scrollable: boolean;
+  focusable: boolean;
+  focused: boolean;
+  enabled: boolean;
+  checkable: boolean;
+  checked: boolean;
+  selected: boolean;
+  password: boolean;
+  children: ViewNode[];
+}
+
+export interface Hierarchy {
+  root: ViewNode;
+  capturedAt: number;
+  nodeCount: number;
+  maxDepth: number;
+}
+
+const parser = new XMLParser({
+  ignoreAttributes: false,
+  attributeNamePrefix: '',
+  isArray: (name) => name === 'node',
+});
+
+function parseBounds(s: string | undefined): Bounds {
+  const m = /\[(-?\d+),(-?\d+)\]\[(-?\d+),(-?\d+)\]/.exec(s ?? '');
+  return m ? [Number(m[1]), Number(m[2]), Number(m[3]), Number(m[4])] : [0, 0, 0, 0];
+}
+
+type RawNode = Record<string, string> & { node?: RawNode[] };
+
+function toViewNode(raw: RawNode, id: string, depth: number): ViewNode {
+  const b = (k: string) => raw[k] === 'true';
+  return {
+    id,
+    depth,
+    className: raw.class ?? '',
+    resourceId: raw['resource-id'] ?? '',
+    text: raw.text ?? '',
+    contentDesc: raw['content-desc'] ?? '',
+    packageName: raw.package ?? '',
+    bounds: parseBounds(raw.bounds),
+    clickable: b('clickable'),
+    longClickable: b('long-clickable'),
+    scrollable: b('scrollable'),
+    focusable: b('focusable'),
+    focused: b('focused'),
+    enabled: b('enabled'),
+    checkable: b('checkable'),
+    checked: b('checked'),
+    selected: b('selected'),
+    password: b('password'),
+    children: (raw.node ?? []).map((c, i) => toViewNode(c, `${id}.${i}`, depth + 1)),
+  };
+}
+
+export function parseHierarchyXml(xml: string): Hierarchy {
+  const doc = parser.parse(xml);
+  const top: RawNode[] = doc?.hierarchy?.node ?? [];
+  const root: ViewNode = {
+    ...toViewNode({ class: 'hierarchy' } as RawNode, '0', 0),
+    children: top.map((n, i) => toViewNode(n, `0.${i}`, 1)),
+  };
+  // 루트 bounds = 자식 합집합
+  if (root.children.length) {
+    root.bounds = root.children.reduce<Bounds>(
+      (acc, c) => [
+        Math.min(acc[0], c.bounds[0]),
+        Math.min(acc[1], c.bounds[1]),
+        Math.max(acc[2], c.bounds[2]),
+        Math.max(acc[3], c.bounds[3]),
+      ],
+      [...root.children[0].bounds],
+    );
+  }
+  let nodeCount = 0;
+  let maxDepth = 0;
+  walk(root, (n) => {
+    nodeCount++;
+    maxDepth = Math.max(maxDepth, n.depth);
+  });
+  return { root, capturedAt: Date.now(), nodeCount, maxDepth };
+}
+
+const REMOTE_DUMP = '/sdcard/droidlens_ui.xml';
+
+/**
+ * uiautomator dump. 애니메이션 중에는 "could not get idle state"로 실패할 수 있어 재시도한다.
+ * 다른 uiautomator 세션(예: Appium)이 떠 있으면 실패한다.
+ */
+export async function dumpHierarchy(dev: DeviceAdb, retries = 3): Promise<Hierarchy> {
+  let lastErr: unknown;
+  for (let i = 0; i < retries; i++) {
+    try {
+      const out = await dev.shell(`uiautomator dump --compressed ${REMOTE_DUMP}`, { timeoutMs: 20_000 });
+      if (!out.includes('dumped')) throw new Error(out.trim() || 'uiautomator dump 실패');
+      const xml = (await dev.execOut(`cat ${REMOTE_DUMP}`)).toString('utf8');
+      return parseHierarchyXml(xml);
+    } catch (e) {
+      lastErr = e;
+      await sleep(400);
+    }
+  }
+  throw lastErr;
+}
+
+export function walk(node: ViewNode, fn: (n: ViewNode, parent?: ViewNode) => void, parent?: ViewNode): void {
+  fn(node, parent);
+  for (const c of node.children) walk(c, fn, node);
+}
+
+export function flatten(root: ViewNode): ViewNode[] {
+  const out: ViewNode[] = [];
+  walk(root, (n) => out.push(n));
+  return out;
+}
+
+// ---------- 셀렉터 ----------
+
+export interface Selector {
+  /** resource-id 전체 또는 ':id/' 뒤 이름 */
+  id?: string;
+  text?: string;
+  textContains?: string;
+  desc?: string;
+  descContains?: string;
+  className?: string;
+  clickable?: boolean;
+  /** 여러 개 매칭될 때 n번째 (0부터) */
+  index?: number;
+}
+
+export function matches(n: ViewNode, s: Selector): boolean {
+  if (s.id && n.resourceId !== s.id && !n.resourceId.endsWith(`:id/${s.id}`)) return false;
+  if (s.text !== undefined && n.text !== s.text) return false;
+  if (s.textContains && !n.text.toLowerCase().includes(s.textContains.toLowerCase())) return false;
+  if (s.desc !== undefined && n.contentDesc !== s.desc) return false;
+  if (s.descContains && !n.contentDesc.toLowerCase().includes(s.descContains.toLowerCase())) return false;
+  if (s.className && n.className !== s.className && !n.className.endsWith(`.${s.className}`)) return false;
+  if (s.clickable !== undefined && n.clickable !== s.clickable) return false;
+  return true;
+}
+
+export function findNodes(root: ViewNode, s: Selector): ViewNode[] {
+  const all = flatten(root).filter((n) => n.depth > 0 && matches(n, s));
+  return s.index !== undefined ? all.slice(s.index, s.index + 1) : all;
+}
+
+export function center(n: ViewNode): { x: number; y: number } {
+  const [l, t, r, b] = n.bounds;
+  return { x: (l + r) / 2, y: (t + b) / 2 };
+}
+
+/** 좌표를 포함하는 가장 깊은(가장 작은) 노드 */
+export function nodeAt(root: ViewNode, x: number, y: number): ViewNode | undefined {
+  let best: ViewNode | undefined;
+  walk(root, (n) => {
+    const [l, t, r, b] = n.bounds;
+    if (n.depth > 0 && x >= l && x <= r && y >= t && y <= b) {
+      if (!best || n.depth >= best.depth) best = n;
+    }
+  });
+  return best;
+}
+
+/** 텍스트 요약/아이콘 버튼 판단에 쓸 사람 친화적 라벨 */
+export function labelOf(n: ViewNode): string {
+  const short = n.resourceId.split(':id/')[1];
+  return n.text || n.contentDesc || short || n.className.split('.').pop() || '';
+}
+
+/**
+ * 에이전트·사람이 읽기 좋은 압축 트리. 의미 없는 래퍼 레이아웃은 건너뛰고 depth를 유지한다.
+ * 각 줄: [id] 클래스 #resId "text" (desc) {플래그} @bounds
+ */
+export function toCompactText(root: ViewNode, opts: { maxDepth?: number; interactiveOnly?: boolean } = {}): string {
+  const lines: string[] = [];
+  const visit = (n: ViewNode, indent: number) => {
+    if (opts.maxDepth !== undefined && n.depth > opts.maxDepth) return;
+    const interesting =
+      n.depth === 0 || n.text || n.contentDesc || n.resourceId || n.clickable || n.scrollable || n.checkable;
+    const show = interesting && (!opts.interactiveOnly || n.clickable || n.scrollable || n.checkable || n.text);
+    if (show) {
+      const flags = [
+        n.clickable && 'click',
+        n.longClickable && 'long',
+        n.scrollable && 'scroll',
+        n.checkable && (n.checked ? 'checked' : 'unchecked'),
+        n.selected && 'selected',
+        n.focused && 'focused',
+        !n.enabled && 'disabled',
+      ].filter(Boolean);
+      const parts = [
+        `${'  '.repeat(indent)}[${n.id}]`,
+        n.className.split('.').pop(),
+        n.resourceId && `#${n.resourceId.split(':id/')[1] ?? n.resourceId}`,
+        n.text && JSON.stringify(n.text.slice(0, 80)),
+        n.contentDesc && `(${n.contentDesc.slice(0, 60)})`,
+        flags.length ? `{${flags.join(',')}}` : '',
+        n.depth > 0 ? `@${n.bounds.join(',')}` : '',
+      ].filter(Boolean);
+      lines.push(parts.join(' '));
+    }
+    for (const c of n.children) visit(c, show ? indent + 1 : indent);
+  };
+  visit(root, 0);
+  return lines.join('\n');
+}
+
+/**
+ * 화면 구조 시그니처. 텍스트·리스트 항목 개수 변화에는 둔감하도록
+ * (클래스, resource-id) 골격만 depth 6까지 쓰고, 같은 부모 아래 반복 형제는 하나로 접는다.
+ */
+export function structureSignature(root: ViewNode, maxDepth = 6): string {
+  const skel = (n: ViewNode): string => {
+    if (n.depth > maxDepth) return '';
+    const kids = [...new Set(n.children.map(skel))].join(',');
+    return `${n.className.split('.').pop()}#${n.resourceId.split(':id/')[1] ?? ''}(${kids})`;
+  };
+  return createHash('sha1').update(skel(root)).digest('hex').slice(0, 12);
+}
+
+/** 깊이별 노드 수 등 뷰 계층 통계 (오버드로/과도한 중첩 진단용) */
+export function hierarchyStats(h: Hierarchy) {
+  const byDepth: number[] = [];
+  const byClass = new Map<string, number>();
+  walk(h.root, (n) => {
+    byDepth[n.depth] = (byDepth[n.depth] ?? 0) + 1;
+    const c = n.className || '(root)';
+    byClass.set(c, (byClass.get(c) ?? 0) + 1);
+  });
+  const isCompose = [...byClass.keys()].some((c) => c.includes('ComposeView') || c === 'android.view.View');
+  return {
+    nodeCount: h.nodeCount,
+    maxDepth: h.maxDepth,
+    byDepth,
+    topClasses: [...byClass.entries()].sort((a, b) => b[1] - a[1]).slice(0, 15),
+    likelyCompose: isCompose,
+  };
+}

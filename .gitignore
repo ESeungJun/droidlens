@@ -1,0 +1,7 @@
+node_modules/
+dist/
+out/
+.droidlens/
+*.log
+.DS_Store
+*.tmp.mjs
