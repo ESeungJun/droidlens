@@ -60,6 +60,27 @@ export interface Integration {
   agentsDir: string;
 }
 
+export interface ScriptEntry {
+  file: string;
+  name: string;
+  app?: string;
+  steps?: number;
+  error?: string;
+}
+export interface ScriptRunResult {
+  file: string;
+  verdict: 'pass' | 'fail' | 'blocked';
+  passed?: number;
+  failed?: number;
+  skipped?: number;
+  durationMs?: number;
+  report?: string;
+  error?: string;
+}
+export type ScriptProgress =
+  | { kind: 'script'; file: string; index: number; total: number }
+  | { kind: 'step'; file: string; index: number; total: number; title: string; status: 'running' | 'pass' | 'fail' | 'skip'; detail?: string };
+
 export interface Progress {
   kind: 'libs' | 'explore';
   message: string;
@@ -113,6 +134,13 @@ export const api = {
   onMirrorPacket: (fn: (p: { data: Uint8Array; config: boolean; key: boolean; pts: number }) => void) =>
     window.dl.on('mirror:packet', (p) => fn(p as never)),
   onMirrorClosed: (fn: (p: { reason?: string }) => void) => window.dl.on('mirror:closed', (p) => fn(p as never)),
+  scriptsList: () => call<ScriptEntry[]>('scriptsList'),
+  scriptRead: (name: string) => call<string>('scriptRead', name),
+  scriptWrite: (name: string, yaml: string) => call<string>('scriptWrite', name, yaml),
+  scriptDelete: (name: string) => call<void>('scriptDelete', name),
+  scriptRun: (s: string, names: string[]) => call<ScriptRunResult[]>('scriptRun', s, names),
+  scriptStop: () => call<void>('scriptStop'),
+  onScriptProgress: (fn: (p: ScriptProgress) => void) => window.dl.on('script:progress', (p) => fn(p as ScriptProgress)),
   sdkApps: (s: string) => call<string[]>('sdkApps', s),
   sdk: <T,>(s: string, pkg: string, method: string, ...args: unknown[]) => call<T>('sdk', s, pkg, method, ...args),
   appVersion: () => call<string>('appVersion'),

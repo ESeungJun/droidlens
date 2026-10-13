@@ -11,3 +11,4 @@ export * from './agent.js';
 export * from './sdk.js';
 export * from './scrcpy.js';
 export * from './http.js';
+export * from './script.js';
