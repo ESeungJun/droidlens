@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { api, type ScenarioData } from '../api';
 import { useApp } from '../App';
+import { ScriptsPanel } from './ScriptsPanel';
 
 function StepShot({ dir, file }: { dir: string; file: string }) {
   const [src, setSrc] = useState<string>();
@@ -10,7 +11,7 @@ function StepShot({ dir, file }: { dir: string; file: string }) {
   return src ? <img src={src} alt="" /> : null;
 }
 
-export function ScenariosTab() {
+function ReportsView() {
   const { run } = useApp();
   const [list, setList] = useState<ScenarioData[]>([]);
   const [sel, setSel] = useState<ScenarioData | null>(null);
@@ -28,7 +29,7 @@ export function ScenariosTab() {
   }, []);
 
   return (
-    <div className="scen">
+    <div className="scen" style={{ height: 'calc(100% - 45px)' }}>
       <div className="scen-list">
         <div className="toolbar"><b>시나리오 검증 기록</b><span className="faint">({list.length})</span></div>
         {list.length === 0 && (
@@ -82,5 +83,25 @@ export function ScenariosTab() {
         <div className="empty">시나리오를 선택하세요</div>
       )}
     </div>
+  );
+}
+
+export function ScenariosTab() {
+  const [view, setView] = useState<'reports' | 'scripts'>(location.hash.includes('view=scripts') ? 'scripts' : 'reports');
+  const [reloadKey, setReloadKey] = useState(0);
+  return (
+    <>
+      <div className="toolbar">
+        <button className={`btn ${view === 'reports' ? 'primary' : ''}`} onClick={() => setView('reports')}>검증 리포트</button>
+        <button className={`btn ${view === 'scripts' ? 'primary' : ''}`} onClick={() => setView('scripts')}>스크립트 (회귀 테스트)</button>
+      </div>
+      {view === 'reports' ? (
+        <ReportsView key={reloadKey} />
+      ) : (
+        <div style={{ height: 'calc(100% - 45px)' }}>
+          <ScriptsPanel onFinished={() => setReloadKey((k) => k + 1)} />
+        </div>
+      )}
+    </>
   );
 }

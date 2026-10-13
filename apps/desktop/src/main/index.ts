@@ -237,6 +237,57 @@ handle('sdk', async (s: string, pkg: string, method: (typeof SDK_METHODS)[number
   return (c[method] as (...a: unknown[]) => Promise<unknown>).apply(c, args);
 });
 
+// ---------- 시나리오 스크립트 ----------
+let scriptAbort: AbortController | null = null;
+/** 스크립트 경로는 scripts 폴더 안의 파일 이름으로만 받는다 */
+const scriptFile = async (name: string) => join(await dl.scriptsDir(), basename(name));
+handle('scriptsList', async () => {
+  const dir = await dl.scriptsDir();
+  const files = await dl.collectScripts(dir);
+  return Promise.all(
+    files.map(async (f) => {
+      try {
+        const s = await dl.loadScript(f);
+        return { file: basename(f), name: s.name, app: s.app, steps: s.steps.length };
+      } catch (e) {
+        return { file: basename(f), name: basename(f), error: (e as Error).message };
+      }
+    }),
+  );
+});
+handle('scriptRead', async (name: string) => readFile(await scriptFile(name), 'utf8'));
+handle('scriptWrite', async (name: string, yaml: string) => {
+  const script = dl.parseScript(yaml); // 형식 오류면 저장하지 않고 에러
+  const file = name ? basename(name) : `${dl.safeName(script.name)}.yaml`;
+  await import('node:fs/promises').then(async (fs) => fs.writeFile(await scriptFile(file), yaml));
+  return file;
+});
+handle('scriptDelete', async (name: string) => import('node:fs/promises').then(async (fs) => fs.unlink(await scriptFile(name))));
+handle('scriptRun', async (s: string, names: string[]) => {
+  scriptAbort?.abort();
+  scriptAbort = new AbortController();
+  const signal = scriptAbort.signal;
+  const results = [];
+  for (const [i, name] of names.entries()) {
+    if (signal.aborted) break;
+    const path = await scriptFile(name);
+    send('script:progress', { kind: 'script', file: name, index: i, total: names.length });
+    try {
+      const r = await dl.runScript(dev(s), await dl.loadScript(path), {
+        sourcePath: path,
+        signal,
+        onStep: (e) => send('script:progress', { kind: 'step', file: name, ...e }),
+      });
+      results.push({ file: name, verdict: r.verdict, passed: r.passed, failed: r.failed, skipped: r.skipped, durationMs: r.durationMs, report: r.report });
+    } catch (e) {
+      results.push({ file: name, verdict: 'blocked', error: (e as Error).message });
+    }
+  }
+  scriptAbort = null;
+  return results;
+});
+handle('scriptStop', async () => scriptAbort?.abort());
+
 // ---------- 기타 ----------
 /** 렌더러가 넘긴 경로는 DroidLens 데이터 폴더 안쪽만 허용 (openPath는 실행 파일도 열 수 있으므로) */
 function insideHome(p: string): string {

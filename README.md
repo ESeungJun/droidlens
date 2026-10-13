@@ -50,7 +50,7 @@ Linux    sudo apt install adb
 | **앱 데이터** ¹ | SharedPreferences 조회·편집, SQLite/Room DB 브라우저와 SQL 실행, 커스텀 이벤트 |
 | **라이브러리** | APK의 DEX·네이티브 lib로 100여 개 라이브러리·프레임워크 탐지, 난독화 추정 |
 | **앱 정보** | 버전·SDK·권한·Activity, 실행/재시작/종료, 딥링크 |
-| **시나리오** | 에이전트가 남긴 검증 기록(단계별 스크린샷·판정)을 실시간 확인 |
+| **시나리오** | 검증 리포트(단계별 스크린샷·판정), **YAML 스크립트** 작성·실행·전체 회귀 실행 |
 | **설정·연동** | adb 경로, Claude Code MCP 원클릭 등록, 전용 에이전트 설치 |
 
 ¹ 앱 debug 빌드에 [DroidLens SDK](#앱-sdk-선택)가 필요합니다.
@@ -67,8 +67,8 @@ dependencyResolutionManagement {
 
 // app/build.gradle.kts
 dependencies {
-    debugImplementation("com.github.ESeungJun.droidlens:sdk:v0.2.0")
-    releaseImplementation("com.github.ESeungJun.droidlens:sdk-noop:v0.2.0")
+    debugImplementation("com.github.ESeungJun.droidlens:sdk:v0.4.0")
+    releaseImplementation("com.github.ESeungJun.droidlens:sdk-noop:v0.4.0")
 }
 
 // 네트워크 인스펙터 (OkHttp를 쓰는 경우)
@@ -81,7 +81,7 @@ DroidLens.event("purchase_clicked", JSONObject().put("itemId", 42))
 ```
 
 - 초기화 코드는 필요 없습니다 (ContentProvider로 자동 시작)
-- 앱 내부 유닉스 소켓(`localabstract:droidlens_sdk_<패키지>`)으로만 통신하므로 INTERNET 권한이 필요 없고, adb 없이는 접근할 수 없습니다
+- 앱 내부 유닉스 소켓(`localabstract:droidlens_sdk_<패키지>`)으로만 통신하므로 INTERNET 권한이 필요 없고, 접속 UID를 검사해 adb·앱 자신 외의 연결(같은 기기의 다른 앱 등)은 거부합니다
 - 요청·응답 본문은 각 256KB까지, 최근 500건을 메모리에만 보관합니다
 - DB 쓰기 SQL은 명시적으로 허용했을 때만 실행됩니다
 
@@ -89,7 +89,7 @@ DroidLens.event("purchase_clicked", JSONObject().put("itemId", 42))
 
 앱의 **설정·연동** 탭에서 버튼 두 개만 누르면 됩니다.
 
-1. **MCP 자동 등록** — 앱에 내장된 MCP 서버(도구 38개)를 `claude mcp add --scope user`로 등록합니다. Node를 따로 설치할 필요가 없습니다.
+1. **MCP 자동 등록** — 앱에 내장된 MCP 서버(도구 43개)를 `claude mcp add --scope user`로 등록합니다. Node를 따로 설치할 필요가 없습니다.
 2. **에이전트 설치** — 전용 에이전트를 `~/.claude/agents/`에 복사합니다.
 
 | 에이전트 | 하는 일 |
@@ -104,6 +104,43 @@ Claude Code를 재시작한 뒤 이렇게 요청하세요.
 
 앱 없이 MCP만 쓰려면 Releases의 `droidlens-mcp.mjs`(Node 20+)를 받아 `claude mcp add --scope user droidlens -- node /path/to/droidlens-mcp.mjs`로 등록하세요.
 
+## 시나리오 스크립트 (회귀 테스트)
+
+검증한 흐름을 YAML로 저장해 언제든 다시 돌릴 수 있습니다. 에이전트가 `droidlens-verifier`로 시나리오를 **통과시키면 조작과 검사가 자동으로 녹화되어** `~/.droidlens/scripts/`에 저장됩니다. 직접 쓰거나 고칠 수도 있습니다.
+
+```yaml
+name: 상품 검색
+app: com.example.shop
+setup: { restart: true }          # clearData, prefs(SDK)로 초기 상태도 만들 수 있음
+steps:
+  - tap: { text: 검색 }
+  - type: { text: 운동화, into: { className: EditText } }
+  - enter                          # 한 단어 축약: back / home / enter / launch / screenshot
+  - wait: { id: result_list, timeout: 8000 }
+  - swipe: { direction: up, until: { textContains: 에어맥스 } }
+  - tap: { textContains: 에어맥스 }
+  - assert: { activity: ProductDetailActivity }
+  - assert: { network: { url: /api/products, method: GET, status: 200 } }   # SDK
+  - assert: { event: product_viewed }                                        # SDK
+  - assert: { noCrash: true }
+```
+
+| 단계 | 설명 |
+| --- | --- |
+| `tap` / `longPress` | 셀렉터(id·text·textContains·desc·descContains·className·index) 요소를 기다렸다가 누름. `optional: true`면 없을 때 건너뜀 |
+| `type` | 입력 (`into`로 입력창 지정, `clear`로 교체). 에이전트가 있으면 한글 가능 |
+| `swipe` | `up/down/left/right`, `until`이면 요소가 보일 때까지 스크롤 |
+| `wait` | 요소가 나타날 때까지 (`gone: true`면 사라질 때까지) |
+| `assert` | `visible` · `notVisible` · `text` · `activity` · `package` · `network` · `pref` · `db` · `event` · `noCrash` |
+| 기타 | `key`, `tapAt`, `sleep`, `launch`, `deeplink`, `screenshot` |
+
+실행 방법:
+- 데스크톱 **시나리오 → 스크립트** 탭에서 편집·실행·전체 회귀 실행
+- Claude Code: `script_run`, `suite_run`, `script_write`
+- CI/터미널: `node droidlens-mcp.mjs run <파일|폴더> [--serial <기기>]` (실패 시 종료 코드 1)
+
+예시는 [examples/scripts](examples/scripts).
+
 ## 산출물
 
 모두 `~/.droidlens/`에 저장됩니다 (`DROIDLENS_HOME`으로 변경 가능).
@@ -112,7 +149,8 @@ Claude Code를 재시작한 뒤 이렇게 요청하세요.
 | --- | --- |
 | `screenshots/`, `recordings/` | 스크린샷 PNG, 녹화 mp4 |
 | `graphs/<패키지>/` | 화면 그래프 `graph.json`, `graph.mmd`(mermaid), 화면별 스크린샷 |
-| `scenarios/<id>/` | 시나리오 검증 `report.html`, `scenario.json`, 단계별 스크린샷 |
+| `scenarios/<id>/` | 시나리오 검증 `report.html`, `scenario.json`, 녹화된 `script.yaml`, 단계별 스크린샷 |
+| `scripts/` | 회귀 테스트 스크립트 (YAML) |
 | `apks/<패키지>/` | 분석용 APK |
 
 ## 온디바이스 에이전트
@@ -126,7 +164,7 @@ Claude Code를 재시작한 뒤 이렇게 요청하세요.
 | 텍스트 입력 | ASCII만 | 한글 등 유니코드 |
 | 화면 안정 판정 | 스크린샷 비교 | 접근성 idle + 구조 비교 |
 
-에이전트는 UI 테스트 도구(Appium, uiautomator)와 같은 Instrumentation 권한으로만 동작하고 네트워크는 기기 내부 `127.0.0.1`에서만 엽니다. 쓰지 않으려면 `DROIDLENS_AGENT=0`.
+에이전트는 UI 테스트 도구(Appium, uiautomator)와 같은 Instrumentation 권한으로 동작합니다. 네트워크를 열지 않고 기기 내부 유닉스 소켓만 쓰며, **adb를 거친 연결만** 받습니다 (접속 UID 검사). 쓰지 않으려면 `DROIDLENS_AGENT=0`.
 
 ## 알려진 한계
 
