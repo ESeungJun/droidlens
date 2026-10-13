@@ -46,16 +46,50 @@ Linux    sudo apt install adb
 | **뷰 계층** | 스크린샷 ↔ 트리 양방향 선택, 속성·셀렉터, 깊이별 노드 수, Compose 추정, **3D 깊이 분해도** |
 | **화면 흐름** | 화면 그래프 (썸네일 + 동작 라벨), **자동 탐색**(결제·삭제·로그아웃·전송 버튼은 누르지 않음), 화면별 진입·진출 경로 |
 | **로그** | 실시간 logcat (앱 PID 필터, 레벨, 검색), 최근 크래시 |
+| **네트워크** ¹ | OkHttp 요청·응답 (헤더, 본문 JSON 정렬, 이미지 미리보기, 소요 시간), 실패 필터, cURL 복사 |
+| **앱 데이터** ¹ | SharedPreferences 조회·편집, SQLite/Room DB 브라우저와 SQL 실행, 커스텀 이벤트 |
 | **라이브러리** | APK의 DEX·네이티브 lib로 100여 개 라이브러리·프레임워크 탐지, 난독화 추정 |
 | **앱 정보** | 버전·SDK·권한·Activity, 실행/재시작/종료, 딥링크 |
 | **시나리오** | 에이전트가 남긴 검증 기록(단계별 스크린샷·판정)을 실시간 확인 |
 | **설정·연동** | adb 경로, Claude Code MCP 원클릭 등록, 전용 에이전트 설치 |
 
+¹ 앱 debug 빌드에 [DroidLens SDK](#앱-sdk-선택)가 필요합니다.
+
+## 앱 SDK (선택)
+
+네트워크·저장소처럼 앱 내부에서만 볼 수 있는 정보는 SDK를 넣은 **내 앱의 debug 빌드**에서만 보입니다. release 빌드에는 같은 API의 빈 구현(`sdk-noop`)이 들어갑니다.
+
+```kotlin
+// settings.gradle.kts
+dependencyResolutionManagement {
+    repositories { maven { url = uri("https://jitpack.io") } }
+}
+
+// app/build.gradle.kts
+dependencies {
+    debugImplementation("com.github.ESeungJun.droidlens:sdk:v0.2.0")
+    releaseImplementation("com.github.ESeungJun.droidlens:sdk-noop:v0.2.0")
+}
+
+// 네트워크 인스펙터 (OkHttp를 쓰는 경우)
+val client = OkHttpClient.Builder()
+    .addInterceptor(DroidLensInterceptor())
+    .build()
+
+// 커스텀 이벤트 (선택)
+DroidLens.event("purchase_clicked", JSONObject().put("itemId", 42))
+```
+
+- 초기화 코드는 필요 없습니다 (ContentProvider로 자동 시작)
+- 앱 내부 유닉스 소켓(`localabstract:droidlens_sdk_<패키지>`)으로만 통신하므로 INTERNET 권한이 필요 없고, adb 없이는 접근할 수 없습니다
+- 요청·응답 본문은 각 256KB까지, 최근 500건을 메모리에만 보관합니다
+- DB 쓰기 SQL은 명시적으로 허용했을 때만 실행됩니다
+
 ## Claude Code 연동
 
 앱의 **설정·연동** 탭에서 버튼 두 개만 누르면 됩니다.
 
-1. **MCP 자동 등록** — 앱에 내장된 MCP 서버(도구 28개)를 `claude mcp add --scope user`로 등록합니다. Node를 따로 설치할 필요가 없습니다.
+1. **MCP 자동 등록** — 앱에 내장된 MCP 서버(도구 38개)를 `claude mcp add --scope user`로 등록합니다. Node를 따로 설치할 필요가 없습니다.
 2. **에이전트 설치** — 전용 에이전트를 `~/.claude/agents/`에 복사합니다.
 
 | 에이전트 | 하는 일 |
@@ -96,7 +130,8 @@ Claude Code를 재시작한 뒤 이렇게 요청하세요.
 
 ## 알려진 한계
 
-- 네트워크·DB·SharedPreferences 같은 앱 내부 정보는 선택형 SDK가 필요 (개발 예정)
+- 네트워크·DB·SharedPreferences는 SDK를 넣은 debug 빌드에서만 (타사 앱은 불가)
+- 네트워크 인스펙터는 OkHttp(Retrofit 포함) 기반 요청만 기록
 - WebView·Flutter·게임 엔진 화면은 접근성 노드가 적어 분석이 제한적
 - Appium 등 다른 UiAutomation 도구와 동시에 쓸 수 없음 (상단 바에서 에이전트를 끄면 됨)
 
@@ -114,6 +149,7 @@ pnpm dist                               # 현재 OS용 설치 파일 → apps/de
 packages/core     adb 엔진 (기기·입력·캡처, 뷰 계층, 화면 그래프·자동 탐색, 라이브러리 탐지, 시나리오)
 packages/mcp      MCP 서버 (단일 파일 번들 droidlens-mcp.mjs)
 android/agent     온디바이스 에이전트 APK (Instrumentation + HTTP)
+android/sdk       앱 SDK (네트워크·Prefs·DB·이벤트), sdk-noop, sample
 apps/desktop      Electron + React
 agents/           Claude Code 에이전트 정의
 ```
