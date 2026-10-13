@@ -7,7 +7,7 @@ import { z } from 'zod';
 import * as dl from '@droidlens/core';
 
 const adb = new dl.Adb();
-const server = new McpServer({ name: 'droidlens', version: '0.2.0' });
+const server = new McpServer({ name: 'droidlens', version: '0.3.0' });
 
 // ---------- 공통 ----------
 
