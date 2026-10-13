@@ -1,4 +1,5 @@
 import { DeviceAdb } from './adb.js';
+import { LocalHttpClient } from './http.js';
 
 /**
  * 선택형 앱 SDK(android/sdk) 연동. SDK를 넣은 앱은 localabstract:droidlens_sdk_<패키지>에 HTTP 서버를 연다.
@@ -88,24 +89,14 @@ export async function listSdkApps(dev: DeviceAdb): Promise<string[]> {
 }
 
 export class SdkClient {
-  constructor(readonly serial: string, readonly pkg: string, readonly port: number) {}
+  private readonly http: LocalHttpClient;
 
-  private async req<T>(method: 'GET' | 'POST', path: string, q?: Record<string, string>, body?: string, timeoutMs = 15_000): Promise<T> {
-    const qs = q ? '?' + new URLSearchParams(q).toString() : '';
-    const res = await fetch(`http://127.0.0.1:${this.port}${path}${qs}`, {
-      method,
-      body,
-      signal: AbortSignal.timeout(timeoutMs),
-    });
-    const text = await res.text();
-    let data: unknown;
-    try {
-      data = JSON.parse(text);
-    } catch {
-      throw new Error(`SDK 응답을 해석하지 못했습니다: ${text.slice(0, 200)}`);
-    }
-    if (!res.ok) throw new Error((data as { error?: string }).error ?? `SDK ${path} 실패 (${res.status})`);
-    return data as T;
+  constructor(readonly serial: string, readonly pkg: string, readonly port: number) {
+    this.http = new LocalHttpClient(port, 'SDK');
+  }
+
+  private req<T>(method: 'GET' | 'POST', path: string, query?: Record<string, string>, body?: string, timeoutMs = 15_000): Promise<T> {
+    return this.http.json<T>(method, path, { query, body, timeoutMs });
   }
 
   info(): Promise<SdkInfo> {
@@ -169,13 +160,7 @@ export async function sdkFor(dev: DeviceAdb, pkg: string): Promise<SdkClient> {
       `${pkg}에서 DroidLens SDK 서버를 찾지 못했습니다. 앱이 실행 중인지, debug 빌드에 SDK(debugImplementation)가 들어갔는지 확인하세요.`,
     );
   }
-  const remote = `localabstract:${SDK_SOCKET_PREFIX}${pkg}`;
-  const list = await dev.adb.text(['forward', '--list']).catch(() => '');
-  const existing = list
-    .split('\n')
-    .map((l) => l.trim().split(/\s+/))
-    .find(([s, , r]) => s === dev.serial && r === remote);
-  const port = existing ? Number(existing[1].replace('tcp:', '')) : Number((await dev.text(['forward', 'tcp:0', remote])).trim());
+  const port = await dev.forward(`localabstract:${SDK_SOCKET_PREFIX}${pkg}`);
   const client = new SdkClient(dev.serial, pkg, port);
   await client.info();
   clients.set(key, client);

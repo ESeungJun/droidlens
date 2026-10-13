@@ -6,7 +6,7 @@ import { agentFor } from './agent.js';
 
 const PKG_RE = /^[a-zA-Z][\w]*(\.[\w]+)+$/;
 
-function assertPackage(pkg: string): void {
+export function assertPackage(pkg: string): void {
   if (!PKG_RE.test(pkg)) throw new Error(`잘못된 패키지 이름: ${pkg}`);
 }
 

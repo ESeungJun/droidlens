@@ -1,7 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
-    <uses-permission android:name="android.permission.INTERNET" />
     <!-- Android 11+ 패키지 가시성: 다른 앱의 Activity 여부를 확인하려면 필요 (사이드로드 개발 도구) -->
     <uses-permission android:name="android.permission.QUERY_ALL_PACKAGES" />
 

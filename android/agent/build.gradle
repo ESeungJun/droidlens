@@ -11,7 +11,7 @@ android {
         minSdk 24
         targetSdk 34
         // 호스트(core/src/agent.ts)의 AGENT_VERSION과 맞춘다
-        versionCode 2
+        versionCode 3
         versionName '0.1.0'
     }
 

@@ -1,6 +1,7 @@
 import { existsSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { DeviceAdb, sleep } from './adb.js';
+import { LocalHttpClient } from './http.js';
 import { droidlensHome } from './workspace.js';
 
 /**
@@ -11,8 +12,9 @@ import { droidlensHome } from './workspace.js';
  */
 
 export const AGENT_PACKAGE = 'io.github.eseungjun.droidlens.agent';
-export const AGENT_VERSION = 2;
-const AGENT_PORT = 7912;
+export const AGENT_VERSION = 3;
+/** 에이전트는 TCP가 아닌 abstract 유닉스 소켓으로 열고 adb(shell) 연결만 받는다 */
+const AGENT_REMOTE = 'localabstract:droidlens_agent';
 const INSTRUMENT = `${AGENT_PACKAGE}/.AgentInstrumentation`;
 
 /**
@@ -35,26 +37,14 @@ export function agentDisabled(): boolean {
 }
 
 export class AgentClient {
-  constructor(readonly serial: string, readonly port: number) {}
+  private readonly http: LocalHttpClient;
 
-  private url(path: string, q?: Record<string, string>): string {
-    const qs = q ? '?' + new URLSearchParams(q).toString() : '';
-    return `http://127.0.0.1:${this.port}${path}${qs}`;
+  constructor(readonly serial: string, readonly port: number) {
+    this.http = new LocalHttpClient(port, 'agent');
   }
 
-  private async req(method: 'GET' | 'POST', path: string, q?: Record<string, string>, timeoutMs = 10_000): Promise<string> {
-    const res = await fetch(this.url(path, q), { method, signal: AbortSignal.timeout(timeoutMs) });
-    const text = await res.text();
-    if (!res.ok) {
-      let msg = text;
-      try {
-        msg = (JSON.parse(text) as { error?: string }).error ?? text;
-      } catch {
-        /* text 그대로 */
-      }
-      throw new Error(`agent ${path}: ${msg}`);
-    }
-    return text;
+  private req(method: 'GET' | 'POST', path: string, query?: Record<string, string>, timeoutMs = 10_000): Promise<string> {
+    return this.http.text(method, path, { query, timeoutMs });
   }
 
   async ping(): Promise<{ ok: boolean; version: number; pid: number }> {
@@ -99,16 +89,7 @@ async function installedVersion(dev: DeviceAdb): Promise<number | undefined> {
   return m ? Number(m[1]) : undefined;
 }
 
-async function forward(dev: DeviceAdb): Promise<number> {
-  // 이미 걸린 포워딩 재사용
-  const list = await dev.adb.text(['forward', '--list']).catch(() => '');
-  const existing = list
-    .split('\n')
-    .map((l) => l.trim().split(/\s+/))
-    .find(([s, , remote]) => s === dev.serial && remote === `tcp:${AGENT_PORT}`);
-  if (existing) return Number(existing[1].replace('tcp:', ''));
-  return Number((await dev.text(['forward', 'tcp:0', `tcp:${AGENT_PORT}`])).trim());
-}
+const forward = (dev: DeviceAdb) => dev.forward(AGENT_REMOTE);
 
 /**
  * 에이전트를 준비한다: 필요하면 설치/업데이트 → 실행(기기에서 setsid로 분리해 호스트 종료 후에도 유지) → 포트 포워딩 → ping.
