@@ -42,12 +42,12 @@ adb는 `ADB_PATH` → `ANDROID_HOME` → `~/Library/Android/sdk/platform-tools/a
 이 폴더에서 Claude Code를 열면 `.mcp.json`과 `.claude/agents/`가 자동으로 잡힌다. 다른 폴더에서도 쓰려면 직접 등록한다.
 
 ```bash
-claude mcp add --scope user droidlens -- node /Users/iseungjun/Desktop/claudeProject/droidlens/packages/mcp/dist/index.js
+claude mcp add --scope user droidlens -- node <droidlens 경로>/packages/mcp/dist/index.js
 cp agents/*.md ~/.claude/agents/
 ```
 
 사용 예:
-- "droidlens-verifier로 번장 stg 앱에서 검색 → 상품 상세 → 찜하기 시나리오 검증해줘"
+- "droidlens-verifier로 쇼핑 앱에서 검색 → 상품 상세 → 찜하기 시나리오 검증해줘"
 - "droidlens-analyst로 이 앱 기술 스택이랑 화면 구조 분석해줘"
 
 ## 알려진 한계 (adb 모드)
