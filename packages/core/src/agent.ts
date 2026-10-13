@@ -170,7 +170,14 @@ export async function stopAgent(dev: DeviceAdb): Promise<void> {
 }
 
 export async function agentStatus(dev: DeviceAdb): Promise<{ installed?: number; running: boolean; apk?: string; disabled: boolean }> {
-  const c = clients.get(dev.serial);
-  const running = c ? !!(await c.ping().catch(() => undefined)) : false;
+  // 다른 DroidLens 프로세스(데스크톱 앱 ↔ MCP)가 띄운 에이전트도 감지한다
+  let c = clients.get(dev.serial);
+  if (!c) {
+    const port = await forward(dev).catch(() => undefined);
+    if (port) c = new AgentClient(dev.serial, port);
+  }
+  const alive = c ? await c.ping().catch(() => undefined) : undefined;
+  const running = !!alive && alive.version === AGENT_VERSION;
+  if (running && c) clients.set(dev.serial, c);
   return { installed: await installedVersion(dev), running, apk: agentApkPath(), disabled: agentDisabled() };
 }
