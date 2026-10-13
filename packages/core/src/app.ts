@@ -2,6 +2,7 @@ import { mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { ChildProcess } from 'node:child_process';
 import { DeviceAdb, quoteShell } from './adb.js';
+import { agentFor } from './agent.js';
 
 const PKG_RE = /^[a-zA-Z][\w]*(\.[\w]+)+$/;
 
@@ -17,7 +18,20 @@ export interface CurrentScreen {
   windowTitle?: string;
 }
 
-export async function currentScreen(dev: DeviceAdb): Promise<CurrentScreen> {
+/**
+ * 현재 화면의 패키지/Activity/Fragment.
+ * Fragment 조회(dumpsys activity top)는 기기에 따라 1~7초가 걸리므로 opts.fragments=true일 때만 한다.
+ * 에이전트가 있으면 Activity를 접근성 이벤트로 즉시 얻는다.
+ */
+export async function currentScreen(dev: DeviceAdb, opts: { fragments?: boolean } = {}): Promise<CurrentScreen> {
+  const agent = agentFor(dev.serial);
+  if (agent) {
+    const st = await agent.state().catch(() => undefined);
+    if (st?.package && st.activity) {
+      const fragments = opts.fragments ? await topFragments(dev).catch(() => []) : [];
+      return { packageName: st.package, activity: st.activity, fragments, windowTitle: st.lastWindowClass };
+    }
+  }
   const win = await dev.shell('dumpsys window | grep -E "mCurrentFocus|mFocusedApp"');
   const m =
     /mCurrentFocus=Window\{[^ ]+ [^ ]+ ([\w.]+)\/([\w.$]+)\}/.exec(win) ??
@@ -25,12 +39,12 @@ export async function currentScreen(dev: DeviceAdb): Promise<CurrentScreen> {
   const packageName = m?.[1] ?? '';
   let activity = m?.[2] ?? '';
   if (activity.startsWith('.')) activity = packageName + activity;
-  const fragments = packageName ? await topFragments(dev).catch(() => []) : [];
+  const fragments = packageName && opts.fragments ? await topFragments(dev).catch(() => []) : [];
   return { packageName, activity, fragments, windowTitle: /mCurrentFocus=Window\{[^}]*\}/.exec(win)?.[0] };
 }
 
 /** dumpsys activity top의 FragmentManager 덤프에서 Added Fragments를 추출 */
-async function topFragments(dev: DeviceAdb): Promise<string[]> {
+export async function topFragments(dev: DeviceAdb): Promise<string[]> {
   const out = await dev.shell('dumpsys activity top', { timeoutMs: 10_000 });
   // 마지막 TASK 블록이 최상위 액티비티
   const lastTask = out.split(/\nTASK /).pop() ?? out;
@@ -149,12 +163,24 @@ export async function appInfo(dev: DeviceAdb, pkg: string): Promise<AppInfo> {
 
 export async function launchApp(dev: DeviceAdb, pkg: string, activity?: string): Promise<void> {
   assertPackage(pkg);
-  if (activity) {
-    await dev.shell(`am start -n ${quoteShell(`${pkg}/${activity}`)}`);
-  } else {
-    const out = await dev.shell(`monkey -p ${pkg} -c android.intent.category.LAUNCHER 1`);
-    if (/No activities found/.test(out)) throw new Error(`${pkg}: 실행 가능한 런처 액티비티가 없습니다`);
+  // NEW_TASK|CLEAR_TASK(0x10008000): 이전에 같은 태스크에 쌓인 화면(다른 패키지 포함)을 비우고 첫 화면부터 시작
+  const component =
+    activity ? `${pkg}/${activity}` : await launcherComponent(dev, pkg);
+  if (component) {
+    const out = await dev.shell(`am start -W -f 0x10008000 -n ${quoteShell(component)}`, { timeoutMs: 30_000 });
+    if (/Error:/.test(out)) throw new Error(out.trim());
+    return;
   }
+  const out = await dev.shell(`monkey -p ${pkg} -c android.intent.category.LAUNCHER 1`);
+  if (/No activities found/.test(out)) throw new Error(`${pkg}: 실행 가능한 런처 액티비티가 없습니다`);
+}
+
+async function launcherComponent(dev: DeviceAdb, pkg: string): Promise<string | undefined> {
+  const out = await dev
+    .shell(`cmd package resolve-activity --brief -a android.intent.action.MAIN -c android.intent.category.LAUNCHER ${pkg}`)
+    .catch(() => '');
+  const last = out.trim().split('\n').pop()?.trim();
+  return last && last.includes('/') ? last : undefined;
 }
 
 export async function stopApp(dev: DeviceAdb, pkg: string): Promise<void> {

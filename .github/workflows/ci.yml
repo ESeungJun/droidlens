@@ -1,0 +1,29 @@
+name: CI
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+      - uses: android-actions/setup-android@v3
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build
+      - name: Build on-device agent APK
+        working-directory: android
+        shell: bash
+        run: ./gradlew :agent:assembleRelease --no-daemon
+      - run: pnpm --filter @droidlens/desktop typecheck
+      - run: pnpm --filter @droidlens/desktop build

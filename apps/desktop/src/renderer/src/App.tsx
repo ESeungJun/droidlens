@@ -1,5 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
-import { api, type DeviceSummary, type PackageSummary } from './api';
+import { api, type AgentStatus, type DeviceSummary, type PackageSummary } from './api';
 import { ScreenTab } from './tabs/ScreenTab';
 import { InspectorTab } from './tabs/InspectorTab';
 import { FlowTab } from './tabs/FlowTab';
@@ -43,6 +43,16 @@ export function App() {
   const [tab, setTab] = useState<TabId>('screen');
   const [toastMsg, setToastMsg] = useState<{ msg: string; err?: boolean } | null>(null);
   const [adbOk, setAdbOk] = useState<boolean | null>(null);
+  const [agent, setAgent] = useState<AgentStatus | null>(null);
+  const [agentBusy, setAgentBusy] = useState(false);
+
+  // 기기가 바뀌면 온디바이스 에이전트를 자동으로 준비 (없으면 uiautomator로 동작)
+  useEffect(() => {
+    setAgent(null);
+    if (!serial) return;
+    setAgentBusy(true);
+    api.agentStart(serial).then(setAgent).catch(() => undefined).finally(() => setAgentBusy(false));
+  }, [serial]);
 
   useEffect(() => {
     api.adbStatus().then((s) => setAdbOk(s.ok)).catch(() => setAdbOk(false));
@@ -111,6 +121,30 @@ export function App() {
             ))}
           </select>
           {pkg && <span className="pill accent mono">{pkg}</span>}
+          {serial && (
+            <button
+              className={`pill ${agent?.running ? 'accent' : ''}`}
+              style={{ cursor: 'pointer' }}
+              disabled={agentBusy}
+              title={
+                agent?.running
+                  ? '온디바이스 에이전트 실행 중 — 뷰 계층이 빠르고 한글 입력이 됩니다. 클릭하면 중지'
+                  : '에이전트 없음 — uiautomator로 동작 (느림, ASCII 입력만). 클릭하면 시작'
+              }
+              onClick={async () => {
+                if (!serial) return;
+                setAgentBusy(true);
+                const r = await run(agent?.running ? api.agentStop(serial) : api.agentStart(serial));
+                setAgentBusy(false);
+                if (r) {
+                  setAgent(r);
+                  if (!r.running && !agent?.running) toast('에이전트를 시작하지 못했습니다. uiautomator로 계속 동작합니다.', true);
+                }
+              }}
+            >
+              {agentBusy ? '에이전트 준비 중…' : agent?.running ? '⚡ 에이전트' : '에이전트 꺼짐'}
+            </button>
+          )}
           <div className="spacer" />
           {fgPkg && (
             <button className="btn sm" onClick={() => setPkg(fgPkg)} title="포그라운드 앱 선택">

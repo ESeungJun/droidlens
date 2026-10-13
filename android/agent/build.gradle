@@ -1,0 +1,30 @@
+plugins {
+    id 'com.android.application'
+}
+
+android {
+    namespace 'io.github.eseungjun.droidlens.agent'
+    compileSdk 34
+
+    defaultConfig {
+        applicationId 'io.github.eseungjun.droidlens.agent'
+        minSdk 24
+        targetSdk 34
+        // 호스트(core/src/agent.ts)의 AGENT_VERSION과 맞춘다
+        versionCode 2
+        versionName '0.1.0'
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            // 개인 도구라 별도 키 없이 디버그 키로 서명 (adb install용)
+            signingConfig signingConfigs.debug
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+}

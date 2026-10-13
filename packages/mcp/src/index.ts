@@ -126,6 +126,20 @@ server.registerTool(
   },
 );
 
+server.registerTool(
+  'agent_status',
+  {
+    description: '온디바이스 에이전트 상태 (설치 버전, 실행 여부). start=true면 설치·실행을 시도한다. 에이전트가 있으면 뷰 계층이 10배 이상 빠르고 한글 입력이 된다',
+    inputSchema: { ...serialArg, start: z.boolean().optional() },
+    annotations: acts,
+  },
+  async ({ serial, start }) => {
+    const dev = await device(serial);
+    if (start) await dl.ensureAgent(dev, { force: true });
+    return json(await dl.agentStatus(dev));
+  },
+);
+
 // ---------- 화면 / 뷰 계층 ----------
 
 server.registerTool(
@@ -137,7 +151,8 @@ server.registerTool(
   },
   async ({ serial }) => {
     const dev = await device(serial);
-    const [screen, h] = await Promise.all([dl.currentScreen(dev), dl.dumpHierarchy(dev)]);
+    const h = await dl.dumpHierarchy(dev);
+    const screen = await dl.currentScreen(dev, { fragments: true });
     return json({ ...screen, signature: dl.structureSignature(h.root), nodeCount: h.nodeCount, maxDepth: h.maxDepth });
   },
 );
@@ -247,7 +262,7 @@ server.registerTool(
 server.registerTool(
   'type_text',
   {
-    description: '현재 포커스된 입력창에 텍스트 입력 (ASCII만). selector를 주면 먼저 탭해 포커스',
+    description: '현재 포커스된 입력창에 텍스트 입력 (온디바이스 에이전트가 있으면 한글 등 유니코드 지원). selector를 주면 먼저 탭해 포커스',
     inputSchema: { ...serialArg, ...selectorShape, value: z.string(), clear: z.boolean().optional().describe('입력 전 기존 텍스트 삭제') },
     annotations: acts,
   },
@@ -263,6 +278,11 @@ server.registerTool(
       await dl.sleep(300);
     }
     if (a.clear) {
+      const agent = await dl.ensureAgent(dev);
+      if (agent) {
+        await dl.replaceText(dev, a.value);
+        return text(`replaced with ${a.value.length} chars`);
+      }
       await dl.pressKey(dev, 123); // MOVE_END
       await dev.shell(`input keyevent ${Array(60).fill(67).join(' ')}`);
     }
@@ -462,7 +482,7 @@ server.registerTool(
     const graph = await dl.ScreenGraph.open(packageName);
     if (!action) {
       const s = await dl.captureSnapshot(dev);
-      const node = await graph.addSnapshot(s);
+      const node = await graph.addSnapshot(s, dev);
       await graph.save();
       return text(`기록: ${node.id} (${node.label}) · 화면 ${graph.nodes.size}개`);
     }
@@ -602,7 +622,7 @@ server.registerTool(
     if (!scenario) throw new Error('먼저 scenario_start를 호출하세요');
     const dev = await device(serial);
     const png = screenshot === false ? undefined : await dl.screenshot(dev);
-    const screen = await dl.currentScreen(dev).catch(() => undefined);
+    const screen = await dl.currentScreen(dev, { fragments: true }).catch(() => undefined);
     const s = await scenario.step(title, status, {
       detail,
       png,
