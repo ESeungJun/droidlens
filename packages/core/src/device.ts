@@ -167,3 +167,32 @@ export function startRecording(
     },
   };
 }
+
+export type SwipeDirection = 'up' | 'down' | 'left' | 'right';
+
+/**
+ * 손가락 이동 방향 기준 스와이프 좌표 (화면 중앙에서 세로 60% / 가로 70% 이동).
+ * up = 손가락을 위로 = 내용이 아래로 스크롤.
+ */
+export function swipeVector(screen: { width: number; height: number }, direction: SwipeDirection): [number, number, number, number] {
+  const cx = screen.width / 2;
+  const cy = screen.height / 2;
+  const dx = screen.width * 0.35;
+  const dy = screen.height * 0.3;
+  switch (direction) {
+    case 'up':
+      return [cx, cy + dy, cx, cy - dy];
+    case 'down':
+      return [cx, cy - dy, cx, cy + dy];
+    case 'left':
+      return [cx + dx, cy, cx - dx, cy];
+    case 'right':
+      return [cx - dx, cy, cx + dx, cy];
+  }
+}
+
+export async function swipeDirection(dev: DeviceAdb, direction: SwipeDirection, durationMs?: number): Promise<void> {
+  const { screen } = await getDeviceInfo(dev);
+  const [x1, y1, x2, y2] = swipeVector(screen, direction);
+  await swipe(dev, x1, y1, x2, y2, durationMs);
+}

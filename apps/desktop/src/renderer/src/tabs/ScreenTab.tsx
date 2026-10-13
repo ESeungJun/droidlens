@@ -1,10 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
-import { api, type CurrentScreen, type DeviceInfo } from '../api';
+import { api, type DeviceInfo } from '../api';
 import { useApp } from '../App';
 import { MirrorCanvas } from '../MirrorCanvas';
 
 export function ScreenTab() {
-  const { serial, pkg, toast, run } = useApp();
+  const { serial, pkg, screen, toast, run } = useApp();
   const [img, setImg] = useState<string>('');
   const [live, setLive] = useState(true);
   // stream: scrcpy 고프레임(H.264 + WebCodecs), snapshot: screencap 폴링(2~4fps, 대체 경로)
@@ -12,7 +12,6 @@ export function ScreenTab() {
   const [fps, setFps] = useState(0);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [info, setInfo] = useState<DeviceInfo | null>(null);
-  const [screen, setScreen] = useState<CurrentScreen | null>(null);
   const [recAt, setRecAt] = useState<number | null>(null);
   const [now, setNow] = useState(Date.now());
   const [graphMode, setGraphMode] = useState(false);
@@ -46,10 +45,6 @@ export function ScreenTab() {
   useEffect(() => {
     if (!serial) return;
     api.deviceInfo(serial).then(setInfo).catch(() => undefined);
-    const tick = () => api.currentScreen(serial).then(setScreen).catch(() => undefined);
-    tick();
-    const t = setInterval(tick, 2000);
-    return () => clearInterval(t);
   }, [serial]);
 
   useEffect(() => {

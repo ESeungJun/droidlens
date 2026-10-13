@@ -31,14 +31,31 @@ function NetworkInspector() {
   const [live, setLive] = useState(true);
   const [pane, setPane] = useState<'res' | 'req' | 'headers'>('res');
   const lastId = useRef(0);
+  const pollCount = useRef(0);
 
   const poll = useCallback(async () => {
     if (!serial || !pkg) return;
-    const fresh = await api.sdk<NetworkEntry[]>(serial, pkg, 'network', { since: 0, limit: 500 }).catch(() => null);
+    // 진행 중(pending)인 가장 오래된 요청 직전부터 다시 받아, 새 요청 + 상태가 바뀐 요청만 반영한다
+    // 진행 중(pending)인 가장 오래된 요청 직전부터 다시 받아, 새 요청 + 상태가 바뀐 요청만 반영한다.
+    // 10번에 한 번은 전체를 받아 앱 재시작(id가 1부터 다시 시작)이나 SDK 쪽 삭제를 반영한다.
+    const full = ++pollCount.current % 10 === 0;
+    const pendingFrom = entriesRef.current.find((e) => e.state === 'pending')?.id;
+    const since = full ? 0 : pendingFrom !== undefined ? pendingFrom - 1 : lastId.current;
+    const fresh = await api.sdk<NetworkEntry[]>(serial, pkg, 'network', { since, limit: 500 }).catch(() => null);
     if (!fresh) return;
-    lastId.current = fresh.at(-1)?.id ?? 0;
-    setEntries(fresh);
+    if (full) {
+      setEntries(fresh);
+      lastId.current = fresh.at(-1)?.id ?? 0;
+      return;
+    }
+    if (!fresh.length) return;
+    setEntries((cur) => [...cur.filter((e) => e.id <= since), ...fresh].slice(-500));
+    lastId.current = Math.max(lastId.current, fresh[fresh.length - 1].id);
   }, [serial, pkg]);
+  const entriesRef = useRef<NetworkEntry[]>([]);
+  useEffect(() => {
+    entriesRef.current = entries;
+  }, [entries]);
 
   useEffect(() => {
     poll();
@@ -73,7 +90,7 @@ function NetworkInspector() {
         <button className={`btn ${live ? 'on' : 'primary'}`} onClick={() => setLive((v) => !v)}>{live ? '⏸ 실시간' : '▶ 실시간'}</button>
         <input className="input" placeholder="URL 필터" value={filter} onChange={(e) => setFilter(e.target.value)} style={{ width: 260 }} />
         <label className="chk"><input type="checkbox" checked={onlyErr} onChange={(e) => setOnlyErr(e.target.checked)} />실패·4xx/5xx만</label>
-        <button className="btn" onClick={async () => { if (serial && pkg) { await run(api.sdk(serial, pkg, 'clearNetwork')); setSel(null); poll(); } }}>지우기</button>
+        <button className="btn" onClick={async () => { if (serial && pkg) { await run(api.sdk(serial, pkg, 'clearNetwork')); setSel(null); lastId.current = 0; setEntries([]); } }}>지우기</button>
         <span className="muted">{shown.length} / {entries.length}</span>
       </div>
       <div style={{ display: 'grid', gridTemplateColumns: detail ? '1fr 46%' : '1fr', height: 'calc(100% - 45px)' }}>
