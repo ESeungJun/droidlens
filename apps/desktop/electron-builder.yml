@@ -40,6 +40,7 @@ nsis:
   oneClick: false
   allowToChangeInstallationDirectory: true
 linux:
+  executableName: droidlens
   category: Development
   target:
     - target: AppImage
