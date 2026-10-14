@@ -207,6 +207,22 @@ agents/           Claude Code 에이전트 정의
 | `release/<버전>` | 릴리스 준비(버전 올리기·노트). `develop`에서 따서 `master`·`develop`에 합친 뒤 태그 |
 | `hotfix/<버전>` | 긴급 수정. `master`에서 따서 `master`·`develop`에 합친 뒤 태그 |
 
+### 커밋 메시지
+
+모든 커밋과 PR 제목(머지 커밋 제목이 됨)은 [Conventional Commits](https://www.conventionalcommits.org) 형식을 씁니다: `<type>(<scope>)?: <설명>`.
+
+| type | 용도 |
+| --- | --- |
+| `feat` | 새 기능 |
+| `fix` | 버그 수정 |
+| `docs` | 문서만 변경 |
+| `refactor` / `perf` / `style` | 동작 변화 없는 코드 개선 / 성능 / 서식 |
+| `test` | 테스트 |
+| `build` / `ci` | 패키징·의존성 / GitHub Actions |
+| `chore` | 버전, 머지, 기타 관리 |
+
+`pnpm install` 하면 프리픽스 없는 커밋을 막는 `commit-msg` 훅(`.githooks/`)이 설치되고, CI가 push된 커밋과 PR 제목을 검사합니다.
+
 `v*` 태그를 푸시하면 GitHub Actions가 macOS(arm64/x64)·Windows(x64/arm64)·Linux 설치 파일을 빌드해 Releases에 올립니다. 로드맵은 [docs/ROADMAP.md](docs/ROADMAP.md).
 
 ## 라이선스
