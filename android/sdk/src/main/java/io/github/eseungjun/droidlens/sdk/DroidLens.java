@@ -6,6 +6,7 @@ import android.util.Log;
 import org.json.JSONObject;
 
 import io.github.eseungjun.droidlens.sdk.internal.EventStore;
+import io.github.eseungjun.droidlens.sdk.internal.Redactor;
 import io.github.eseungjun.droidlens.sdk.internal.SdkServer;
 
 /**
@@ -46,5 +47,26 @@ public final class DroidLens {
 
     public static void event(String name, JSONObject data) {
         EventStore.get().add(name, data);
+    }
+
+    /**
+     * 네트워크 기록에서 값을 가릴 헤더를 추가한다 (대소문자 무시).
+     * 기본: Authorization, Proxy-Authorization, Cookie, Set-Cookie, X-Api-Key, X-Auth-Token
+     */
+    public static void redactHeaders(String... names) {
+        Redactor.get().addHeaders(names);
+    }
+
+    /**
+     * JSON 본문·폼 본문·URL 쿼리에서 값을 가릴 키를 추가한다 (대소문자 무시).
+     * 기본: password, token, access_token, refresh_token, secret, api_key 등
+     */
+    public static void redactKeys(String... keys) {
+        Redactor.get().addKeys(keys);
+    }
+
+    /** 기본 가리기 규칙을 끄고 redactHeaders·redactKeys 로 추가한 항목만 가린다 */
+    public static void clearDefaultRedaction() {
+        Redactor.get().clearDefaults();
     }
 }
