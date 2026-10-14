@@ -72,6 +72,7 @@ export function FlowTab() {
   const [steps, setSteps] = useState(30);
   const [depth, setDepth] = useState(3);
   const [progress, setProgress] = useState<string[]>([]);
+  const [confirmReset, setConfirmReset] = useState(false);
 
   const reload = useCallback(async () => {
     if (pkg) setG((await run(api.graphGet(pkg))) ?? null);
@@ -125,7 +126,25 @@ export function FlowTab() {
     const r = await run(api.explore(serial, pkg, steps, depth));
     setExploring(false);
     await reload();
-    if (r) toast(t('탐색 완료: {n}스텝', { n: r.steps }) + (r.skipped.length ? t(', 위험 라벨 {n}개 건너뜀', { n: r.skipped.length }) : ''));
+    if (r) {
+      const danger = r.skipped.filter((s) => s.reason === '위험 라벨').length;
+      const missing = r.skipped.length - danger;
+      toast(
+        t('탐색 완료: 버튼 {n}번 누름', { n: r.steps }) +
+          (danger ? t(', 위험 라벨 {n}개 건너뜀', { n: danger }) : '') +
+          (missing ? t(', 화면에서 못 찾은 버튼 {n}개', { n: missing }) : ''),
+      );
+    }
+  };
+
+  const reset = async () => {
+    setConfirmReset(false);
+    if ((await run(api.graphReset(pkg))) !== undefined) {
+      setSel(null);
+      setProgress([]);
+      await reload();
+      toast(t('화면 그래프를 초기화했습니다'));
+    }
   };
 
   return (
@@ -135,10 +154,23 @@ export function FlowTab() {
           {exploring ? t('탐색 중…') : t('▶ 자동 탐색')}
         </button>
         {exploring && <button className="btn danger" onClick={() => api.exploreStop()}>{t('중지')}</button>}
-        <label className="muted">{t('스텝')} <input className="input" type="number" min={1} max={300} value={steps} onChange={(e) => setSteps(+e.target.value)} style={{ width: 64 }} /></label>
-        <label className="muted">{t('깊이')} <input className="input" type="number" min={1} max={10} value={depth} onChange={(e) => setDepth(+e.target.value)} style={{ width: 52 }} /></label>
+        <label className="muted" title={t('자동 탐색이 버튼을 누르는 총 횟수의 상한입니다. 클수록 더 많은 화면을 찾지만 오래 걸립니다.')}>
+          {t('최대 탭 수')} <input className="input" type="number" min={1} max={300} value={steps} onChange={(e) => setSteps(+e.target.value)} style={{ width: 64 }} />
+        </label>
+        <label className="muted" title={t('시작 화면에서 몇 화면 안쪽까지 들어갈지 정합니다. 1이면 시작 화면의 버튼만 눌러 보고, 2면 거기서 열린 화면의 버튼까지 눌러 봅니다.')}>
+          {t('최대 깊이')} <input className="input" type="number" min={1} max={10} value={depth} onChange={(e) => setDepth(+e.target.value)} style={{ width: 52 }} />
+        </label>
         <button className="btn" onClick={async () => serial && (await run(api.graphRecordHere(serial, pkg))) && reload()}>{t('＋ 현재 화면 추가')}</button>
         <button className="btn" onClick={reload}>↻</button>
+        {confirmReset ? (
+          <>
+            <span className="muted">{t('이 앱의 화면과 연결을 모두 지울까요?')}</span>
+            <button className="btn danger" onClick={reset}>{t('초기화')}</button>
+            <button className="btn" onClick={() => setConfirmReset(false)}>{t('취소')}</button>
+          </>
+        ) : (
+          <button className="btn" disabled={exploring || !g?.nodes.length} onClick={() => setConfirmReset(true)}>{t('그래프 초기화')}</button>
+        )}
         <span className="muted">{t('화면 {n} · 전이 {e}', { n: g?.nodes.length ?? 0, e: g?.edges.length ?? 0 })}</span>
         <span className="faint" style={{ fontSize: 11 }}>{t('결제·삭제·로그아웃·전송 같은 버튼은 자동 탐색에서 누르지 않습니다')}</span>
       </div>
