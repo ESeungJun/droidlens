@@ -5,6 +5,10 @@ on:
   pull_request:
     types: [opened, edited, synchronize, reopened]
 
+# 커밋 메시지·PR 제목만 읽으므로 쓰기 권한이 필요 없다
+permissions:
+  contents: read
+
 jobs:
   check:
     runs-on: ubuntu-latest
