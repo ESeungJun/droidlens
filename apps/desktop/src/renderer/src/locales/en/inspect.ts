@@ -1,5 +1,7 @@
 // 뷰 계층 · 화면 흐름 · 네트워크 탭
 export const inspect: Record<string, string> = {
+  '트리 패널 접기': 'Collapse tree',
+  '트리 패널 펴기': 'Expand tree',
   '속성 패널 접기': 'Collapse properties',
   '속성 패널 펴기': 'Expand properties',
   속성: 'Properties',
