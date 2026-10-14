@@ -55,7 +55,7 @@ export function SettingsTab({ onAdbChange, updater }: { onAdbChange?(s: AdbStatu
 
   return (
     <div className="scroll">
-      <div className="cards" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(420px, 1fr))' }}>
+      <div className="cards" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(420px, 1fr))' }}>
         <div className="card">
           <h5>adb</h5>
           {!adb ? (

@@ -163,14 +163,19 @@ label.chk { display: inline-flex; gap: 6px; align-items: center; color: var(--fg
 
 /* 라이브러리 */
 .scroll { height: calc(100% - 45px); overflow: auto; padding: 14px; }
-.cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 10px; }
+.cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 10px; }
+/* 창 높이까지 채우는 카드 그리드: 카드 안의 .grow 영역이 남은 높이를 차지하고 넘치면 스크롤 */
+.scroll.fill { display: flex; flex-direction: column; }
+.cards.fill { flex: 1; min-height: 0; grid-auto-rows: minmax(320px, 1fr); }
+.card.col { display: flex; flex-direction: column; min-height: 0; }
+.card .grow { flex: 1; min-height: 0; overflow: auto; }
 .card { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 12px; }
 .card h5 { margin: 0 0 8px; font-size: 11px; text-transform: uppercase; letter-spacing: .08em; color: var(--fg-faint); }
 .lib { padding: 4px 0; border-top: 1px solid var(--line); }
 .lib:first-of-type { border-top: 0; }
 .lib b { font-weight: 600; }
 .lib .ev { font-family: var(--mono); font-size: 10.5px; color: var(--fg-faint); }
-.stats { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 14px; }
+.stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; margin-bottom: 14px; }
 .stat { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 10px 14px; min-width: 120px; }
 .stat b { display: block; font-size: 20px; }
 .stat span { color: var(--fg-faint); font-size: 11px; }

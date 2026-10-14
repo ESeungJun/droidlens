@@ -49,7 +49,7 @@ function Prefs() {
     <div className="scroll">
       <button className="btn sm" onClick={load} style={{ marginBottom: 10 }}>↻ 새로고침</button>
       {files === null ? <div className="faint">불러오는 중…</div> : files.length === 0 && <div className="faint">SharedPreferences 파일이 없습니다</div>}
-      <div className="cards" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(420px, 1fr))' }}>
+      <div className="cards" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(420px, 1fr))' }}>
         {(files ?? []).map((f) => (
           <div className="card" key={f.name}>
             <h5>{f.name}.xml</h5>
