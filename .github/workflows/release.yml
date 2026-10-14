@@ -39,13 +39,23 @@ jobs:
         run: ./gradlew :agent:assembleRelease --no-daemon
       - name: Fetch scrcpy server (SHA256 검증)
         run: node scripts/fetch-scrcpy.mjs
-      - name: Package & publish
+      - name: Package
         working-directory: apps/desktop
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: pnpm exec electron-vite build && pnpm exec electron-builder ${{ matrix.target }} --publish always
+        run: pnpm exec electron-vite build && pnpm exec electron-builder ${{ matrix.target }} --publish never
+      # 앱 업데이터(updater.ts)는 GitHub API로 OS·칩별 파일을 직접 받으므로
+      # electron-updater용 blockmap·latest*.yml 과 x64+arm64 합본 설치 파일은 올리지 않는다
+      - uses: actions/upload-artifact@v4
+        with:
+          name: desktop-${{ matrix.os }}
+          if-no-files-found: error
+          path: |
+            apps/desktop/release/*-mac-*.dmg
+            apps/desktop/release/*-mac-*.zip
+            apps/desktop/release/*-win-x64.exe
+            apps/desktop/release/*-win-arm64.exe
+            apps/desktop/release/*.AppImage
 
-  mcp-standalone:
+  release:
     runs-on: ubuntu-latest
     needs: desktop
     steps:
@@ -64,12 +74,21 @@ jobs:
       - name: Build on-device agent APK
         working-directory: android
         run: ./gradlew :agent:assembleRelease --no-daemon
-      - name: Attach standalone MCP server & agents
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: desktop-*
+          path: dist
+          merge-multiple: true
+      - name: Publish release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           cd agents && zip ../droidlens-agents.zip *.md && cd ..
           cp android/agent/build/outputs/apk/release/agent-release.apk droidlens-agent.apk
-          gh release upload "${GITHUB_REF_NAME}" packages/mcp/dist/droidlens-mcp.mjs droidlens-agent.apk droidlens-agents.zip --clobber
-          # electron-builder가 만든 초안을 공개로 전환
-          gh release edit "${GITHUB_REF_NAME}" --draft=false --latest
+          files="dist/* packages/mcp/dist/droidlens-mcp.mjs droidlens-agent.apk droidlens-agents.zip"
+          if gh release view "${GITHUB_REF_NAME}" >/dev/null 2>&1; then
+            gh release upload "${GITHUB_REF_NAME}" $files --clobber
+            gh release edit "${GITHUB_REF_NAME}" --draft=false --latest
+          else
+            gh release create "${GITHUB_REF_NAME}" $files --title "${GITHUB_REF_NAME}" --generate-notes --latest
+          fi
