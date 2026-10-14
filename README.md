@@ -201,11 +201,11 @@ agents/           Claude Code agent definitions
 
 | Branch | Purpose |
 | --- | --- |
-| `main` | Released code only. Every commit here is a tagged release (`v*`) |
+| `master` | Released code only. Every commit here is a tagged release (`v*`) |
 | `develop` | Integration branch for the next release. Open feature PRs against this |
 | `feature/<name>` | New features and fixes, branched from `develop` and merged back via PR |
-| `release/<version>` | Release prep (version bump, notes) from `develop`; merged into `main` and `develop`, then tagged |
-| `hotfix/<version>` | Urgent fixes from `main`; merged into `main` and `develop`, then tagged |
+| `release/<version>` | Release prep (version bump, notes) from `develop`; merged into `master` and `develop`, then tagged |
+| `hotfix/<version>` | Urgent fixes from `master`; merged into `master` and `develop`, then tagged |
 
 Pushing a `v*` tag makes GitHub Actions build installers for macOS (arm64/x64), Windows (x64/arm64), and Linux and upload them to Releases. See the roadmap in [docs/ROADMAP.md](docs/ROADMAP.md).
 
