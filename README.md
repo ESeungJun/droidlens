@@ -92,8 +92,8 @@ dependencyResolutionManagement {
 
 // app/build.gradle.kts
 dependencies {
-    debugImplementation("com.github.ESeungJun.droidlens:sdk:v0.4.0")
-    releaseImplementation("com.github.ESeungJun.droidlens:sdk-noop:v0.4.0")
+    debugImplementation("com.github.ESeungJun.droidlens:sdk:v0.5.0")
+    releaseImplementation("com.github.ESeungJun.droidlens:sdk-noop:v0.5.0")
 }
 
 // Network inspector (if you use OkHttp)
