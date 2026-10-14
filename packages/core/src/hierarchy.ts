@@ -249,6 +249,19 @@ export function structureSignature(root: ViewNode, maxDepth = 6): string {
   return createHash('sha1').update(skel(root)).digest('hex').slice(0, 12);
 }
 
+/**
+ * 화면 그래프에서 '같은 화면'을 판단하는 시그니처. structureSignature 와 같되 스크롤 영역의 내용은 빼서,
+ * 피드·목록의 항목 종류가 바뀌어도(배너가 끼거나 로딩 중이거나) 같은 화면으로 본다.
+ */
+export function screenSignature(root: ViewNode, maxDepth = 6): string {
+  const skel = (n: ViewNode): string => {
+    if (n.depth > maxDepth) return '';
+    const kids = n.scrollable ? '' : [...new Set(n.children.map(skel))].join(',');
+    return `${n.className.split('.').pop()}#${n.resourceId.split(':id/')[1] ?? ''}(${kids})`;
+  };
+  return createHash('sha1').update(skel(root)).digest('hex').slice(0, 12);
+}
+
 /** 깊이별 노드 수 등 뷰 계층 통계 (오버드로/과도한 중첩 진단용) */
 export function hierarchyStats(h: Hierarchy) {
   const byDepth: number[] = [];

@@ -229,6 +229,10 @@ handle('explore', async (s: string, pkg: string, maxSteps: number, maxDepth: num
   return { steps: r.steps, skipped: r.skipped, errors: r.errors };
 });
 handle('exploreStop', async () => exploreAbort?.abort());
+handle('graphReset', async (pkg: string) => {
+  if (exploreAbort) throw new Error('탐색 중에는 그래프를 초기화할 수 없습니다');
+  await dl.ScreenGraph.reset(pkg);
+});
 
 // ---------- 앱 SDK ----------
 const SDK_METHODS = ['info', 'network', 'networkDetail', 'clearNetwork', 'prefs', 'setPref', 'removePref', 'databases', 'query', 'events'] as const;

@@ -1,5 +1,16 @@
 // 뷰 계층 · 화면 흐름 · 네트워크 탭
 export const inspect: Record<string, string> = {
+  '탐색 완료: 버튼 {n}번 누름': 'Exploration done: {n} taps',
+  ', 화면에서 못 찾은 버튼 {n}개': ', {n} buttons not found on screen',
+  '화면 그래프를 초기화했습니다': 'Screen graph cleared',
+  '자동 탐색이 버튼을 누르는 총 횟수의 상한입니다. 클수록 더 많은 화면을 찾지만 오래 걸립니다.': 'Maximum number of taps during auto-exploration. Higher finds more screens but takes longer.',
+  '최대 탭 수': 'Max taps',
+  '시작 화면에서 몇 화면 안쪽까지 들어갈지 정합니다. 1이면 시작 화면의 버튼만 눌러 보고, 2면 거기서 열린 화면의 버튼까지 눌러 봅니다.': 'How many screens deep to go from the start screen. 1 taps only the start screen\'s buttons; 2 also taps buttons on the screens it opens.',
+  '최대 깊이': 'Max depth',
+  '이 앱의 화면과 연결을 모두 지울까요?': 'Delete all screens and transitions for this app?',
+  '초기화': 'Clear',
+  '그래프 초기화': 'Clear graph',
+  '탐색 중에는 그래프를 초기화할 수 없습니다': "Can't clear the graph while exploring",
   '트리 패널 접기': 'Collapse tree',
   '트리 패널 펴기': 'Expand tree',
   '속성 패널 접기': 'Collapse properties',
@@ -29,13 +40,10 @@ export const inspect: Record<string, string> = {
 
   // 화면 흐름
   '{n}회': '{n}×',
-  '탐색 완료: {n}스텝': 'Exploration done: {n} steps',
   ', 위험 라벨 {n}개 건너뜀': ', skipped {n} risky labels',
   '탐색 중…': 'Exploring…',
   '▶ 자동 탐색': '▶ Auto-explore',
   '중지': 'Stop',
-  '스텝': 'Steps',
-  '깊이': 'Depth',
   '＋ 현재 화면 추가': '＋ Add current screen',
   '화면 {n} · 전이 {e}': '{n} screens · {e} transitions',
   '결제·삭제·로그아웃·전송 같은 버튼은 자동 탐색에서 누르지 않습니다': 'Auto-explore never taps buttons like pay, delete, log out, or send',
