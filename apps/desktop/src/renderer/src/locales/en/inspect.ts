@@ -1,5 +1,8 @@
 // 뷰 계층 · 화면 흐름 · 네트워크 탭
 export const inspect: Record<string, string> = {
+  '속성 패널 접기': 'Collapse properties',
+  '속성 패널 펴기': 'Expand properties',
+  속성: 'Properties',
   '클래스 이름 표시': 'Show class names',
   // 뷰 계층
   '캡처 중…': 'Capturing…',
