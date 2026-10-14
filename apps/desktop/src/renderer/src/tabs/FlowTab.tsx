@@ -77,22 +77,26 @@ const startOf = (g: GraphData) => [...g.nodes].sort((a, b) => a.firstSeen - b.fi
  * 다음 단계로 가는 연결만 배치에 써서 '홈으로 돌아가기' 같은 되돌아가는 연결이 시작 화면을 밀어내지 않게 한다.
  * 같은 열 안의 순서는 dagre 가 선이 덜 엇갈리게 정한다.
  */
-/** 시작 화면에서 연결선을 따라 몇 단계 떨어졌는지 (BFS) */
+/**
+ * 시작 화면에서 연결선을 따라 몇 단계 떨어졌는지 (BFS).
+ * 시작 화면에서 닿지 않는 화면(현재 화면부터 탐색·직접 추가한 화면)은 기록된 순서대로 새 출발점으로 삼아 이어서 센다
+ */
 function levels(g: GraphData): Map<string, number> {
-  const start = startOf(g);
   const level = new Map<string, number>();
-  if (!start) return level;
-  level.set(start, 0);
-  const q = [start];
-  while (q.length) {
-    const cur = q.shift()!;
-    for (const e of g.edges) {
-      if (e.from === cur && !level.has(e.to)) {
-        level.set(e.to, level.get(cur)! + 1);
-        q.push(e.to);
+  const bfs = (root: string) => {
+    level.set(root, 0);
+    const q = [root];
+    while (q.length) {
+      const cur = q.shift()!;
+      for (const e of g.edges) {
+        if (e.from === cur && !level.has(e.to)) {
+          level.set(e.to, level.get(cur)! + 1);
+          q.push(e.to);
+        }
       }
     }
-  }
+  };
+  for (const n of [...g.nodes].sort((a, b) => a.firstSeen - b.firstSeen)) if (!level.has(n.id)) bfs(n.id);
   return level;
 }
 
@@ -110,12 +114,10 @@ function layout(g: GraphData): Map<string, Pos> {
     if (lf !== undefined && lt === lf + 1) d.setEdge(e.from, e.to);
   }
   dagreLayout(d);
-  // 열(x)은 시작 화면에서의 단계로 고정, 줄(y)은 dagre 결과. 시작 화면에서 닿지 않는 화면은 맨 오른쪽 열
-  const maxLevel = Math.max(0, ...level.values());
+  // 열(x)은 출발점에서의 단계로 고정, 줄(y)은 dagre 결과
   for (const n of g.nodes) {
     const p = d.node(n.id);
-    const col = level.get(n.id) ?? maxLevel + 1;
-    pos.set(n.id, { x: col * (CARD_W + 110), y: p.y - CARD_H / 2 });
+    pos.set(n.id, { x: (level.get(n.id) ?? 0) * (CARD_W + 110), y: p.y - CARD_H / 2 });
   }
   return pos;
 }
@@ -183,6 +185,7 @@ export function FlowTab() {
 
   useEffect(() => {
     setSel(null);
+    moved.current = false; // 다른 앱으로 바뀌면 직접 옮긴 배치는 의미가 없다
     reload();
   }, [reload]);
 
@@ -251,6 +254,9 @@ export function FlowTab() {
     setConfirmReset(false);
     if ((await run(api.graphReset(pkg))) !== undefined) {
       setSel(null);
+      moved.current = false;
+      // 초기화 뒤 같은 이름으로 다시 기록되는 화면에 예전 스크린샷이 보이지 않게
+      for (const k of [...imgCache.keys()]) if (k.startsWith(pkg)) imgCache.delete(k);
       setProgress([]);
       await reload();
       toast(t('화면 그래프를 초기화했습니다'));
