@@ -231,3 +231,10 @@ label.chk { display: inline-flex; gap: 6px; align-items: center; color: var(--fg
 .chat-note.error { color: var(--err); text-align: left; }
 .chat-input { display: grid; grid-template-columns: 1fr auto; gap: 8px; padding: 10px; border-top: 1px solid var(--line); align-items: end; }
 .chat-input textarea { resize: none; }
+
+/* 기기 연결 도우미 */
+.setup-step { padding: 10px 0; border-top: 1px solid var(--line); }
+.setup-step:first-of-type { border-top: 0; }
+.setup-step p { margin: 6px 0 8px; font-size: 12px; }
+.setup-pre { margin: 8px 0 0; padding: 10px; background: var(--bg); border: 1px solid var(--line); border-radius: 6px; font: 11px/1.55 var(--mono); white-space: pre-wrap; word-break: break-word; max-height: 320px; overflow: auto; }
+.setup-ol { margin: 6px 0 0; padding-left: 20px; font-size: 12px; line-height: 1.7; }

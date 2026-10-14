@@ -366,6 +366,7 @@ async function runClaude(args: string[]): Promise<string> {
 }
 
 handle('appVersion', async () => currentVersion());
+handle('platform', async () => ({ platform: process.platform, arch: process.arch }));
 handle('updateCheck', () => checkForUpdate());
 handle('updateInstall', async (info: UpdateInfo) => {
   // 렌더러가 넘긴 정보 대신 다시 확인한 결과로 설치한다 (다운로드 URL을 렌더러에서 받지 않음)
