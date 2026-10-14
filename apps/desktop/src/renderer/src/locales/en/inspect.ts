@@ -1,5 +1,10 @@
 // 뷰 계층 · 화면 흐름 · 네트워크 탭
 export const inspect: Record<string, string> = {
+  '트리 패널 접기': 'Collapse tree',
+  '트리 패널 펴기': 'Expand tree',
+  '속성 패널 접기': 'Collapse properties',
+  '속성 패널 펴기': 'Expand properties',
+  속성: 'Properties',
   '클래스 이름 표시': 'Show class names',
   // 뷰 계층
   '캡처 중…': 'Capturing…',
@@ -20,7 +25,7 @@ export const inspect: Record<string, string> = {
   '작은 뷰 숨기기': 'Hide small views',
   '시점 초기화': 'Reset view',
   '정면': 'Front',
-  '드래그로 회전 · 클릭으로 선택': 'Drag to rotate · click to select',
+  '드래그로 회전 · 스페이스+드래그로 이동 · 클릭으로 선택': 'Drag to rotate · Space+drag to pan · Click to select',
 
   // 화면 흐름
   '{n}회': '{n}×',
