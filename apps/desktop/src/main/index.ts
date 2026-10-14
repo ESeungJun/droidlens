@@ -215,20 +215,27 @@ handle('graphRecordHere', async (s: string, pkg: string) => {
   return n.id;
 });
 let exploreAbort: AbortController | null = null;
-handle('explore', async (s: string, pkg: string, maxSteps: number, maxDepth: number) => {
+handle('explore', async (s: string, pkg: string, maxDepth: number, fromCurrent?: boolean) => {
   exploreAbort?.abort();
   exploreAbort = new AbortController();
-  const r = await dl.explore(dev(s), {
-    packageName: pkg,
-    maxSteps,
-    maxDepth,
-    signal: exploreAbort.signal,
-    onProgress: (e) => send('progress', { kind: 'explore', ...e }),
-  });
-  exploreAbort = null;
-  return { steps: r.steps, skipped: r.skipped, errors: r.errors };
+  try {
+    const r = await dl.explore(dev(s), {
+      packageName: pkg,
+      maxDepth,
+      relaunch: !fromCurrent,
+      signal: exploreAbort.signal,
+      onProgress: (e) => send('progress', { kind: 'explore', ...e }),
+    });
+    return { steps: r.steps, limited: r.limited, skipped: r.skipped, errors: r.errors };
+  } finally {
+    exploreAbort = null; // 오류로 끝나도 '탐색 중' 상태가 남지 않게
+  }
 });
 handle('exploreStop', async () => exploreAbort?.abort());
+handle('graphReset', async (pkg: string) => {
+  if (exploreAbort) throw new Error('탐색 중에는 그래프를 초기화할 수 없습니다');
+  await dl.ScreenGraph.reset(pkg);
+});
 
 // ---------- 앱 SDK ----------
 const SDK_METHODS = ['info', 'network', 'networkDetail', 'clearNetwork', 'prefs', 'setPref', 'removePref', 'databases', 'query', 'events'] as const;
