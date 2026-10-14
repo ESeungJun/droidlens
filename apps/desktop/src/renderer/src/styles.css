@@ -111,14 +111,12 @@ label.chk { display: inline-flex; gap: 6px; align-items: center; color: var(--fg
 .shot-box img { display: block; max-width: 100%; max-height: calc(100vh - 140px); border-radius: 8px; }
 .hl { position: absolute; pointer-events: none; border: 2px solid var(--accent); background: rgba(125,211,168,.15); border-radius: 2px; }
 .hl.hover { border-color: var(--info); background: rgba(124,180,242,.12); }
-.inspector.props-closed { grid-template-columns: minmax(260px, 34%) 1fr 28px; }
-.inspector.is-3d.props-closed { grid-template-columns: 1fr minmax(260px, 30%) 28px; }
-.props-col { position: relative; min-height: 0; display: flex; flex-direction: column; }
-.props-col .props { flex: 1; min-height: 0; padding-top: 34px; }
-.props-toggle { position: absolute; top: 6px; right: 6px; z-index: 1; width: 22px; height: 22px; border: 1px solid var(--line); border-radius: 5px; background: var(--panel); color: var(--fg-dim); cursor: pointer; }
-.props-toggle:hover, .props-rail:hover { color: var(--fg); background: var(--panel-2, var(--panel)); }
-.props-rail { border: 0; border-left: 1px solid var(--line); background: var(--panel); color: var(--fg-dim); cursor: pointer; display: flex; flex-direction: column; align-items: center; gap: 8px; padding-top: 10px; font-size: 11px; }
-.props-rail span { writing-mode: vertical-rl; letter-spacing: .1em; }
+.panel-col { position: relative; min-height: 0; display: flex; flex-direction: column; }
+.panel-col > .props, .panel-col > .tree { flex: 1; min-height: 0; padding-top: 34px; }
+.panel-toggle { position: absolute; top: 6px; right: 6px; z-index: 1; width: 22px; height: 22px; border: 1px solid var(--line); border-radius: 5px; background: var(--panel); color: var(--fg-dim); cursor: pointer; }
+.panel-toggle:hover, .panel-rail:hover { color: var(--fg); background: var(--panel-2, var(--panel)); }
+.panel-rail { border: 0; border-left: 1px solid var(--line); background: var(--panel); color: var(--fg-dim); cursor: pointer; display: flex; flex-direction: column; align-items: center; gap: 8px; padding-top: 10px; font-size: 11px; }
+.panel-rail span { writing-mode: vertical-rl; letter-spacing: .1em; }
 .tree { overflow: auto; padding: 6px 0; font-family: var(--mono); font-size: 12px; border-right: 1px solid var(--line); }
 .row { display: flex; align-items: center; gap: 4px; padding: 1px 8px; cursor: pointer; white-space: nowrap; }
 .row:hover { background: var(--panel-2); }
@@ -146,7 +144,6 @@ label.chk { display: inline-flex; gap: 6px; align-items: center; color: var(--fg
 .layer.hov { border-color: var(--info); background: rgba(124,180,242,.18); }
 .layer-label { position: absolute; left: 1px; top: 1px; padding: 0 4px; font: 10px/15px var(--mono); color: var(--fg); background: rgba(13,15,19,.82); border-left: 2px solid; border-radius: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; pointer-events: none; }
 .layer.sel .layer-label, .layer.hov .layer-label { font-size: 12px; line-height: 18px; z-index: 1; }
-.inspector.is-3d { grid-template-columns: 1fr minmax(260px, 30%) 300px; }
 .inspector.is-3d .three { height: 100%; }
 .tree .row.hov { background: rgba(124,180,242,.12); }
 .tree .row.path { background: rgba(125,211,168,.07); box-shadow: inset 2px 0 0 rgba(125,211,168,.5); }

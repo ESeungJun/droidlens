@@ -20,7 +20,25 @@ function nodeAt(root: ViewNode, x: number, y: number): ViewNode | undefined {
 
 const short = (c: string) => c.split('.').pop() ?? c;
 const rid = (r: string) => r.split(':id/')[1] ?? r;
-const PROPS_KEY = 'droidlens.inspector.props';
+/** 접고 펼 수 있는 패널의 열림 상태. 다음 실행에도 유지되도록 저장한다 */
+function usePanel(key: string): [boolean, (open: boolean) => void] {
+  const [open, setOpen] = useState(() => {
+    try {
+      return localStorage.getItem(key) !== '0';
+    } catch {
+      return true;
+    }
+  });
+  const toggle = (v: boolean) => {
+    setOpen(v);
+    try {
+      localStorage.setItem(key, v ? '1' : '0');
+    } catch {
+      /* 이번 실행 동안만 유지 */
+    }
+  };
+  return [open, toggle];
+}
 /** 선택한 뷰이거나 그 조상인지 (id 가 0.2.1 같은 경로라 접두어로 판단) */
 const onPath = (n: ViewNode, sel: ViewNode | null) => !!sel && (sel.id === n.id || sel.id.startsWith(n.id + '.'));
 /** 깊이별 색: 3D 층 테두리와 트리의 색 점이 같은 색을 써서 조각과 목록을 맞춰 볼 수 있다 */
@@ -37,21 +55,14 @@ export function InspectorTab() {
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   const [query, setQuery] = useState('');
   const [mode, setMode] = useState<'2d' | '3d'>('2d');
-  const [propsOpen, setPropsOpen] = useState(() => {
-    try {
-      return localStorage.getItem(PROPS_KEY) !== '0';
-    } catch {
-      return true;
-    }
-  });
-  const toggleProps = (open: boolean) => {
-    setPropsOpen(open);
-    try {
-      localStorage.setItem(PROPS_KEY, open ? '1' : '0');
-    } catch {
-      /* 이번 실행 동안만 유지 */
-    }
-  };
+  const [treeOpen, toggleTree] = usePanel('droidlens.inspector.tree');
+  const [propsOpen, toggleProps] = usePanel('droidlens.inspector.props');
+  // 접힌 패널은 28px 막대만 남기고, 남는 너비는 스크린샷·3D 가 차지
+  const cols = [
+    mode === '3d' || !treeOpen ? '1fr' : 'minmax(260px, 34%)',
+    treeOpen ? (mode === '3d' ? 'minmax(260px, 30%)' : '1fr') : '28px',
+    propsOpen ? (mode === '3d' ? '300px' : '320px') : '28px',
+  ].join(' ');
 
   const load = async () => {
     if (!serial) return;
@@ -103,38 +114,47 @@ export function InspectorTab() {
       {!snap ? (
         <div className="empty">{loading ? t('뷰 계층을 가져오는 중…') : t('캡처 버튼을 눌러 뷰 계층을 가져오세요')}</div>
       ) : (
-        <div className={`inspector ${mode === '3d' ? 'is-3d' : ''} ${propsOpen ? '' : 'props-closed'}`}>
+        <div className={`inspector ${mode === '3d' ? 'is-3d' : ''}`} style={{ gridTemplateColumns: cols }}>
           {mode === '3d' ? (
             <ThreeD snap={snap} sel={sel} setSel={setSel} hover={hover} onHover={setHover} />
           ) : (
             <ShotPane snap={snap} sel={sel} hover={hover} onPick={setSel} onHover={setHover} />
           )}
-          <div className="tree">
-            <TreeRow
-              n={snap.hierarchy.root}
-              sel={sel}
-              hover={hover}
-              depthDots={mode === '3d'}
-              collapsed={collapsed}
-              matchIds={matchIds}
-              onToggle={(id) =>
-                setCollapsed((c) => {
-                  const nx = new Set(c);
-                  nx.has(id) ? nx.delete(id) : nx.add(id);
-                  return nx;
-                })
-              }
-              onSel={setSel}
-              onHover={setHover}
-            />
-          </div>
+          {!treeOpen ? (
+            <button className="panel-rail" onClick={() => toggleTree(true)} title={t('트리 패널 펴기')}>
+              ◂ <span>{t('트리')}</span>
+            </button>
+          ) : (
+            <div className="panel-col">
+              <button className="panel-toggle" onClick={() => toggleTree(false)} title={t('트리 패널 접기')}>▸</button>
+              <div className="tree">
+                <TreeRow
+                  n={snap.hierarchy.root}
+                  sel={sel}
+                  hover={hover}
+                  depthDots={mode === '3d'}
+                  collapsed={collapsed}
+                  matchIds={matchIds}
+                  onToggle={(id) =>
+                    setCollapsed((c) => {
+                      const nx = new Set(c);
+                      nx.has(id) ? nx.delete(id) : nx.add(id);
+                      return nx;
+                    })
+                  }
+                  onSel={setSel}
+                  onHover={setHover}
+                />
+              </div>
+            </div>
+          )}
           {propsOpen ? (
-            <div className="props-col">
-              <button className="props-toggle" onClick={() => toggleProps(false)} title={t('속성 패널 접기')}>▸</button>
+            <div className="panel-col">
+              <button className="panel-toggle" onClick={() => toggleProps(false)} title={t('속성 패널 접기')}>▸</button>
               <Props snap={snap} n={sel} />
             </div>
           ) : (
-            <button className="props-rail" onClick={() => toggleProps(true)} title={t('속성 패널 펴기')}>
+            <button className="panel-rail" onClick={() => toggleProps(true)} title={t('속성 패널 펴기')}>
               ◂ <span>{t('속성')}</span>
             </button>
           )}
