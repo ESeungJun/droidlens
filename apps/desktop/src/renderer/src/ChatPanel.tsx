@@ -25,6 +25,9 @@ export function ChatPanel({ onClose }: { onClose(): void }) {
   const [sessionId, setSessionId] = useState<string | undefined>();
   const [claude, setClaude] = useState<{ version?: string; error?: string } | null>(null);
   const bottom = useRef<HTMLDivElement>(null);
+  // 사용자가 멈춘 실행: 'stop'이면 결과를 "중지했습니다"로, 'reset'이면 새 대화로 넘어갔으니 남은 이벤트를 버린다
+  const stopped = useRef<'stop' | 'reset' | null>(null);
+  const [confirm, setConfirm] = useState<null | (() => void)>(null);
 
   useEffect(() => {
     api.chatStatus().then((c) => setClaude({ version: c.version })).catch((e) => setClaude({ error: (e as Error).message }));
@@ -33,6 +36,17 @@ export function ChatPanel({ onClose }: { onClose(): void }) {
   useEffect(
     () =>
       api.onChatEvent((e: ChatEvent) => {
+        if (stopped.current === 'reset') {
+          if (e.kind === 'done') stopped.current = null;
+          return;
+        }
+        if (e.kind === 'done' && stopped.current === 'stop') {
+          stopped.current = null;
+          setBusy(false);
+          if (e.sessionId) setSessionId(e.sessionId);
+          setItems((cur) => [...cur, { kind: 'note', text: '중지했습니다' }]);
+          return;
+        }
         if (e.kind === 'session') setSessionId(e.sessionId);
         else if (e.kind === 'text') setItems((cur) => [...cur, { kind: 'assistant', text: e.text }]);
         else if (e.kind === 'tool') setItems((cur) => [...cur, { kind: 'tool', id: e.id, name: e.name, input: e.input }]);
@@ -56,6 +70,7 @@ export function ChatPanel({ onClose }: { onClose(): void }) {
     const message = input.trim();
     if (!message || busy) return;
     setInput('');
+    if (stopped.current === 'stop') stopped.current = null; // 'reset'은 이전 실행의 done이 올 때 풀린다
     setBusy(true);
     setItems((cur) => [...cur, { kind: 'user', text: message }]);
     try {
@@ -66,12 +81,24 @@ export function ChatPanel({ onClose }: { onClose(): void }) {
     }
   };
 
+  const stop = () => {
+    stopped.current = 'stop';
+    api.chatStop();
+  };
+
   const reset = () => {
-    if (busy) api.chatStop();
+    if (busy) {
+      stopped.current = 'reset';
+      api.chatStop();
+    }
+    setConfirm(null);
     setItems([]);
     setSessionId(undefined);
     setBusy(false);
   };
+
+  /** 작업 중이면 진행 중인 작업을 버려도 되는지 먼저 묻는다 */
+  const guard = (action: () => void) => (busy ? setConfirm(() => action) : action());
 
   const hint = AGENTS.find((a) => a.id === agent)!.hint;
 
@@ -83,8 +110,11 @@ export function ChatPanel({ onClose }: { onClose(): void }) {
           className="input"
           value={agent}
           onChange={(e) => {
-            setAgent(e.target.value as typeof agent);
-            reset();
+            const next = e.target.value as typeof agent;
+            guard(() => {
+              setAgent(next);
+              reset();
+            });
           }}
         >
           {AGENTS.map((a) => (
@@ -92,9 +122,17 @@ export function ChatPanel({ onClose }: { onClose(): void }) {
           ))}
         </select>
         <div className="spacer" />
-        <button className="btn sm" onClick={reset} title="새 대화">＋</button>
+        <button className="btn sm" onClick={() => guard(reset)} title="새 대화">＋</button>
         <button className="btn sm" onClick={onClose} title="닫기">✕</button>
       </div>
+
+      {confirm && (
+        <div className="chat-note" style={{ margin: 8, display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
+          <span style={{ flex: 1 }}>진행 중인 작업을 중단하고 새 대화를 시작할까요?</span>
+          <button className="btn sm danger" onClick={confirm}>중단하고 새 대화</button>
+          <button className="btn sm" onClick={() => setConfirm(null)}>계속 진행</button>
+        </div>
+      )}
 
       <div className="chat-body">
         {claude?.error && (
@@ -151,7 +189,7 @@ export function ChatPanel({ onClose }: { onClose(): void }) {
           }}
         />
         {busy ? (
-          <button className="btn danger" onClick={() => api.chatStop()}>■ 중지</button>
+          <button className="btn danger" onClick={stop}>■ 중지</button>
         ) : (
           <button className="btn primary" disabled={!input.trim() || !!claude?.error} onClick={send}>보내기</button>
         )}
