@@ -7,6 +7,7 @@ import {
   MiniMap,
   Position,
   ReactFlow,
+  applyNodeChanges,
   type Edge,
   type Node,
   type NodeChange,
@@ -21,18 +22,25 @@ import { useT } from '../i18n';
 const imgCache = new Map<string, string>();
 
 function useShot(pkg: string, file?: string) {
-  const [src, setSrc] = useState(file ? imgCache.get(pkg + file) : undefined);
+  const key = file ? pkg + file : '';
+  const [loaded, setLoaded] = useState<{ key: string; src: string } | null>(null);
   useEffect(() => {
-    if (!file || imgCache.has(pkg + file)) return;
+    if (!file || imgCache.has(key)) return;
+    let alive = true;
     api.graphImage(pkg, file).then((d) => {
-      imgCache.set(pkg + file, d);
-      setSrc(d);
+      imgCache.set(key, d);
+      if (alive) setLoaded({ key, src: d });
     }).catch(() => undefined);
-  }, [pkg, file]);
-  return src;
+    return () => {
+      alive = false;
+    };
+  }, [pkg, file, key]);
+  // 다른 화면을 고르면 그 화면의 이미지로 (이전 화면의 이미지를 붙들고 있지 않게)
+  if (!file) return undefined;
+  return imgCache.get(key) ?? (loaded?.key === key ? loaded.src : undefined);
 }
 
-type SNodeData = { screen: ScreenNode; pkg: string; selected: boolean };
+type SNodeData = { screen: ScreenNode; pkg: string; selected: boolean; start: boolean };
 
 const ScreenCard = memo(({ data }: NodeProps<Node<SNodeData>>) => {
   const src = useShot(data.pkg, data.screen.screenshot);
@@ -41,7 +49,10 @@ const ScreenCard = memo(({ data }: NodeProps<Node<SNodeData>>) => {
     <div className={`screen-node ${data.selected ? 'sel' : ''}`}>
       <Handle type="target" position={Position.Left} />
       {src ? <img src={src} alt="" /> : <img alt="" />}
-      <div className="t" title={data.screen.label}>{data.screen.label}</div>
+      <div className="t" title={data.screen.label}>
+        {data.start && <span className="pill accent" style={{ marginRight: 4, padding: '0 6px', fontSize: 10 }}>{t('시작')}</span>}
+        {data.screen.label}
+      </div>
       <div className="s">{data.screen.signature} · {t('{n}회', { n: data.screen.visits })}</div>
       <Handle type="source" position={Position.Right} />
     </div>
@@ -55,19 +66,45 @@ type Pos = { x: number; y: number };
 const CARD_W = 162;
 const CARD_H = 380;
 
-/** 화면 흐름을 왼쪽 → 오른쪽 계층으로 배치 (연결이 겹치지 않게 dagre 로 정렬) */
+/** 탐색을 시작한 화면 (가장 먼저 기록된 화면) */
+const startOf = (g: GraphData) => [...g.nodes].sort((a, b) => a.firstSeen - b.firstSeen)[0]?.id;
+
+/**
+ * 시작 화면 기준으로 왼쪽 → 오른쪽 배치. 시작 화면에서 연결선을 따라 몇 단계인지(BFS)로 열을 정하고,
+ * 다음 단계로 가는 연결만 배치에 써서 '홈으로 돌아가기' 같은 되돌아가는 연결이 시작 화면을 밀어내지 않게 한다.
+ * 같은 열 안의 순서는 dagre 가 선이 덜 엇갈리게 정한다.
+ */
 function layout(g: GraphData): Map<string, Pos> {
+  const pos = new Map<string, Pos>();
+  const start = startOf(g);
+  if (!start) return pos;
+  const level = new Map([[start, 0]]);
+  const q = [start];
+  while (q.length) {
+    const cur = q.shift()!;
+    for (const e of g.edges) {
+      if (e.from === cur && !level.has(e.to)) {
+        level.set(e.to, level.get(cur)! + 1);
+        q.push(e.to);
+      }
+    }
+  }
   const d = new Graph();
   d.setGraph({ rankdir: 'LR', nodesep: 40, ranksep: 110, marginx: 20, marginy: 20 });
   d.setDefaultEdgeLabel(() => ({}));
   for (const n of g.nodes) d.setNode(n.id, { width: CARD_W, height: CARD_H });
-  for (const e of g.edges) if (e.from !== e.to && d.hasNode(e.from) && d.hasNode(e.to)) d.setEdge(e.from, e.to);
+  for (const e of g.edges) {
+    const lf = level.get(e.from);
+    const lt = level.get(e.to);
+    if (lf !== undefined && lt === lf + 1) d.setEdge(e.from, e.to);
+  }
   dagreLayout(d);
-  const pos = new Map<string, Pos>();
-  // dagre 는 카드 중심 좌표를 준다 → React Flow 는 왼쪽 위 기준
+  // 열(x)은 시작 화면에서의 단계로 고정, 줄(y)은 dagre 결과. 시작 화면에서 닿지 않는 화면은 맨 오른쪽 열
+  const maxLevel = Math.max(0, ...level.values());
   for (const n of g.nodes) {
     const p = d.node(n.id);
-    pos.set(n.id, { x: p.x - CARD_W / 2, y: p.y - CARD_H / 2 });
+    const col = level.get(n.id) ?? maxLevel + 1;
+    pos.set(n.id, { x: col * (CARD_W + 110), y: p.y - CARD_H / 2 });
   }
   return pos;
 }
@@ -83,39 +120,50 @@ export function FlowTab() {
   const [progress, setProgress] = useState<string[]>([]);
   const [confirmReset, setConfirmReset] = useState(false);
   const [fromCurrent, setFromCurrent] = useState(false);
-  // 카드 위치: 처음엔 자동 배치, 사용자가 드래그하면 그 위치를 유지하고 '정리'로 다시 자동 배치
-  const [pos, setPos] = useState<Map<string, Pos>>(new Map());
+  // 카드: 처음엔 자동 배치, 드래그하면 그 위치를 유지하고 '정리'로 다시 자동 배치.
+  // React Flow 가 잰 카드 크기(measured)를 잃지 않도록 변경분만 applyNodeChanges 로 반영한다 (새로 만들면 매번 다시 재며 깜빡인다)
+  const [rfNodes, setRfNodes] = useState<Node<SNodeData>[]>([]);
   const moved = useRef(false);
   const rf = useRef<ReactFlowInstance<Node<SNodeData>, Edge> | null>(null);
 
   const arrange = useCallback(() => {
     if (!g) return;
     moved.current = false;
-    setPos(layout(g));
+    const auto = layout(g);
+    setRfNodes((cur) => cur.map((n) => ({ ...n, position: auto.get(n.id) ?? n.position })));
     requestAnimationFrame(() => rf.current?.fitView({ padding: 0.15, duration: 300 }));
   }, [g]);
 
   // 그래프가 바뀌면: 직접 옮긴 적이 없으면 전체 다시 배치, 옮겼으면 새 화면만 자동 위치에 추가
   useEffect(() => {
-    if (!g) return;
+    if (!g || !pkg) return setRfNodes([]);
     const auto = layout(g);
-    setPos((cur) => {
-      if (!moved.current) return auto;
-      const next = new Map(cur);
-      for (const [id, p] of auto) if (!next.has(id)) next.set(id, p);
-      return next;
+    const start = startOf(g);
+    setRfNodes((cur) => {
+      const old = new Map(cur.map((n) => [n.id, n]));
+      return g.nodes.map((s) => {
+        const o = old.get(s.id);
+        return {
+          ...o,
+          id: s.id,
+          type: 'screen',
+          position: moved.current && o ? o.position : auto.get(s.id) ?? { x: 0, y: 0 },
+          data: { screen: s, pkg, selected: o?.data.selected ?? false, start: s.id === start },
+        };
+      });
     });
-  }, [g]);
+  }, [g, pkg]);
+
+  // 선택이 바뀐 카드만 data 를 바꾼다
+  useEffect(() => {
+    setRfNodes((cur) =>
+      cur.map((n) => (n.data.selected === (n.id === sel) ? n : { ...n, data: { ...n.data, selected: n.id === sel } })),
+    );
+  }, [sel]);
 
   const onNodesChange = useCallback((changes: NodeChange<Node<SNodeData>>[]) => {
-    const drags = changes.filter((c) => c.type === 'position' && c.position);
-    if (!drags.length) return;
-    moved.current = true;
-    setPos((cur) => {
-      const next = new Map(cur);
-      for (const c of drags) if (c.type === 'position' && c.position) next.set(c.id, c.position);
-      return next;
-    });
+    if (changes.some((c) => c.type === 'position' && c.dragging)) moved.current = true;
+    setRfNodes((cur) => applyNodeChanges(changes, cur));
   }, []);
 
   const reload = useCallback(async () => {
@@ -138,15 +186,9 @@ export function FlowTab() {
     [reload],
   );
 
-  const { nodes, edges } = useMemo(() => {
-    if (!g || !pkg) return { nodes: [], edges: [] };
-    const nodes: Node<SNodeData>[] = g.nodes.map((n) => ({
-      id: n.id,
-      type: 'screen',
-      position: pos.get(n.id) ?? { x: 0, y: 0 },
-      data: { screen: n, pkg, selected: n.id === sel },
-    }));
-    const edges: Edge[] = g.edges
+  const edges = useMemo<Edge[]>(() => {
+    if (!g) return [];
+    return g.edges
       .filter((e) => e.from !== e.to)
       .map((e) => ({
         id: e.id,
@@ -157,8 +199,7 @@ export function FlowTab() {
         style: { stroke: sel && (e.from === sel || e.to === sel) ? '#7dd3a8' : '#4a505c' },
         animated: !!sel && e.from === sel,
       }));
-    return { nodes, edges };
-  }, [g, pkg, sel, pos]);
+  }, [g, sel]);
 
   if (!pkg) return <NeedPkg />;
   const selNode = g?.nodes.find((n) => n.id === sel);
@@ -233,7 +274,7 @@ export function FlowTab() {
       <div className="flow" style={{ position: 'relative' }}>
         {g && g.nodes.length ? (
           <ReactFlow
-            nodes={nodes}
+            nodes={rfNodes}
             edges={edges}
             nodeTypes={nodeTypes}
             onNodeClick={(_, n) => setSel(n.id)}
