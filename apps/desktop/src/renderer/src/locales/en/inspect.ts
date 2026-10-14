@@ -25,7 +25,7 @@ export const inspect: Record<string, string> = {
   '작은 뷰 숨기기': 'Hide small views',
   '시점 초기화': 'Reset view',
   '정면': 'Front',
-  '드래그로 회전 · 클릭으로 선택': 'Drag to rotate · click to select',
+  '드래그로 회전 · 스페이스+드래그로 이동 · 클릭으로 선택': 'Drag to rotate · Space+drag to pan · Click to select',
 
   // 화면 흐름
   '{n}회': '{n}×',

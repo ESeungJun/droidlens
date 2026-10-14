@@ -338,7 +338,41 @@ function ThreeD({ snap, sel, setSel, hover, onHover }: {
   const hov = hover?.id ?? null;
   const [minArea, setMinArea] = useState(true);
   const [labels, setLabels] = useState(true);
-  const dragging = useRef<{ x: number; y: number; rx: number; ry: number } | null>(null);
+  const [pan, setPan] = useState({ x: 0, y: 0 });
+  // 스페이스바를 누른 채 드래그하면 회전 대신 장면을 이동(팬)
+  const [space, setSpace] = useState(false);
+  const spaceRef = useRef(false);
+  const dragging = useRef<{ x: number; y: number; rx: number; ry: number; px: number; py: number; pan: boolean } | null>(null);
+  useEffect(() => {
+    const typing = (e: KeyboardEvent) => (e.target as HTMLElement)?.closest?.('input, textarea, select');
+    const set = (v: boolean) => {
+      spaceRef.current = v;
+      setSpace(v);
+    };
+    const down = (e: KeyboardEvent) => {
+      if (e.code !== 'Space' || typing(e)) return;
+      e.preventDefault();
+      if (!spaceRef.current) set(true);
+    };
+    const up = (e: KeyboardEvent) => {
+      if (e.code !== 'Space' || typing(e)) return;
+      e.preventDefault(); // 포커스된 버튼이 스페이스로 눌리지 않게
+      set(false);
+    };
+    const blur = () => set(false);
+    window.addEventListener('keydown', down);
+    window.addEventListener('keyup', up);
+    window.addEventListener('blur', blur);
+    return () => {
+      window.removeEventListener('keydown', down);
+      window.removeEventListener('keyup', up);
+      window.removeEventListener('blur', blur);
+    };
+  }, []);
+  const resetView = (r: { x: number; y: number }) => {
+    setRot(r);
+    setPan({ x: 0, y: 0 });
+  };
   const root = snap.hierarchy.root;
   const W = root.bounds[2] - root.bounds[0] || 1080;
   const H = root.bounds[3] - root.bounds[1] || 2400;
@@ -361,30 +395,32 @@ function ThreeD({ snap, sel, setSel, hover, onHover }: {
         <label>{t('확대')} <input type="range" min={0.5} max={2} step={0.05} value={zoom} onChange={(e) => setZoom(+e.target.value)} /></label>
         <label className="chk"><input type="checkbox" checked={minArea} onChange={(e) => setMinArea(e.target.checked)} />{t('작은 뷰 숨기기')}</label>
         <label className="chk"><input type="checkbox" checked={labels} onChange={(e) => setLabels(e.target.checked)} />{t('클래스 이름 표시')}</label>
-        <button className="btn sm" onClick={() => setRot({ x: 20, y: -30 })}>{t('시점 초기화')}</button>
-        <button className="btn sm" onClick={() => setRot({ x: 0, y: 0 })}>{t('정면')}</button>
-        <span>{hover ?? sel ? `${label((hover ?? sel)!)} · depth ${(hover ?? sel)!.depth}` : t('드래그로 회전 · 클릭으로 선택')}</span>
+        <button className="btn sm" onClick={() => resetView({ x: 20, y: -30 })}>{t('시점 초기화')}</button>
+        <button className="btn sm" onClick={() => resetView({ x: 0, y: 0 })}>{t('정면')}</button>
+        <span>{hover ?? sel ? `${label((hover ?? sel)!)} · depth ${(hover ?? sel)!.depth}` : t('드래그로 회전 · 스페이스+드래그로 이동 · 클릭으로 선택')}</span>
       </div>
       <div
         className="three"
-        style={{ height: '100%' }}
-        onMouseDown={(e) => (dragging.current = { x: e.clientX, y: e.clientY, rx: rot.x, ry: rot.y })}
+        style={{ height: '100%', cursor: space ? 'move' : undefined }}
+        onMouseDown={(e) => (dragging.current = { x: e.clientX, y: e.clientY, rx: rot.x, ry: rot.y, px: pan.x, py: pan.y, pan: spaceRef.current })}
         onMouseMove={(e) => {
           const d = dragging.current;
-          if (d) setRot({ x: Math.max(-80, Math.min(80, d.rx - (e.clientY - d.y) * 0.3)), y: d.ry + (e.clientX - d.x) * 0.3 });
+          if (!d) return;
+          if (d.pan) setPan({ x: d.px + e.clientX - d.x, y: d.py + e.clientY - d.y });
+          else setRot({ x: Math.max(-80, Math.min(80, d.rx - (e.clientY - d.y) * 0.3)), y: d.ry + (e.clientX - d.x) * 0.3 });
         }}
         onMouseUp={(e) => {
           const d = dragging.current;
           dragging.current = null;
-          // 회전 없이 빈 곳을 누르면 선택 해제
-          if (d && Math.abs(e.clientX - d.x) + Math.abs(e.clientY - d.y) < 4 && !(e.target as HTMLElement).closest('.layer')) setSel(null);
+          // 회전·이동 없이 빈 곳을 누르면 선택 해제
+          if (d && !d.pan && Math.abs(e.clientX - d.x) + Math.abs(e.clientY - d.y) < 4 && !(e.target as HTMLElement).closest('.layer')) setSel(null);
         }}
         onMouseLeave={() => (dragging.current = null)}
         onWheel={(e) => setZoom((z) => Math.max(0.5, Math.min(2, z - e.deltaY * 0.001)))}
       >
         <div
           className="three-scene"
-          style={{ width: W * scale, height: H * scale, transform: `rotateX(${rot.x}deg) rotateY(${rot.y}deg)` }}
+          style={{ width: W * scale, height: H * scale, transform: `translate(${pan.x}px, ${pan.y}px) rotateX(${rot.x}deg) rotateY(${rot.y}deg)` }}
         >
           <img className="three-base" src={snap.image} style={{ width: '100%', height: '100%', opacity: sel ? 0.1 : undefined }} alt="" />
           {nodes.map((n) => {
@@ -410,7 +446,7 @@ function ThreeD({ snap, sel, setSel, hover, onHover }: {
                 onMouseLeave={() => hover?.id === n.id && onHover(null)}
                 onClick={(e) => {
                   e.stopPropagation();
-                  setSel(n);
+                  if (!spaceRef.current) setSel(n); // 이동 중에는 선택하지 않음
                 }}
                 title={`${label(n)} ${n.text}`}
               >
