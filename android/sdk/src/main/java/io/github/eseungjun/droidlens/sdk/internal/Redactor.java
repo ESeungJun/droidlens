@@ -129,7 +129,7 @@ public final class Redactor {
         return url.substring(0, q + 1) + pairs(url.substring(q + 1, end)) + url.substring(end);
     }
 
-    private static final Pattern URL_IN_TEXT = Pattern.compile("https?://[^\\s\"'<>]+");
+    private static final Pattern URL_IN_TEXT = Pattern.compile("https?://[^\\s\"'<>]++");
 
     /** 오류 메시지처럼 URL 이 섞인 자유 텍스트 */
     public String text(String s) {
@@ -255,8 +255,9 @@ public final class Redactor {
 
     // ---------- XML ----------
 
-    private static final Pattern XML_ELEMENT = Pattern.compile("<([\\w:.-]+)(\\s[^>]*)?>([^<]*)</\\1\\s*>");
-    private static final Pattern XML_ATTR = Pattern.compile("([\\w:.-]+)(\\s*=\\s*)(\"[^\"]*\"|'[^']*')");
+    // 정규식은 모두 되돌아가지 않는 수량자(*+, ++)와 단어 경계를 써서, 서버가 보낸 긴 입력에도 처리 시간이 길이에 비례하게 한다 (ReDoS 방지)
+    private static final Pattern XML_ELEMENT = Pattern.compile("<([\\w:.-]++)(\\s[^<>]*+)?>([^<]*+)</\\1\\s*+>");
+    private static final Pattern XML_ATTR = Pattern.compile("(?<![\\w:.-])([\\w:.-]++)(\\s*+=\\s*+)(\"[^\"]*+\"|'[^']*+')");
 
     String xml(String s) {
         Matcher m = XML_ELEMENT.matcher(s);
@@ -313,8 +314,8 @@ public final class Redactor {
         return out.toString();
     }
 
-    private static final Pattern GRAPHQL_ARG = Pattern.compile("([A-Za-z_][A-Za-z0-9_]*)(\\s*:\\s*)(\"(?:[^\"\\\\]|\\\\.)*\"|[^\\s,)}\\]]+)");
-    private static final Pattern GRAPHQL_DOC = Pattern.compile("^\\s*(query|mutation|subscription|fragment)?\\b[^{]*\\{", Pattern.CASE_INSENSITIVE);
+    private static final Pattern GRAPHQL_ARG = Pattern.compile("(?<![A-Za-z0-9_])([A-Za-z_][A-Za-z0-9_]*+)(\\s*+:\\s*+)(\"(?:[^\"\\\\]|\\\\.)*+\"|[^\\s,)}\\]]++)");
+    private static final Pattern GRAPHQL_DOC = Pattern.compile("^\\s*+(?:query|mutation|subscription|fragment)?+[^{]*+\\{", Pattern.CASE_INSENSITIVE);
 
     private String nested(String token) {
         if (token.length() < 4 || !token.endsWith("\"")) return token;
