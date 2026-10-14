@@ -473,12 +473,16 @@ export async function explore(dev: DeviceAdb, opts: ExploreOptions): Promise<Exp
     log('BACK 복귀 실패 → 재실행 후 경로 재생');
     snap = await replay(path).catch((e: Error) => {
       log(e.message);
-      return snap;
+      // 재생이 중간에 실패하면 기기 화면은 이미 바뀌었을 수 있으니 실제 화면을 다시 잡는다
+      return waitForSettle(dev).catch(() => snap);
     });
   };
 
+  // 이번 실행에서 이미 들어가 본 화면. 저장된 그래프의 방문 수를 쓰면 다시 탐색할 때 깊이가 무시된다
+  const entered = new Set<string>();
   const visit = async (path: GraphAction[], depth: number): Promise<void> => {
     const hereId = screenId(snap);
+    entered.add(hereId);
     for (const first of candidateActions(snap, pkg)) {
       if (steps >= maxSteps || opts.signal?.aborted) return;
       const tkey = `${hereId}|${first.key}`;
@@ -536,11 +540,13 @@ export async function explore(dev: DeviceAdb, opts: ExploreOptions): Promise<Exp
         await graph.save();
         log(`"${cand.label}" → ${to.label}`, to.id);
         snap = after;
-        if (depth + 1 < maxDepth && to.visits === 1) await visit([...path, action], depth + 1);
+        if (depth + 1 < maxDepth && !entered.has(to.id)) await visit([...path, action], depth + 1);
         if (screenId(snap) !== hereId) await returnTo(hereId, path);
       } catch (e) {
         errors.push(`${hereId} "${cand.label}": ${(e as Error).message}`);
-        snap = await replay(path).catch(() => snap);
+        // 오류가 나면 지금 화면을 알 수 없으므로 경로를 다시 따라가거나, 그것도 안 되면 실제 화면을 다시 잡는다.
+        // 누르기 전 스냅샷을 그대로 두면 다음 버튼을 다른 화면에 누르고 엉뚱한 연결을 기록하게 된다
+        snap = await replay(path).catch(() => waitForSettle(dev)).catch(() => snap);
       }
     }
   };
