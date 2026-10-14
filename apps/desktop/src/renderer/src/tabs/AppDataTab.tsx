@@ -26,7 +26,7 @@ export function AppDataTab() {
 
 function Prefs() {
   const { serial, pkg, run, toast } = useApp();
-  const [files, setFiles] = useState<PrefsFile[]>([]);
+  const [files, setFiles] = useState<PrefsFile[] | null>(null);
   const [editing, setEditing] = useState<{ file: string; key: string; type: string; value: string } | null>(null);
   const load = useCallback(async () => {
     if (serial && pkg) setFiles((await run(api.sdk<PrefsFile[]>(serial, pkg, 'prefs'))) ?? []);
@@ -48,9 +48,9 @@ function Prefs() {
   return (
     <div className="scroll">
       <button className="btn sm" onClick={load} style={{ marginBottom: 10 }}>↻ 새로고침</button>
-      {files.length === 0 && <div className="faint">SharedPreferences 파일이 없습니다</div>}
+      {files === null ? <div className="faint">불러오는 중…</div> : files.length === 0 && <div className="faint">SharedPreferences 파일이 없습니다</div>}
       <div className="cards" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(420px, 1fr))' }}>
-        {files.map((f) => (
+        {(files ?? []).map((f) => (
           <div className="card" key={f.name}>
             <h5>{f.name}.xml</h5>
             <div className="props" style={{ padding: 0 }}>
@@ -100,7 +100,7 @@ function Prefs() {
 
 function Db() {
   const { serial, pkg, run, toast } = useApp();
-  const [dbs, setDbs] = useState<DbInfo[]>([]);
+  const [dbs, setDbs] = useState<DbInfo[] | null>(null);
   const [db, setDb] = useState('');
   const [sql, setSql] = useState('');
   const [write, setWrite] = useState(false);
@@ -141,8 +141,8 @@ function Db() {
   return (
     <div style={{ display: 'grid', gridTemplateColumns: '260px 1fr', height: 'calc(100% - 45px)' }}>
       <div style={{ borderRight: '1px solid var(--line)', overflow: 'auto', padding: 10 }}>
-        {dbs.length === 0 && <div className="faint">DB가 없습니다</div>}
-        {dbs.map((d) => (
+        {dbs === null ? <div className="faint">불러오는 중…</div> : dbs.length === 0 && <div className="faint">DB가 없습니다</div>}
+        {(dbs ?? []).map((d) => (
           <div key={d.name} style={{ marginBottom: 12 }}>
             <div style={{ fontWeight: 600 }}>{d.name} <span className="faint" style={{ fontWeight: 400, fontSize: 11 }}>{(d.size / 1024).toFixed(0)}KB</span></div>
             {d.error && <div className="error" style={{ fontSize: 11 }}>{d.error}</div>}
@@ -168,7 +168,7 @@ function Db() {
           />
           <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
             <select className="input" value={db} onChange={(e) => setDb(e.target.value)}>
-              {dbs.map((d) => <option key={d.name}>{d.name}</option>)}
+              {(dbs ?? []).map((d) => <option key={d.name}>{d.name}</option>)}
             </select>
             <button className="btn primary" disabled={busy} onClick={() => exec()}>실행 (⌘↵)</button>
             <label className="chk" title="INSERT/UPDATE/DELETE 등 앱 데이터를 바꾸는 SQL 허용">
