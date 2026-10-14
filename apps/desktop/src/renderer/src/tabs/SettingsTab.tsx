@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react';
 import { api, type AdbStatus, type Integration } from '../api';
 import { useApp } from '../App';
+import type { useUpdater } from '../Updater';
 
 const REPO = 'https://github.com/ESeungJun/droidlens';
 
-export function SettingsTab({ onAdbChange }: { onAdbChange?(s: AdbStatus): void }) {
+export function SettingsTab({ onAdbChange, updater }: { onAdbChange?(s: AdbStatus): void; updater: ReturnType<typeof useUpdater> }) {
   const { run, toast } = useApp();
   const [adb, setAdb] = useState<AdbStatus | null>(null);
   const [adbPath, setAdbPath] = useState('');
@@ -131,10 +132,27 @@ Linux   sudo apt install adb`}
             <span>데이터 폴더</span>
             <span>{home}</span>
           </div>
-          <div style={{ display: 'flex', gap: 6, marginTop: 10 }}>
+          <h5 style={{ marginTop: 14 }}>업데이트</h5>
+          <div style={{ fontSize: 12 }}>
+            {updater.checking
+              ? '확인 중…'
+              : updater.info
+                ? updater.info.available
+                  ? <span style={{ color: 'var(--accent)' }}>새 버전 {updater.info.latest} 있음 (현재 {updater.info.current})</span>
+                  : `최신 버전입니다 (${updater.info.current})`
+                : '-'}
+            {updater.progress && <div className="mono" style={{ marginTop: 4 }}>{Math.round(updater.progress.p * 100)}% {updater.progress.message}</div>}
+            {(updater.error || (updater.info?.available && !updater.info.canInstall)) && (
+              <div className="error" style={{ marginTop: 4 }}>{updater.error ?? updater.info?.reason}</div>
+            )}
+          </div>
+          <div style={{ display: 'flex', gap: 6, marginTop: 10, flexWrap: 'wrap' }}>
+            {updater.info?.available && (
+              <button className="btn primary" disabled={!!updater.progress} onClick={updater.install}>⬆ {updater.info.latest} 설치하고 다시 시작</button>
+            )}
+            <button className="btn" disabled={updater.checking} onClick={updater.check}>새 버전 확인</button>
             <button className="btn" onClick={() => api.openPath(home)}>데이터 폴더 열기</button>
             <button className="btn" onClick={() => api.openExternal(REPO)}>GitHub</button>
-            <button className="btn" onClick={() => api.openExternal(`${REPO}/releases`)}>새 버전 확인</button>
           </div>
         </div>
       </div>

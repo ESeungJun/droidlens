@@ -35,6 +35,16 @@ export interface SnapshotDTO {
   image: string;
 }
 
+export interface UpdateInfo {
+  current: string;
+  latest: string;
+  available: boolean;
+  notes?: string;
+  url: string;
+  canInstall: boolean;
+  reason?: string;
+}
+
 export interface AgentStatus {
   installed?: number;
   expected?: number;
@@ -157,6 +167,9 @@ export const api = {
   onChatEvent: (fn: (e: ChatEvent) => void) => window.dl.on('chat:event', (p) => fn(p as ChatEvent)),
   sdkApps: (s: string) => call<string[]>('sdkApps', s),
   sdk: <T,>(s: string, pkg: string, method: string, ...args: unknown[]) => call<T>('sdk', s, pkg, method, ...args),
+  updateCheck: () => call<UpdateInfo>('updateCheck'),
+  updateInstall: (info: UpdateInfo) => call<void>('updateInstall', info),
+  onUpdateProgress: (fn: (p: { p: number; message: string }) => void) => window.dl.on('update:progress', (x) => fn(x as never)),
   appVersion: () => call<string>('appVersion'),
   adbStatus: () => call<AdbStatus>('adbStatus'),
   setAdbPath: (p: string) => call<AdbStatus>('setAdbPath', p),
