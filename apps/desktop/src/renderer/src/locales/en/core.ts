@@ -1,6 +1,9 @@
 export const core: Record<string, string> = {
   '진행 중인 시나리오는 지울 수 없습니다': "Can't delete a scenario that is still running",
   '잘못된 요청입니다': 'Invalid request',
+  '파일 확인 중…': 'Verifying file…',
+  '릴리스에 SHA256SUMS 가 없어 파일을 확인할 수 없습니다': "The release has no SHA256SUMS, so the download can't be verified",
+  '내려받은 파일이 릴리스 체크섬과 다릅니다. 설치하지 않습니다': "The downloaded file doesn't match the release checksum. Not installing",
   // 앱 정보
   '실행': 'Run',
   '재시작': 'Restart',
