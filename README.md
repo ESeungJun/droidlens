@@ -103,7 +103,7 @@ DroidLens.event("purchase_clicked", JSONObject().put("itemId", 42))
 - No initialization code needed (starts automatically via a ContentProvider)
 - Communicates only over an in-app Unix socket (`localabstract:droidlens_sdk_<package>`), so no INTERNET permission is required; it checks the peer UID and rejects any connection other than adb and the app itself (e.g. other apps on the same device)
 - Request and response bodies are capped at 256KB each; the latest 500 entries are kept in memory only
-- Sensitive values are masked **on the device, before they are stored**: `Authorization`, `Cookie`/`Set-Cookie`, `X-Api-Key` headers and `password`, `token`, `access_token`, `secret`, `api_key`… in JSON bodies, form bodies and URL queries. Add your own with `DroidLens.redactHeaders("X-Session")` / `DroidLens.redactKeys("phone")`, or call `DroidLens.clearDefaultRedaction()` to use only your list
+- Sensitive values are masked **on the device, before they are stored**: `Authorization`, `Cookie`/`Set-Cookie`, `X-Api-Key` headers and `password`, `token`, `access_token`, `secret`, `api_key`… in JSON bodies (including nested objects and arrays), form bodies and URL queries. Key names match regardless of case and separators (`access_token` = `accessToken` = `access-token`). Add your own with `DroidLens.redactHeaders("X-Session")` / `DroidLens.redactKeys("phone")`, or call `DroidLens.clearDefaultRedaction()` to use only your list
 - DB write SQL runs only when explicitly allowed
 
 ## Claude Code integration
