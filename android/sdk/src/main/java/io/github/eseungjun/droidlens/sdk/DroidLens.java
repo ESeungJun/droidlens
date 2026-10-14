@@ -50,22 +50,24 @@ public final class DroidLens {
     }
 
     /**
-     * 네트워크 기록에서 값을 가릴 헤더를 추가한다 (대소문자 무시).
-     * 기본: Authorization, Proxy-Authorization, Cookie, Set-Cookie, X-Api-Key, X-Auth-Token
+     * 네트워크 기록에서 값을 가릴 헤더를 추가한다. 대소문자·구분자는 무시하고, 4글자 이상이면 이름에 들어 있기만 해도 가린다.
+     * 기본: 이름에 authorization, cookie, token, secret, apikey, session, password, credential, signature 가 들어간 헤더
      */
     public static void redactHeaders(String... names) {
         Redactor.get().addHeaders(names);
     }
 
     /**
-     * JSON 본문·폼 본문·URL 쿼리에서 값을 가릴 키를 추가한다 (대소문자 무시).
-     * 기본: password, token, access_token, refresh_token, secret, api_key 등
+     * 본문(JSON·폼·multipart·XML·GraphQL 인자)·URL 쿼리·커스텀 이벤트에서 값을 가릴 키를 추가한다.
+     * 대소문자·구분자는 무시하고, 4글자 이상이면 키 이름에 들어 있기만 해도 가린다 (예: "phone" → phoneNumber).
+     * 기본: 이름에 password, secret, token, apikey, privatekey, credential, sessionid, cardnumber 등이 들어간 키와
+     * jwt, otp, pin, cvc 같은 짧은 이름(정확히 같을 때만)
      */
     public static void redactKeys(String... keys) {
         Redactor.get().addKeys(keys);
     }
 
-    /** 기본 가리기 규칙을 끄고 redactHeaders·redactKeys 로 추가한 항목만 가린다 */
+    /** 기본 가리기 규칙을 끄고 redactHeaders·redactKeys 로 추가한 항목만 가린다 (호출 순서와 상관없이 추가한 항목은 유지) */
     public static void clearDefaultRedaction() {
         Redactor.get().clearDefaults();
     }
