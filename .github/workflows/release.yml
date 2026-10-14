@@ -86,6 +86,10 @@ jobs:
           cd agents && zip ../droidlens-agents.zip *.md && cd ..
           cp android/agent/build/outputs/apk/release/agent-release.apk droidlens-agent.apk
           files="dist/* packages/mcp/dist/droidlens-mcp.mjs droidlens-agent.apk droidlens-agents.zip"
+          # 설치 스크립트·앱 업데이터가 받은 파일을 대조하는 체크섬 목록 (파일 이름만 남김)
+          sha256sum $files | sed -E 's#  .*/#  #' > SHA256SUMS
+          cat SHA256SUMS
+          files="$files SHA256SUMS"
           if gh release view "${GITHUB_REF_NAME}" >/dev/null 2>&1; then
             gh release upload "${GITHUB_REF_NAME}" $files --clobber
             gh release edit "${GITHUB_REF_NAME}" --draft=false --latest

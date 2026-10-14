@@ -1,7 +1,8 @@
 import { app } from 'electron';
 import { execFile, spawn } from 'node:child_process';
 import { createWriteStream } from 'node:fs';
-import { chmod, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { createHash } from 'node:crypto';
+import { chmod, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { Readable } from 'node:stream';
@@ -10,7 +11,8 @@ import { promisify } from 'node:util';
 
 /**
  * GitHub Releases 기반 자체 업데이트.
- * macOS 앱이 코드 서명되지 않아 Squirrel(electron-updater)을 쓸 수 없으므로 플랫폼별로 직접 교체한다.
+ * macOS 앱이 Apple 인증서 없이 임시(ad-hoc) 서명만 되어 있어 Squirrel(electron-updater)을 쓸 수 없으므로 플랫폼별로 직접 교체한다.
+ * 받은 파일은 릴리스의 SHA256SUMS 와 대조해 다르면 설치하지 않는다.
  *  - macOS: zip을 받아 풀고, 앱이 종료되면 번들을 교체한 뒤 다시 연다 (분리된 셸 스크립트)
  *  - Windows: NSIS 설치 파일을 조용히(/S) 실행하고 설치 후 자동 실행(--force-run)
  *  - Linux: AppImage 파일을 바꾸고 다시 실행
@@ -26,6 +28,8 @@ export interface UpdateInfo {
   notes?: string;
   url: string;
   asset?: { name: string; url: string; size: number };
+  /** 릴리스 첨부 파일의 SHA-256 목록 (SHA256SUMS) */
+  sumsUrl?: string;
   /** 이 실행 형태에서 자동 설치가 가능한지 (개발 모드·지원하지 않는 설치 형태면 false) */
   canInstall: boolean;
   reason?: string;
@@ -45,8 +49,17 @@ function newer(a: string, b: string): boolean {
   return false;
 }
 
-function assetName(version: string): string | undefined {
-  const arch = process.arch === 'arm64' ? 'arm64' : 'x64';
+/** Rosetta 로 실행 중인 Intel 빌드면 Apple 칩용으로 바꿔 받도록 실제 CPU 를 본다 */
+async function cpuArch(): Promise<'arm64' | 'x64'> {
+  if (process.arch === 'arm64') return 'arm64';
+  if (process.platform === 'darwin') {
+    const out = await run('sysctl', ['-in', 'sysctl.proc_translated']).then((r) => r.stdout.trim()).catch(() => '');
+    if (out === '1') return 'arm64';
+  }
+  return 'x64';
+}
+
+function assetName(version: string, arch: 'arm64' | 'x64'): string | undefined {
   if (process.platform === 'darwin') return `DroidLens-${version}-mac-${arch}.zip`;
   if (process.platform === 'win32') return `DroidLens-${version}-win-${arch}.exe`;
   if (process.platform === 'linux') return `DroidLens-${version}-linux-x86_64.AppImage`;
@@ -67,8 +80,9 @@ export async function checkForUpdate(): Promise<UpdateInfo> {
   const rel = (await res.json()) as { tag_name: string; body?: string; html_url: string; assets: { name: string; browser_download_url: string; size: number }[] };
   const latest = rel.tag_name.replace(/^v/, '');
   const current = currentVersion();
-  const name = assetName(latest);
+  const name = assetName(latest, await cpuArch());
   const a = rel.assets.find((x) => x.name === name);
+  const sums = rel.assets.find((x) => x.name === 'SHA256SUMS');
   let canInstall = app.isPackaged && !!a;
   let reason: string | undefined;
   if (!app.isPackaged) reason = '개발 모드에서는 자동 설치를 하지 않습니다 (git pull 후 다시 빌드)';
@@ -84,6 +98,7 @@ export async function checkForUpdate(): Promise<UpdateInfo> {
     notes: rel.body,
     url: rel.html_url,
     asset: a ? { name: a.name, url: a.browser_download_url, size: a.size } : undefined,
+    sumsUrl: sums?.browser_download_url,
     canInstall,
     reason,
   };
@@ -106,6 +121,21 @@ export async function installUpdate(info: UpdateInfo, onProgress: (p: number, ms
     onProgress(Math.min(got / total, 1), `다운로드 ${(got / 1048576).toFixed(0)} / ${(total / 1048576).toFixed(0)}MB`);
   });
   await pipeline(body, createWriteStream(file));
+
+  // 무결성 확인: 릴리스의 SHA256SUMS 와 대조 (없거나 다르면 설치하지 않는다)
+  onProgress(1, '파일 확인 중…');
+  if (!info.sumsUrl) throw new Error('릴리스에 SHA256SUMS 가 없어 파일을 확인할 수 없습니다');
+  const sumsRes = await fetch(info.sumsUrl, { headers: { 'User-Agent': 'DroidLens' }, signal: AbortSignal.timeout(15_000) });
+  if (!sumsRes.ok) throw new Error(`SHA256SUMS 를 받지 못했습니다 (${sumsRes.status})`);
+  const expected = (await sumsRes.text())
+    .split('\n')
+    .map((l) => l.trim().split(/\s+\*?/))
+    .find(([, n]) => n === info.asset!.name)?.[0];
+  const actual = createHash('sha256').update(await readFile(file)).digest('hex');
+  if (!expected || expected.toLowerCase() !== actual) {
+    await rm(dir, { recursive: true, force: true });
+    throw new Error('내려받은 파일이 릴리스 체크섬과 다릅니다. 설치하지 않습니다');
+  }
 
   if (process.platform === 'darwin') {
     onProgress(1, '압축 해제 중…');
