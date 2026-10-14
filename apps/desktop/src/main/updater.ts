@@ -1,0 +1,157 @@
+import { app } from 'electron';
+import { execFile, spawn } from 'node:child_process';
+import { createWriteStream } from 'node:fs';
+import { chmod, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { dirname, join, resolve } from 'node:path';
+import { Readable } from 'node:stream';
+import { pipeline } from 'node:stream/promises';
+import { promisify } from 'node:util';
+
+/**
+ * GitHub Releases 기반 자체 업데이트.
+ * macOS 앱이 코드 서명되지 않아 Squirrel(electron-updater)을 쓸 수 없으므로 플랫폼별로 직접 교체한다.
+ *  - macOS: zip을 받아 풀고, 앱이 종료되면 번들을 교체한 뒤 다시 연다 (분리된 셸 스크립트)
+ *  - Windows: NSIS 설치 파일을 조용히(/S) 실행하고 설치 후 자동 실행(--force-run)
+ *  - Linux: AppImage 파일을 바꾸고 다시 실행
+ */
+
+const REPO = 'ESeungJun/droidlens';
+const run = promisify(execFile);
+
+export interface UpdateInfo {
+  current: string;
+  latest: string;
+  available: boolean;
+  notes?: string;
+  url: string;
+  asset?: { name: string; url: string; size: number };
+  /** 이 실행 형태에서 자동 설치가 가능한지 (개발 모드·지원하지 않는 설치 형태면 false) */
+  canInstall: boolean;
+  reason?: string;
+}
+
+/** 개발용: DROIDLENS_FAKE_VERSION으로 현재 버전을 낮춰 업데이트 흐름을 시험한다 */
+export function currentVersion(): string {
+  return process.env.DROIDLENS_FAKE_VERSION ?? app.getVersion();
+}
+
+function newer(a: string, b: string): boolean {
+  const pa = a.replace(/^v/, '').split('.').map(Number);
+  const pb = b.replace(/^v/, '').split('.').map(Number);
+  for (let i = 0; i < 3; i++) {
+    if ((pa[i] ?? 0) !== (pb[i] ?? 0)) return (pa[i] ?? 0) > (pb[i] ?? 0);
+  }
+  return false;
+}
+
+function assetName(version: string): string | undefined {
+  const arch = process.arch === 'arm64' ? 'arm64' : 'x64';
+  if (process.platform === 'darwin') return `DroidLens-${version}-mac-${arch}.zip`;
+  if (process.platform === 'win32') return `DroidLens-${version}-win-${arch}.exe`;
+  if (process.platform === 'linux') return `DroidLens-${version}-linux-x86_64.AppImage`;
+  return undefined;
+}
+
+/** 현재 실행 중인 macOS 앱 번들 경로 (…/DroidLens.app) */
+function macBundle(): string {
+  return resolve(dirname(process.execPath), '..', '..');
+}
+
+export async function checkForUpdate(): Promise<UpdateInfo> {
+  const res = await fetch(`https://api.github.com/repos/${REPO}/releases/latest`, {
+    headers: { Accept: 'application/vnd.github+json', 'User-Agent': 'DroidLens' },
+    signal: AbortSignal.timeout(15_000),
+  });
+  if (!res.ok) throw new Error(`업데이트 확인 실패 (GitHub ${res.status})`);
+  const rel = (await res.json()) as { tag_name: string; body?: string; html_url: string; assets: { name: string; browser_download_url: string; size: number }[] };
+  const latest = rel.tag_name.replace(/^v/, '');
+  const current = currentVersion();
+  const name = assetName(latest);
+  const a = rel.assets.find((x) => x.name === name);
+  let canInstall = app.isPackaged && !!a;
+  let reason: string | undefined;
+  if (!app.isPackaged) reason = '개발 모드에서는 자동 설치를 하지 않습니다 (git pull 후 다시 빌드)';
+  else if (!a) reason = `이 플랫폼용 파일(${name})이 릴리스에 없습니다`;
+  else if (process.platform === 'linux' && !process.env.APPIMAGE) {
+    canInstall = false;
+    reason = 'AppImage로 실행한 경우에만 자동 업데이트를 지원합니다';
+  }
+  return {
+    current,
+    latest,
+    available: newer(latest, current),
+    notes: rel.body,
+    url: rel.html_url,
+    asset: a ? { name: a.name, url: a.browser_download_url, size: a.size } : undefined,
+    canInstall,
+    reason,
+  };
+}
+
+/** 내려받고 설치를 예약한 뒤 앱을 종료한다. onProgress(0~1) */
+export async function installUpdate(info: UpdateInfo, onProgress: (p: number, msg: string) => void): Promise<void> {
+  if (!info.asset || !info.canInstall) throw new Error(info.reason ?? '자동 설치를 할 수 없습니다');
+  const dir = await mkdtemp(join(tmpdir(), 'droidlens-update-'));
+  const file = join(dir, info.asset.name);
+
+  // 다운로드 (진행률)
+  const res = await fetch(info.asset.url, { headers: { 'User-Agent': 'DroidLens' } });
+  if (!res.ok || !res.body) throw new Error(`다운로드 실패 (${res.status})`);
+  const total = Number(res.headers.get('content-length')) || info.asset.size;
+  let got = 0;
+  const body = Readable.fromWeb(res.body as never);
+  body.on('data', (c: Buffer) => {
+    got += c.length;
+    onProgress(Math.min(got / total, 1), `다운로드 ${(got / 1048576).toFixed(0)} / ${(total / 1048576).toFixed(0)}MB`);
+  });
+  await pipeline(body, createWriteStream(file));
+
+  if (process.platform === 'darwin') {
+    onProgress(1, '압축 해제 중…');
+    const unpacked = join(dir, 'unpacked');
+    await run('ditto', ['-x', '-k', file, unpacked]);
+    const newApp = join(unpacked, 'DroidLens.app');
+    const target = macBundle();
+    // 앱이 완전히 종료된 뒤 교체하고 다시 연다. 실패하면 기존 앱을 되돌린다.
+    const script = `#!/bin/sh
+while kill -0 ${process.pid} 2>/dev/null; do sleep 0.3; done
+set -e
+mv "${target}" "${target}.old"
+if ditto "${newApp}" "${target}"; then
+  rm -rf "${target}.old"
+else
+  rm -rf "${target}"; mv "${target}.old" "${target}"
+fi
+xattr -dr com.apple.quarantine "${target}" 2>/dev/null || true
+open "${target}"
+rm -rf "${dir}"
+`;
+    const sh = join(dir, 'update.sh');
+    await writeFile(sh, script);
+    await chmod(sh, 0o755);
+    spawn('/bin/sh', [sh], { detached: true, stdio: 'ignore' }).unref();
+  } else if (process.platform === 'win32') {
+    onProgress(1, '설치 프로그램 실행 중…');
+    // 조용히 설치(/S)한 뒤 앱을 다시 실행(--force-run). 설치 파일이 실행 중인 앱 종료를 기다린다
+    spawn(file, ['/S', '--force-run'], { detached: true, stdio: 'ignore' }).unref();
+  } else {
+    onProgress(1, '교체 중…');
+    const target = process.env.APPIMAGE!;
+    await chmod(file, 0o755);
+    const script = `#!/bin/sh
+while kill -0 ${process.pid} 2>/dev/null; do sleep 0.3; done
+mv -f "${file}" "${target}" && chmod +x "${target}"
+nohup "${target}" >/dev/null 2>&1 &
+`;
+    const sh = join(dir, 'update.sh');
+    await writeFile(sh, script);
+    await chmod(sh, 0o755);
+    spawn('/bin/sh', [sh], { detached: true, stdio: 'ignore' }).unref();
+  }
+  setTimeout(() => app.quit(), 300);
+}
+
+export async function cleanupOldUpdates(): Promise<void> {
+  if (process.platform === 'darwin' && app.isPackaged) await rm(`${macBundle()}.old`, { recursive: true, force: true }).catch(() => undefined);
+}

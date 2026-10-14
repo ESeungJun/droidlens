@@ -7,6 +7,7 @@ import { basename, join, resolve, sep } from 'node:path';
 import { promisify } from 'node:util';
 import * as dl from '@droidlens/core';
 import { resolveClaude, sendChat, stopChat, type ChatRequest } from './chat';
+import { checkForUpdate, cleanupOldUpdates, currentVersion, installUpdate, type UpdateInfo } from './updater';
 
 let adb = new dl.Adb();
 const run = promisify(execFile);
@@ -357,7 +358,17 @@ async function runClaude(args: string[]): Promise<string> {
   return stdout;
 }
 
-handle('appVersion', async () => app.getVersion());
+handle('appVersion', async () => currentVersion());
+handle('updateCheck', () => checkForUpdate());
+handle('updateInstall', async (info: UpdateInfo) => {
+  // 렌더러가 넘긴 정보 대신 다시 확인한 결과로 설치한다 (다운로드 URL을 렌더러에서 받지 않음)
+  const fresh = await checkForUpdate();
+  if (!fresh.available || fresh.latest !== info.latest) throw new Error('설치할 업데이트가 없습니다');
+  stopChat();
+  mirror?.m.stop();
+  logStream?.stop();
+  await installUpdate(fresh, (p, message) => send('update:progress', { p, message }));
+});
 handle('adbStatus', async () => ({ ...(await adb.version()), candidates: dl.adbCandidates() }));
 handle('setAdbPath', async (p: string) => {
   const cfgPath = join(dl.droidlensHome(), 'config.json');
@@ -426,6 +437,16 @@ handle('agentStop', async (s: string) => {
 
 app.whenReady().then(() => {
   installAgentApk().catch(() => undefined);
+  cleanupOldUpdates().catch(() => undefined);
+  // 개발용 자가 테스트: DROIDLENS_FAKE_VERSION=0.0.1 DROIDLENS_UPDATE_SELFTEST=1 로 실행하면 확인 창 없이 최신 릴리스로 교체
+  if (process.env.DROIDLENS_UPDATE_SELFTEST) {
+    checkForUpdate()
+      .then((u) => {
+        debug('selftest update', JSON.stringify(u));
+        return u.available ? installUpdate(u, (p, m) => debug('update', Math.round(p * 100), m)) : undefined;
+      })
+      .catch((e) => debug('selftest failed', (e as Error).message));
+  }
   createWindow();
 });
 app.on('window-all-closed', () => {
