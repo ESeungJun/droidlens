@@ -26,7 +26,8 @@ public final class EventStore {
             e.put("at", System.currentTimeMillis());
             e.put("name", name);
             e.put("thread", Thread.currentThread().getName());
-            if (data != null) e.put("data", data);
+            // 커스텀 이벤트에 토큰 같은 값이 들어와도 네트워크 기록과 같은 규칙으로 가린다
+            if (data != null) e.put("data", new JSONObject(Redactor.get().json(data.toString())));
             synchronized (events) {
                 events.addLast(e);
                 while (events.size() > MAX) events.removeFirst();

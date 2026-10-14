@@ -44,7 +44,7 @@ public final class DroidLensInterceptor implements Interceptor {
                 MediaType ct = body.contentType();
                 e.requestContentType = ct != null ? ct.toString() : null;
                 e.requestSize = body.contentLength();
-                if (!body.isOneShot() && !body.isDuplex()) {
+                if (!body.isOneShot() && !body.isDuplex() && !compressed(request.header("Content-Encoding"))) {
                     Buffer buf = new Buffer();
                     body.writeTo(buf);
                     e.requestSize = buf.size();
@@ -61,7 +61,7 @@ public final class DroidLensInterceptor implements Interceptor {
         try {
             response = chain.proceed(request);
         } catch (IOException ex) {
-            NetworkStore.get().fail(e, (System.nanoTime() - t0) / 1_000_000, ex.toString());
+            NetworkStore.get().fail(e, (System.nanoTime() - t0) / 1_000_000, redact.text(ex.toString()));
             throw ex;
         }
         long tookMs = (System.nanoTime() - t0) / 1_000_000;
@@ -73,7 +73,8 @@ public final class DroidLensInterceptor implements Interceptor {
             ResponseBody peek = response.peekBody(maxBodyBytes);
             MediaType ct = peek.contentType();
             e.responseContentType = ct != null ? ct.toString() : null;
-            byte[] raw = peek.bytes();
+            // 앱이 Accept-Encoding 을 직접 지정해 압축된 채 받은 본문은 가릴 수 없으니 기록하지 않는다
+            byte[] raw = compressed(response.header("Content-Encoding")) ? new byte[0] : peek.bytes();
             ResponseBody original = response.body();
             long len = original != null ? original.contentLength() : -1;
             e.responseSize = len >= 0 ? len : raw.length;
@@ -84,5 +85,9 @@ public final class DroidLensInterceptor implements Interceptor {
         }
         NetworkStore.get().finish(e, tookMs);
         return response;
+    }
+
+    private static boolean compressed(String encoding) {
+        return encoding != null && !encoding.isEmpty() && !"identity".equalsIgnoreCase(encoding);
     }
 }

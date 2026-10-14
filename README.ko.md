@@ -103,7 +103,7 @@ DroidLens.event("purchase_clicked", JSONObject().put("itemId", 42))
 - 초기화 코드는 필요 없습니다 (ContentProvider로 자동 시작)
 - 앱 내부 유닉스 소켓(`localabstract:droidlens_sdk_<패키지>`)으로만 통신하므로 INTERNET 권한이 필요 없고, 접속 UID를 검사해 adb·앱 자신 외의 연결(같은 기기의 다른 앱 등)은 거부합니다
 - 요청·응답 본문은 각 256KB까지, 최근 500건을 메모리에만 보관합니다
-- 민감 정보는 **기기 안에서 저장하기 전에** 가립니다: `Authorization`, `Cookie`/`Set-Cookie`, `X-Api-Key` 헤더와 JSON 본문(중첩 객체·배열 포함)·폼 본문·URL 쿼리의 `password`, `token`, `access_token`, `secret`, `api_key` 등. 키 이름은 대소문자·구분자와 상관없이 맞춥니다 (`access_token` = `accessToken` = `access-token`). `DroidLens.redactHeaders("X-Session")`, `DroidLens.redactKeys("phone")` 로 추가하고, `DroidLens.clearDefaultRedaction()` 으로 기본 규칙을 끌 수 있습니다
+- 민감 정보는 **기기 안에서 저장하기 전에** 가립니다 — 헤더, URL 쿼리, `Location` 리다이렉트, JSON 본문(중첩 객체·배열, 문자열 안의 JSON 포함), GraphQL 인자, 폼·multipart·XML 본문, 오류 메시지, 커스텀 이벤트. 키는 대소문자·구분자와 상관없이 맞추고, 흔한 단어는 이름에 들어 있기만 해도 가립니다(`newPassword`, `fcmToken`, `X-Refresh-Token`). `jwt`·`otp`·`pin` 같은 짧은 이름은 정확히 같을 때만 가립니다. `DroidLens.redactHeaders("X-Session")`, `DroidLens.redactKeys("phone")` 로 추가하고, `DroidLens.clearDefaultRedaction()` 으로 기본 규칙을 끌 수 있습니다. 앱이 직접 압축을 요청한 본문(`Content-Encoding`)은 기록하지 않습니다
 - DB 쓰기 SQL은 명시적으로 허용했을 때만 실행됩니다
 
 ## Claude Code 연동
