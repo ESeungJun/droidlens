@@ -400,6 +400,7 @@ function locate(s: Snapshot, a: Extract<GraphAction, { type: 'tap' }>, pkg: stri
 
 export interface ExploreOptions {
   packageName: string;
+  /** 누르는 횟수의 안전 상한 (기본 500). 탐색 범위는 maxDepth 로 정하고 이건 끝없이 도는 것만 막는다 */
   maxSteps?: number;
   maxDepth?: number;
   /** true면 앱을 재시작하고 시작 (기본 true) */
@@ -413,6 +414,8 @@ export interface ExploreOptions {
 export interface ExploreResult {
   graph: GraphData;
   steps: number;
+  /** 안전 상한에 닿아 멈췄는지 */
+  limited: boolean;
   skipped: { screen: string; label: string; reason: string }[];
   errors: string[];
 }
@@ -424,7 +427,7 @@ export interface ExploreResult {
 export async function explore(dev: DeviceAdb, opts: ExploreOptions): Promise<ExploreResult> {
   const pkg = opts.packageName;
   assertPackage(pkg);
-  const maxSteps = opts.maxSteps ?? 40;
+  const maxSteps = opts.maxSteps ?? 500;
   const maxDepth = opts.maxDepth ?? 4;
   const graph = await ScreenGraph.open(pkg);
   const tried = new Set<string>();
@@ -534,5 +537,5 @@ export async function explore(dev: DeviceAdb, opts: ExploreOptions): Promise<Exp
   await visit([], 0);
   await graph.save();
   log(`탐색 완료: 화면 ${graph.nodes.size}개, 전이 ${graph.edges.size}개, ${steps}스텝`);
-  return { graph: graph.toJSON(), steps, skipped, errors };
+  return { graph: graph.toJSON(), steps, limited: steps >= maxSteps, skipped, errors };
 }
