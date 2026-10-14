@@ -20,6 +20,9 @@ function nodeAt(root: ViewNode, x: number, y: number): ViewNode | undefined {
 
 const short = (c: string) => c.split('.').pop() ?? c;
 const rid = (r: string) => r.split(':id/')[1] ?? r;
+/** 깊이별 색: 3D 층 테두리와 트리의 색 점이 같은 색을 써서 조각과 목록을 맞춰 볼 수 있다 */
+const depthColor = (d: number, a = 1) => `hsla(${150 + d * 18}, 60%, 65%, ${a})`;
+const label = (n: ViewNode) => `${short(n.className) || 'root'}${n.resourceId ? ' #' + rid(n.resourceId) : ''}`;
 
 export function InspectorTab() {
   const { serial, run } = useApp();
@@ -81,15 +84,19 @@ export function InspectorTab() {
       </div>
       {!snap ? (
         <div className="empty">{loading ? t('뷰 계층을 가져오는 중…') : t('캡처 버튼을 눌러 뷰 계층을 가져오세요')}</div>
-      ) : mode === '3d' ? (
-        <ThreeD snap={snap} sel={sel} setSel={setSel} />
       ) : (
-        <div className="inspector">
-          <ShotPane snap={snap} sel={sel} hover={hover} onPick={setSel} onHover={setHover} />
+        <div className={`inspector ${mode === '3d' ? 'is-3d' : ''}`}>
+          {mode === '3d' ? (
+            <ThreeD snap={snap} sel={sel} setSel={setSel} hover={hover} onHover={setHover} />
+          ) : (
+            <ShotPane snap={snap} sel={sel} hover={hover} onPick={setSel} onHover={setHover} />
+          )}
           <div className="tree">
             <TreeRow
               n={snap.hierarchy.root}
               sel={sel}
+              hover={hover}
+              depthDots={mode === '3d'}
               collapsed={collapsed}
               matchIds={matchIds}
               onToggle={(id) =>
@@ -150,6 +157,8 @@ function ShotPane(p: {
 function TreeRow(p: {
   n: ViewNode;
   sel: ViewNode | null;
+  hover?: ViewNode | null;
+  depthDots?: boolean;
   collapsed: Set<string>;
   matchIds: Set<string> | null;
   onToggle(id: string): void;
@@ -168,7 +177,7 @@ function TreeRow(p: {
     <>
       <div
         ref={ref}
-        className={`row ${isSel ? 'sel' : ''}`}
+        className={`row ${isSel ? 'sel' : ''} ${p.hover?.id === n.id && !isSel ? 'hov' : ''}`}
         style={{ paddingLeft: 8 + n.depth * 14, opacity: dim ? 0.35 : 1 }}
         onClick={() => p.onSel(n)}
         onMouseEnter={() => p.onHover(n)}
@@ -183,6 +192,7 @@ function TreeRow(p: {
         >
           {n.children.length ? (open ? '▾' : '▸') : ''}
         </span>
+        {p.depthDots && <span className="ddot" style={{ background: depthColor(n.depth) }} title={`depth ${n.depth}`}>{n.depth}</span>}
         <span className="cls">{short(n.className) || 'root'}</span>
         {n.resourceId && <span className="rid">#{rid(n.resourceId)}</span>}
         {(n.text || n.contentDesc) && <span className="txt">"{n.text || n.contentDesc}"</span>}
@@ -267,13 +277,20 @@ function Props({ snap, n }: { snap: SnapshotDTO; n: ViewNode | null }) {
 }
 
 /** CSS 3D로 뷰를 깊이만큼 띄워 보여주는 분해도 */
-function ThreeD({ snap, sel, setSel }: { snap: SnapshotDTO; sel: ViewNode | null; setSel(n: ViewNode | null): void }) {
+function ThreeD({ snap, sel, setSel, hover, onHover }: {
+  snap: SnapshotDTO;
+  sel: ViewNode | null;
+  setSel(n: ViewNode | null): void;
+  hover: ViewNode | null;
+  onHover(n: ViewNode | null): void;
+}) {
   const t = useT();
   const [rot, setRot] = useState({ x: 20, y: -30 });
   const [gap, setGap] = useState(28);
   const [zoom, setZoom] = useState(1);
-  const [hov, setHov] = useState<string | null>(null);
+  const hov = hover?.id ?? null;
   const [minArea, setMinArea] = useState(true);
+  const [labels, setLabels] = useState(true);
   const dragging = useRef<{ x: number; y: number; rx: number; ry: number } | null>(null);
   const root = snap.hierarchy.root;
   const W = root.bounds[2] - root.bounds[0] || 1080;
@@ -284,20 +301,22 @@ function ThreeD({ snap, sel, setSel }: { snap: SnapshotDTO; sel: ViewNode | null
       flatten(root).filter((n) => {
         if (n.depth === 0) return false;
         const [l, t, r, b] = n.bounds;
-        return !minArea || (r - l) * (b - t) > 400;
+        // 작은 뷰를 숨겨도 목록에서 고르거나 가리킨 뷰는 보여준다
+        return !minArea || (r - l) * (b - t) > 400 || n.id === sel?.id || n.id === hov;
       }),
-    [root, minArea],
+    [root, minArea, sel, hov],
   );
 
   return (
-    <div style={{ position: 'relative', height: 'calc(100% - 45px)' }}>
-      <div style={{ position: 'absolute', zIndex: 2, left: 12, top: 10, display: 'flex', gap: 12, alignItems: 'center' }} className="muted">
+    <div style={{ position: 'relative', height: '100%', minWidth: 0, overflow: 'hidden', borderRight: '1px solid var(--line)' }}>
+      <div style={{ position: 'absolute', zIndex: 2, left: 12, right: 12, top: 10, display: 'flex', flexWrap: 'wrap', gap: '6px 12px', alignItems: 'center' }} className="muted">
         <label>{t('간격')} <input type="range" min={0} max={80} value={gap} onChange={(e) => setGap(+e.target.value)} /></label>
         <label>{t('확대')} <input type="range" min={0.5} max={2} step={0.05} value={zoom} onChange={(e) => setZoom(+e.target.value)} /></label>
         <label className="chk"><input type="checkbox" checked={minArea} onChange={(e) => setMinArea(e.target.checked)} />{t('작은 뷰 숨기기')}</label>
+        <label className="chk"><input type="checkbox" checked={labels} onChange={(e) => setLabels(e.target.checked)} />{t('클래스 이름 표시')}</label>
         <button className="btn sm" onClick={() => setRot({ x: 20, y: -30 })}>{t('시점 초기화')}</button>
         <button className="btn sm" onClick={() => setRot({ x: 0, y: 0 })}>{t('정면')}</button>
-        <span>{sel ? `${short(sel.className)} ${sel.resourceId ? '#' + rid(sel.resourceId) : ''} · depth ${sel.depth}` : t('드래그로 회전 · 클릭으로 선택')}</span>
+        <span>{hover ?? sel ? `${label((hover ?? sel)!)} · depth ${(hover ?? sel)!.depth}` : t('드래그로 회전 · 클릭으로 선택')}</span>
       </div>
       <div
         className="three"
@@ -318,6 +337,8 @@ function ThreeD({ snap, sel, setSel }: { snap: SnapshotDTO; sel: ViewNode | null
           <img className="three-base" src={snap.image} style={{ width: '100%', height: '100%' }} alt="" />
           {nodes.map((n) => {
             const [l, t, r, b] = n.bounds;
+            const w = (r - l) * scale;
+            const on = sel?.id === n.id || hov === n.id;
             return (
               <div
                 key={n.id}
@@ -328,16 +349,23 @@ function ThreeD({ snap, sel, setSel }: { snap: SnapshotDTO; sel: ViewNode | null
                   width: (r - l) * scale,
                   height: (b - t) * scale,
                   transform: `translateZ(${n.depth * gap}px)`,
-                  borderColor: sel?.id === n.id || hov === n.id ? undefined : `hsla(${150 + n.depth * 18}, 60%, 65%, .45)`,
+                  borderColor: on ? undefined : depthColor(n.depth, 0.45),
+                  zIndex: on ? 1 : undefined,
                 }}
-                onMouseEnter={() => setHov(n.id)}
-                onMouseLeave={() => setHov((h) => (h === n.id ? null : h))}
+                onMouseEnter={() => onHover(n)}
+                onMouseLeave={() => hover?.id === n.id && onHover(null)}
                 onClick={(e) => {
                   e.stopPropagation();
                   setSel(n);
                 }}
-                title={`${short(n.className)} ${rid(n.resourceId)} ${n.text}`}
-              />
+                title={`${label(n)} ${n.text}`}
+              >
+                {(on || (labels && w > 56)) && (
+                  <span className="layer-label" style={{ borderColor: depthColor(n.depth), maxWidth: on ? undefined : w - 4 }}>
+                    <b style={{ color: depthColor(n.depth) }}>{n.depth}</b> {label(n)}
+                  </span>
+                )}
+              </div>
             );
           })}
         </div>
