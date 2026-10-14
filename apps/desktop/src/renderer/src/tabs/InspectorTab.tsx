@@ -21,6 +21,8 @@ function nodeAt(root: ViewNode, x: number, y: number): ViewNode | undefined {
 const short = (c: string) => c.split('.').pop() ?? c;
 const rid = (r: string) => r.split(':id/')[1] ?? r;
 const PROPS_KEY = 'droidlens.inspector.props';
+/** 선택한 뷰이거나 그 조상인지 (id 가 0.2.1 같은 경로라 접두어로 판단) */
+const onPath = (n: ViewNode, sel: ViewNode | null) => !!sel && (sel.id === n.id || sel.id.startsWith(n.id + '.'));
 /** 깊이별 색: 3D 층 테두리와 트리의 색 점이 같은 색을 써서 조각과 목록을 맞춰 볼 수 있다 */
 const depthColor = (d: number, a = 1) => `hsla(${150 + d * 18}, 60%, 65%, ${a})`;
 const label = (n: ViewNode) => `${short(n.className) || 'root'}${n.resourceId ? ' #' + rid(n.resourceId) : ''}`;
@@ -202,7 +204,7 @@ function TreeRow(p: {
     <>
       <div
         ref={ref}
-        className={`row ${isSel ? 'sel' : ''} ${p.hover?.id === n.id && !isSel ? 'hov' : ''}`}
+        className={`row ${isSel ? 'sel' : ''} ${p.hover?.id === n.id && !isSel ? 'hov' : ''} ${!isSel && onPath(n, p.sel) ? 'path' : ''}`}
         style={{ paddingLeft: 8 + n.depth * 14, opacity: dim ? 0.35 : 1 }}
         onClick={() => p.onSel(n)}
         onMouseEnter={() => p.onHover(n)}
@@ -351,7 +353,12 @@ function ThreeD({ snap, sel, setSel, hover, onHover }: {
           const d = dragging.current;
           if (d) setRot({ x: Math.max(-80, Math.min(80, d.rx - (e.clientY - d.y) * 0.3)), y: d.ry + (e.clientX - d.x) * 0.3 });
         }}
-        onMouseUp={() => (dragging.current = null)}
+        onMouseUp={(e) => {
+          const d = dragging.current;
+          dragging.current = null;
+          // 회전 없이 빈 곳을 누르면 선택 해제
+          if (d && Math.abs(e.clientX - d.x) + Math.abs(e.clientY - d.y) < 4 && !(e.target as HTMLElement).closest('.layer')) setSel(null);
+        }}
         onMouseLeave={() => (dragging.current = null)}
         onWheel={(e) => setZoom((z) => Math.max(0.5, Math.min(2, z - e.deltaY * 0.001)))}
       >
@@ -359,7 +366,7 @@ function ThreeD({ snap, sel, setSel, hover, onHover }: {
           className="three-scene"
           style={{ width: W * scale, height: H * scale, transform: `rotateX(${rot.x}deg) rotateY(${rot.y}deg)` }}
         >
-          <img className="three-base" src={snap.image} style={{ width: '100%', height: '100%' }} alt="" />
+          <img className="three-base" src={snap.image} style={{ width: '100%', height: '100%', opacity: sel ? 0.1 : undefined }} alt="" />
           {nodes.map((n) => {
             const [l, t, r, b] = n.bounds;
             const w = (r - l) * scale;
@@ -376,6 +383,8 @@ function ThreeD({ snap, sel, setSel, hover, onHover }: {
                   transform: `translateZ(${n.depth * gap}px)`,
                   borderColor: on ? undefined : depthColor(n.depth, 0.45),
                   zIndex: on ? 1 : undefined,
+                  // 선택이 있으면 선택한 뷰까지의 경로만 또렷하게, 나머지는 흐리게
+                  opacity: sel && !onPath(n, sel) && hov !== n.id ? 0.1 : 1,
                 }}
                 onMouseEnter={() => onHover(n)}
                 onMouseLeave={() => hover?.id === n.id && onHover(null)}
