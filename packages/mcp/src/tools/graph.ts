@@ -97,7 +97,7 @@ export function register(server: McpServer): void {
       inputSchema: {
         ...serialArg,
         packageName: z.string(),
-        maxSteps: z.number().int().min(1).max(300).optional().describe('기본 40'),
+        maxSteps: z.number().int().min(1).max(500).optional().describe('누르는 횟수 안전 상한 (기본 500). 범위는 maxDepth 로 정한다'),
         maxDepth: z.number().int().min(1).max(10).optional().describe('기본 4'),
         avoid: z.string().optional().describe('추가로 피할 라벨 정규식'),
         relaunch: z.boolean().optional(),

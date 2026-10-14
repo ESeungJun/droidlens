@@ -215,12 +215,11 @@ handle('graphRecordHere', async (s: string, pkg: string) => {
   return n.id;
 });
 let exploreAbort: AbortController | null = null;
-handle('explore', async (s: string, pkg: string, maxSteps: number, maxDepth: number) => {
+handle('explore', async (s: string, pkg: string, maxDepth: number) => {
   exploreAbort?.abort();
   exploreAbort = new AbortController();
   const r = await dl.explore(dev(s), {
     packageName: pkg,
-    maxSteps,
     maxDepth,
     signal: exploreAbort.signal,
     onProgress: (e) => send('progress', { kind: 'explore', ...e }),
