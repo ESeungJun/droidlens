@@ -1,5 +1,6 @@
 // 뷰 계층 · 화면 흐름 · 네트워크 탭
 export const inspect: Record<string, string> = {
+  시작: 'Start',
   '앱 첫 화면부터': 'From app start',
   '현재 화면부터': 'From current screen',
   '⊞ 정리': '⊞ Arrange',
