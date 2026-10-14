@@ -11,6 +11,7 @@ import { SettingsTab } from './tabs/SettingsTab';
 import { NetworkTab } from './tabs/NetworkTab';
 import { AppDataTab } from './tabs/AppDataTab';
 import { ChatPanel } from './ChatPanel';
+import { DeviceSetup } from './DeviceSetup';
 import { UpdateButton, useUpdater } from './Updater';
 import { useT } from './i18n';
 
@@ -241,25 +242,30 @@ export function App() {
             </nav>
             <section className="content">
               {!serial && tab !== 'scen' && tab !== 'settings' ? (
-                <div className="empty">
-                  {adbOk === null || !devicesLoaded ? (
+                adbOk === null || !devicesLoaded ? (
+                  <div className="empty">
                     <div>{t('기기 확인 중…')}</div>
-                  ) : adbOk === false ? (
-                    <div>
-                      {t('adb를 찾지 못했습니다.')}
-                      <br />
-                      <button className="btn primary" style={{ marginTop: 10 }} onClick={() => setTab('settings')}>
-                        {t('설정에서 adb 연결하기')}
-                      </button>
-                    </div>
-                  ) : (
-                    <div>
-                      {t('연결된 기기가 없습니다.')}
-                      <br />
-                      {t('USB 디버깅을 켜거나 에뮬레이터를 실행하세요.')}
-                    </div>
-                  )}
-                </div>
+                  </div>
+                ) : (
+                  <div className="scroll" style={{ height: '100%', display: 'grid', justifyItems: 'center', alignContent: 'start', gap: 16, paddingTop: 40 }}>
+                    {adbOk === false ? (
+                      <div style={{ textAlign: 'center' }}>
+                        {t('adb를 찾지 못했습니다.')}
+                        <br />
+                        <button className="btn primary" style={{ marginTop: 10 }} onClick={() => setTab('settings')}>
+                          {t('설정에서 adb 연결하기')}
+                        </button>
+                      </div>
+                    ) : (
+                      <div style={{ textAlign: 'center' }}>
+                        <b>{t('연결된 기기가 없습니다.')}</b>
+                        <br />
+                        <span className="muted">{t('폰이나 에뮬레이터가 연결되면 자동으로 인식합니다.')}</span>
+                      </div>
+                    )}
+                    <DeviceSetup />
+                  </div>
+                )
               ) : (
                 <>
                   {tab === 'screen' && <ScreenTab />}
