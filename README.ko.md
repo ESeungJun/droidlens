@@ -197,6 +197,16 @@ apps/desktop      Electron + React
 agents/           Claude Code 에이전트 정의
 ```
 
+### 브랜치 (git flow)
+
+| 브랜치 | 용도 |
+| --- | --- |
+| `main` | 배포된 코드만. 모든 커밋이 태그(`v*`)가 붙은 릴리스 |
+| `develop` | 다음 릴리스를 모으는 통합 브랜치. 기능 PR은 여기로 |
+| `feature/<이름>` | 기능·수정 작업. `develop`에서 따서 PR로 다시 합침 |
+| `release/<버전>` | 릴리스 준비(버전 올리기·노트). `develop`에서 따서 `main`·`develop`에 합친 뒤 태그 |
+| `hotfix/<버전>` | 긴급 수정. `main`에서 따서 `main`·`develop`에 합친 뒤 태그 |
+
 `v*` 태그를 푸시하면 GitHub Actions가 macOS(arm64/x64)·Windows(x64/arm64)·Linux 설치 파일을 빌드해 Releases에 올립니다. 로드맵은 [docs/ROADMAP.md](docs/ROADMAP.md).
 
 ## 라이선스
