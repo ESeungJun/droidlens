@@ -71,16 +71,32 @@ function macBundle(): string {
   return resolve(dirname(process.execPath), '..', '..');
 }
 
-export async function checkForUpdate(): Promise<UpdateInfo> {
+type Release = { tag_name: string; body?: string; html_url: string; assets: { name: string; browser_download_url: string; size: number }[] };
+
+/**
+ * 최신 릴리스. GitHub API 는 비로그인 시 IP 당 시간당 60회라 회사처럼 IP 를 함께 쓰면 금방 막힌다.
+ * 막히면 releases/latest 주소의 리다이렉트로 태그를 알아내고 파일 주소는 이름 규칙으로 만든다 (노트·크기는 없음)
+ */
+async function latestRelease(arch: 'arm64' | 'x64'): Promise<Release> {
   const res = await fetch(`https://api.github.com/repos/${REPO}/releases/latest`, {
     headers: { Accept: 'application/vnd.github+json', 'User-Agent': 'DroidLens' },
     signal: AbortSignal.timeout(15_000),
-  });
-  if (!res.ok) throw new Error(`업데이트 확인 실패 (GitHub ${res.status})`);
-  const rel = (await res.json()) as { tag_name: string; body?: string; html_url: string; assets: { name: string; browser_download_url: string; size: number }[] };
+  }).catch(() => undefined);
+  if (res?.ok) return (await res.json()) as Release;
+  const page = await fetch(`https://github.com/${REPO}/releases/latest`, { headers: { 'User-Agent': 'DroidLens' }, signal: AbortSignal.timeout(15_000) });
+  const tag = page.url.split('/tag/')[1];
+  if (!page.ok || !tag || !/^v\d/.test(tag)) throw new Error(`업데이트 확인 실패 (GitHub ${res?.status ?? page.status})`);
+  const base = `https://github.com/${REPO}/releases/download/${tag}`;
+  const names = [assetName(tag.replace(/^v/, ''), arch), 'SHA256SUMS'].filter((x): x is string => !!x);
+  return { tag_name: tag, html_url: page.url, assets: names.map((name) => ({ name, browser_download_url: `${base}/${name}`, size: 0 })) };
+}
+
+export async function checkForUpdate(): Promise<UpdateInfo> {
+  const arch = await cpuArch();
+  const rel = await latestRelease(arch);
   const latest = rel.tag_name.replace(/^v/, '');
   const current = currentVersion();
-  const name = assetName(latest, await cpuArch());
+  const name = assetName(latest, arch);
   const a = rel.assets.find((x) => x.name === name);
   const sums = rel.assets.find((x) => x.name === 'SHA256SUMS');
   let canInstall = app.isPackaged && !!a;
