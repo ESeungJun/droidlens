@@ -371,7 +371,15 @@ function mcpAddArgs(): string[] {
 async function runClaude(args: string[]): Promise<string> {
   // claude 위치·PATH는 resolveClaude()가 로그인 셸에서 한 번만 찾아 캐시한다 (매번 로그인 셸을 띄우면 수 초씩 걸림)
   const c = await resolveClaude();
-  const { stdout } = await run(c.bin, args, { timeout: 30_000, env: { ...process.env, PATH: c.path }, shell: process.platform === 'win32' });
+  const env = { ...process.env, PATH: c.path };
+  if (process.platform === 'win32') {
+    // claude.cmd 는 셸로 실행해야 하는데, shell 모드에서는 Node 가 인자를 따옴표 없이 이어 붙인다.
+    // 'C:\Program Files\DroidLens\DroidLens.exe' 같은 공백 경로가 깨지지 않게 직접 감싼다
+    const quote = (a: string) => (/[\s"]/.test(a) ? `"${a.replace(/"/g, '\\"')}"` : a);
+    const { stdout } = await run(quote(c.bin), args.map(quote), { timeout: 30_000, env, shell: true });
+    return stdout;
+  }
+  const { stdout } = await run(c.bin, args, { timeout: 30_000, env });
   return stdout;
 }
 
