@@ -12,6 +12,7 @@ import { NetworkTab } from './tabs/NetworkTab';
 import { AppDataTab } from './tabs/AppDataTab';
 import { ChatPanel } from './ChatPanel';
 import { UpdateButton, useUpdater } from './Updater';
+import { useT } from './i18n';
 
 interface Ctx {
   serial: string | null;
@@ -43,6 +44,7 @@ type TabId = (typeof TABS)[number][0];
 const initial = new URLSearchParams(location.hash.slice(1));
 
 export function App() {
+  const t = useT();
   const [devices, setDevices] = useState<DeviceSummary[]>([]);
   const [devicesLoaded, setDevicesLoaded] = useState(false);
   const [serial, setSerial] = useState<string | null>(null);
@@ -72,17 +74,21 @@ export function App() {
     api.adbStatus().then((s) => setAdbOk(s.ok)).catch(() => setAdbOk(false));
   }, []);
 
-  const toast = useCallback((msg: string, err?: boolean) => {
-    setToastMsg({ msg, err });
-    setTimeout(() => setToastMsg((t) => (t?.msg === msg ? null : t)), err ? 5000 : 2500);
-  }, []);
+  const toast = useCallback(
+    (raw: string, err?: boolean) => {
+      const msg = t(raw); // 메인 프로세스의 고정 문구도 사전에 있으면 번역된다
+      setToastMsg({ msg, err });
+      setTimeout(() => setToastMsg((cur) => (cur?.msg === msg ? null : cur)), err ? 5000 : 2500);
+    },
+    [t],
+  );
 
   const run = useCallback(
     async <T,>(p: Promise<T>) => {
       try {
         return await p;
       } catch (e) {
-        toast((e as Error).message, true);
+        toast((e as Error).message.replace(/^Error invoking remote method '[^']*': (?:\w*Error: )?/, ''), true);
         return undefined;
       }
     },
@@ -153,7 +159,7 @@ export function App() {
             Droid<em>Lens</em>
           </span>
           <select className="input" value={serial ?? ''} onChange={(e) => setSerial(e.target.value || null)} style={{ minWidth: 220 }}>
-            {devices.length === 0 && <option value="">{devicesLoaded ? '기기 없음' : '기기 찾는 중…'}</option>}
+            {devices.length === 0 && <option value="">{devicesLoaded ? t('기기 없음') : t('기기 찾는 중…')}</option>}
             {devices.map((d) => (
               <option key={d.serial} value={d.serial} disabled={d.state !== 'device'}>
                 {d.model ?? d.serial} · {d.serial} {d.state !== 'device' ? `(${d.state})` : ''}
@@ -168,8 +174,8 @@ export function App() {
               disabled={agentBusy}
               title={
                 agent?.running
-                  ? '온디바이스 에이전트 실행 중 — 뷰 계층이 빠르고 한글 입력이 됩니다. 클릭하면 중지'
-                  : `에이전트 꺼짐 — uiautomator로 동작 (느림, ASCII 입력만). 클릭하면 시작${agent?.error ? `\n최근 실패: ${agent.error}` : ''}`
+                  ? t('온디바이스 에이전트 실행 중 — 뷰 계층이 빠르고 한글 입력이 됩니다. 클릭하면 중지')
+                  : t('에이전트 꺼짐 — uiautomator로 동작 (느림, ASCII 입력만). 클릭하면 시작') + (agent?.error ? '\n' + t('최근 실패: {error}', { error: agent.error }) : '')
               }
               onClick={async () => {
                 if (!serial) return;
@@ -179,34 +185,34 @@ export function App() {
                 if (r) {
                   setAgent(r);
                   if (!r.running && !agent?.running)
-                    toast(`에이전트를 시작하지 못했습니다${r.error ? `: ${r.error}` : ''} — uiautomator로 계속 동작합니다`, true);
+                    toast(r.error ? t('에이전트를 시작하지 못했습니다: {error} — uiautomator로 계속 동작합니다', { error: r.error }) : t('에이전트를 시작하지 못했습니다 — uiautomator로 계속 동작합니다'), true);
                 }
               }}
             >
-              {agentBusy ? '에이전트 준비 중…' : agent?.running ? '⚡ 에이전트' : '에이전트 꺼짐'}
+              {agentBusy ? t('에이전트 준비 중…') : agent?.running ? t('⚡ 에이전트') : t('에이전트 꺼짐')}
             </button>
           )}
           <div className="spacer" />
           <UpdateButton u={updater} />
-          <button className={`btn sm ${chatOpen ? 'primary' : ''}`} onClick={() => setChatOpen((v) => !v)} title="에이전트와 대화">
-            💬 에이전트 대화
+          <button className={`btn sm ${chatOpen ? 'primary' : ''}`} onClick={() => setChatOpen((v) => !v)} title={t('에이전트와 대화')}>
+            {t('💬 에이전트 대화')}
           </button>
           {fgPkg && (
-            <button className="btn sm" onClick={() => setPkg(fgPkg)} title="포그라운드 앱 선택">
-              포그라운드: <span className="mono">{fgPkg}</span>
+            <button className="btn sm" onClick={() => setPkg(fgPkg)} title={t('포그라운드 앱 선택')}>
+              {t('포그라운드:')} <span className="mono">{fgPkg}</span>
             </button>
           )}
         </header>
         <div className="body" style={{ gridTemplateColumns: chatOpen ? '260px 1fr 400px' : undefined }}>
           <aside className="sidebar">
             <div className="search">
-              <input className="input" placeholder="패키지 검색" value={filter} onChange={(e) => setFilter(e.target.value)} />
+              <input className="input" placeholder={t('패키지 검색')} value={filter} onChange={(e) => setFilter(e.target.value)} />
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                 <label className="chk">
                   <input type="checkbox" checked={thirdOnly} onChange={(e) => setThirdOnly(e.target.checked)} />
-                  사용자 설치 앱만
+                  {t('사용자 설치 앱만')}
                 </label>
-                <button className="btn sm" onClick={() => setPkgTick((t) => t + 1)} title="앱 목록 새로고침">
+                <button className="btn sm" onClick={() => setPkgTick((t) => t + 1)} title={t('앱 목록 새로고침')}>
                   ↻
                 </button>
               </div>
@@ -222,14 +228,14 @@ export function App() {
                   {p.packageName}
                 </button>
               ))}
-              {serial && shown.length === 0 && <div className="empty">{pkgsLoading ? '앱 목록 불러오는 중…' : '패키지가 없습니다'}</div>}
+              {serial && shown.length === 0 && <div className="empty">{pkgsLoading ? t('앱 목록 불러오는 중…') : t('패키지가 없습니다')}</div>}
             </div>
           </aside>
           <main className="main">
             <nav className="tabs">
               {TABS.map(([id, label]) => (
                 <button key={id} className={`tab ${tab === id ? 'active' : ''}`} onClick={() => setTab(id)}>
-                  {label}
+                  {t(label)}
                 </button>
               ))}
             </nav>
@@ -237,20 +243,20 @@ export function App() {
               {!serial && tab !== 'scen' && tab !== 'settings' ? (
                 <div className="empty">
                   {adbOk === null || !devicesLoaded ? (
-                    <div>기기 확인 중…</div>
+                    <div>{t('기기 확인 중…')}</div>
                   ) : adbOk === false ? (
                     <div>
-                      adb를 찾지 못했습니다.
+                      {t('adb를 찾지 못했습니다.')}
                       <br />
                       <button className="btn primary" style={{ marginTop: 10 }} onClick={() => setTab('settings')}>
-                        설정에서 adb 연결하기
+                        {t('설정에서 adb 연결하기')}
                       </button>
                     </div>
                   ) : (
                     <div>
-                      연결된 기기가 없습니다.
+                      {t('연결된 기기가 없습니다.')}
                       <br />
-                      USB 디버깅을 켜거나 에뮬레이터를 실행하세요.
+                      {t('USB 디버깅을 켜거나 에뮬레이터를 실행하세요.')}
                     </div>
                   )}
                 </div>
@@ -279,5 +285,6 @@ export function App() {
 }
 
 export function NeedPkg() {
-  return <div className="empty">왼쪽에서 앱을 선택하세요</div>;
+  const t = useT();
+  return <div className="empty">{t('왼쪽에서 앱을 선택하세요')}</div>;
 }

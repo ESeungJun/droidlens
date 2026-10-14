@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { api, type SnapshotDTO, type ViewNode } from '../api';
 import { useApp } from '../App';
+import { useT } from '../i18n';
 
 function flatten(n: ViewNode, out: ViewNode[] = []): ViewNode[] {
   out.push(n);
@@ -22,6 +23,7 @@ const rid = (r: string) => r.split(':id/')[1] ?? r;
 
 export function InspectorTab() {
   const { serial, run } = useApp();
+  const t = useT();
   const [snap, setSnap] = useState<SnapshotDTO | null>(null);
   const [loading, setLoading] = useState(false);
   const [sel, setSel] = useState<ViewNode | null>(null);
@@ -62,23 +64,23 @@ export function InspectorTab() {
     <>
       <div className="toolbar">
         <button className="btn primary" onClick={load} disabled={loading}>
-          {loading ? '캡처 중…' : '↻ 현재 화면 캡처'}
+          {loading ? t('캡처 중…') : t('↻ 현재 화면 캡처')}
         </button>
         <div style={{ display: 'flex', gap: 2 }}>
-          <button className={`btn sm ${mode === '2d' ? 'primary' : ''}`} onClick={() => setMode('2d')}>트리</button>
-          <button className={`btn sm ${mode === '3d' ? 'primary' : ''}`} onClick={() => setMode('3d')}>3D 깊이</button>
+          <button className={`btn sm ${mode === '2d' ? 'primary' : ''}`} onClick={() => setMode('2d')}>{t('트리')}</button>
+          <button className={`btn sm ${mode === '3d' ? 'primary' : ''}`} onClick={() => setMode('3d')}>{t('3D 깊이')}</button>
         </div>
-        <input className="input" placeholder="클래스·id·텍스트 검색" value={query} onChange={(e) => setQuery(e.target.value)} style={{ width: 220 }} />
+        <input className="input" placeholder={t('클래스·id·텍스트 검색')} value={query} onChange={(e) => setQuery(e.target.value)} style={{ width: 220 }} />
         {snap && (
           <span className="muted">
-            {short(snap.screen.activity)} · 노드 {snap.stats.nodeCount} · 최대 깊이 {snap.stats.maxDepth}
-            {snap.stats.likelyCompose && <span className="pill" style={{ marginLeft: 8 }}>Compose 추정</span>}
-            {matchIds && <span className="pill accent" style={{ marginLeft: 8 }}>검색 {matchIds.size}</span>}
+            {short(snap.screen.activity)} · {t('노드 {n} · 최대 깊이 {d}', { n: snap.stats.nodeCount, d: snap.stats.maxDepth })}
+            {snap.stats.likelyCompose && <span className="pill" style={{ marginLeft: 8 }}>{t('Compose 추정')}</span>}
+            {matchIds && <span className="pill accent" style={{ marginLeft: 8 }}>{t('검색 {n}', { n: matchIds.size })}</span>}
           </span>
         )}
       </div>
       {!snap ? (
-        <div className="empty">{loading ? '뷰 계층을 가져오는 중…' : '캡처 버튼을 눌러 뷰 계층을 가져오세요'}</div>
+        <div className="empty">{loading ? t('뷰 계층을 가져오는 중…') : t('캡처 버튼을 눌러 뷰 계층을 가져오세요')}</div>
       ) : mode === '3d' ? (
         <ThreeD snap={snap} sel={sel} setSel={setSel} />
       ) : (
@@ -192,6 +194,7 @@ function TreeRow(p: {
 }
 
 function Props({ snap, n }: { snap: SnapshotDTO; n: ViewNode | null }) {
+  const t = useT();
   const max = Math.max(...snap.stats.byDepth.map((v) => v ?? 0));
   return (
     <div className="props">
@@ -239,9 +242,9 @@ function Props({ snap, n }: { snap: SnapshotDTO; n: ViewNode | null }) {
           </tbody>
         </table>
       ) : (
-        <div className="faint">노드를 선택하세요 (스크린샷 클릭 또는 트리)</div>
+        <div className="faint">{t('노드를 선택하세요 (스크린샷 클릭 또는 트리)')}</div>
       )}
-      <h4 style={{ marginTop: 18 }} className="faint">깊이별 노드 수</h4>
+      <h4 style={{ marginTop: 18 }} className="faint">{t('깊이별 노드 수')}</h4>
       <div className="bars">
         {snap.stats.byDepth.map((v, d) => (
           <div className="bar" key={d}>
@@ -251,7 +254,7 @@ function Props({ snap, n }: { snap: SnapshotDTO; n: ViewNode | null }) {
           </div>
         ))}
       </div>
-      <h4 style={{ marginTop: 18 }} className="faint">많이 쓰인 클래스</h4>
+      <h4 style={{ marginTop: 18 }} className="faint">{t('많이 쓰인 클래스')}</h4>
       <div className="mono" style={{ fontSize: 11 }}>
         {snap.stats.topClasses.map(([c, k]) => (
           <div key={c}>
@@ -265,6 +268,7 @@ function Props({ snap, n }: { snap: SnapshotDTO; n: ViewNode | null }) {
 
 /** CSS 3D로 뷰를 깊이만큼 띄워 보여주는 분해도 */
 function ThreeD({ snap, sel, setSel }: { snap: SnapshotDTO; sel: ViewNode | null; setSel(n: ViewNode | null): void }) {
+  const t = useT();
   const [rot, setRot] = useState({ x: 20, y: -30 });
   const [gap, setGap] = useState(28);
   const [zoom, setZoom] = useState(1);
@@ -288,12 +292,12 @@ function ThreeD({ snap, sel, setSel }: { snap: SnapshotDTO; sel: ViewNode | null
   return (
     <div style={{ position: 'relative', height: 'calc(100% - 45px)' }}>
       <div style={{ position: 'absolute', zIndex: 2, left: 12, top: 10, display: 'flex', gap: 12, alignItems: 'center' }} className="muted">
-        <label>간격 <input type="range" min={0} max={80} value={gap} onChange={(e) => setGap(+e.target.value)} /></label>
-        <label>확대 <input type="range" min={0.5} max={2} step={0.05} value={zoom} onChange={(e) => setZoom(+e.target.value)} /></label>
-        <label className="chk"><input type="checkbox" checked={minArea} onChange={(e) => setMinArea(e.target.checked)} />작은 뷰 숨기기</label>
-        <button className="btn sm" onClick={() => setRot({ x: 20, y: -30 })}>시점 초기화</button>
-        <button className="btn sm" onClick={() => setRot({ x: 0, y: 0 })}>정면</button>
-        <span>{sel ? `${short(sel.className)} ${sel.resourceId ? '#' + rid(sel.resourceId) : ''} · depth ${sel.depth}` : '드래그로 회전 · 클릭으로 선택'}</span>
+        <label>{t('간격')} <input type="range" min={0} max={80} value={gap} onChange={(e) => setGap(+e.target.value)} /></label>
+        <label>{t('확대')} <input type="range" min={0.5} max={2} step={0.05} value={zoom} onChange={(e) => setZoom(+e.target.value)} /></label>
+        <label className="chk"><input type="checkbox" checked={minArea} onChange={(e) => setMinArea(e.target.checked)} />{t('작은 뷰 숨기기')}</label>
+        <button className="btn sm" onClick={() => setRot({ x: 20, y: -30 })}>{t('시점 초기화')}</button>
+        <button className="btn sm" onClick={() => setRot({ x: 0, y: 0 })}>{t('정면')}</button>
+        <span>{sel ? `${short(sel.className)} ${sel.resourceId ? '#' + rid(sel.resourceId) : ''} · depth ${sel.depth}` : t('드래그로 회전 · 클릭으로 선택')}</span>
       </div>
       <div
         className="three"
