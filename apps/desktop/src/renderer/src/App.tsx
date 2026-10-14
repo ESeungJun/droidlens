@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { api, type AgentStatus, type CurrentScreen, type DeviceSummary, type PackageSummary } from './api';
 import { ScreenTab } from './tabs/ScreenTab';
 import { InspectorTab } from './tabs/InspectorTab';
@@ -101,10 +101,11 @@ export function App() {
     return () => clearInterval(t);
   }, [refreshDevices]);
 
+  const [pkgTick, setPkgTick] = useState(0);
   useEffect(() => {
     if (!serial) return setPkgs([]);
     run(api.packages(serial, thirdOnly)).then((p) => setPkgs(p ?? []));
-  }, [serial, thirdOnly, run]);
+  }, [serial, thirdOnly, run, pkgTick]);
 
   // 포그라운드 화면: 여기서만 폴링하고 컨텍스트로 공유 (탭마다 따로 폴링하면 기기 부하가 커진다)
   useEffect(() => {
@@ -119,6 +120,16 @@ export function App() {
       clearInterval(t);
     };
   }, [serial]);
+
+  // 목록은 기기 연결 시 한 번만 받으므로, 그 뒤에 설치한 앱이 포그라운드에 오면 다시 받는다.
+  // 시스템 앱처럼 다시 받아도 목록에 없는 패키지는 한 번만 시도한다.
+  const missingFg = useRef('');
+  useEffect(() => {
+    if (!fgPkg || pkgs.length === 0 || pkgs.some((p) => p.packageName === fgPkg)) return;
+    if (missingFg.current === fgPkg) return;
+    missingFg.current = fgPkg;
+    setPkgTick((t) => t + 1);
+  }, [fgPkg, pkgs]);
 
   // DroidLens 온디바이스 에이전트 자체는 분석 대상이 아니므로 숨긴다
   const shown = useMemo(
@@ -183,10 +194,15 @@ export function App() {
           <aside className="sidebar">
             <div className="search">
               <input className="input" placeholder="패키지 검색" value={filter} onChange={(e) => setFilter(e.target.value)} />
-              <label className="chk">
-                <input type="checkbox" checked={thirdOnly} onChange={(e) => setThirdOnly(e.target.checked)} />
-                사용자 설치 앱만
-              </label>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <label className="chk">
+                  <input type="checkbox" checked={thirdOnly} onChange={(e) => setThirdOnly(e.target.checked)} />
+                  사용자 설치 앱만
+                </label>
+                <button className="btn sm" onClick={() => setPkgTick((t) => t + 1)} title="앱 목록 새로고침">
+                  ↻
+                </button>
+              </div>
             </div>
             <div className="pkglist">
               {shown.map((p) => (
