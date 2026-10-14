@@ -44,6 +44,7 @@ const initial = new URLSearchParams(location.hash.slice(1));
 
 export function App() {
   const [devices, setDevices] = useState<DeviceSummary[]>([]);
+  const [devicesLoaded, setDevicesLoaded] = useState(false);
   const [serial, setSerial] = useState<string | null>(null);
   const [pkgs, setPkgs] = useState<PackageSummary[]>([]);
   const [pkg, setPkg] = useState<string | null>(initial.get('pkg'));
@@ -91,6 +92,7 @@ export function App() {
   const refreshDevices = useCallback(async () => {
     const list = (await run(api.devices())) ?? [];
     setDevices(list);
+    setDevicesLoaded(true);
     const online = list.filter((d) => d.state === 'device');
     setSerial((cur) => (cur && online.some((d) => d.serial === cur) ? cur : online[0]?.serial ?? null));
   }, [run]);
@@ -102,9 +104,14 @@ export function App() {
   }, [refreshDevices]);
 
   const [pkgTick, setPkgTick] = useState(0);
+  const [pkgsLoading, setPkgsLoading] = useState(false);
   useEffect(() => {
     if (!serial) return setPkgs([]);
-    run(api.packages(serial, thirdOnly)).then((p) => setPkgs(p ?? []));
+    setPkgsLoading(true);
+    run(api.packages(serial, thirdOnly)).then((p) => {
+      setPkgs(p ?? []);
+      setPkgsLoading(false);
+    });
   }, [serial, thirdOnly, run, pkgTick]);
 
   // 포그라운드 화면: 여기서만 폴링하고 컨텍스트로 공유 (탭마다 따로 폴링하면 기기 부하가 커진다)
@@ -146,7 +153,7 @@ export function App() {
             Droid<em>Lens</em>
           </span>
           <select className="input" value={serial ?? ''} onChange={(e) => setSerial(e.target.value || null)} style={{ minWidth: 220 }}>
-            {devices.length === 0 && <option value="">기기 없음</option>}
+            {devices.length === 0 && <option value="">{devicesLoaded ? '기기 없음' : '기기 찾는 중…'}</option>}
             {devices.map((d) => (
               <option key={d.serial} value={d.serial} disabled={d.state !== 'device'}>
                 {d.model ?? d.serial} · {d.serial} {d.state !== 'device' ? `(${d.state})` : ''}
@@ -215,7 +222,7 @@ export function App() {
                   {p.packageName}
                 </button>
               ))}
-              {serial && shown.length === 0 && <div className="empty">패키지가 없습니다</div>}
+              {serial && shown.length === 0 && <div className="empty">{pkgsLoading ? '앱 목록 불러오는 중…' : '패키지가 없습니다'}</div>}
             </div>
           </aside>
           <main className="main">
@@ -229,7 +236,9 @@ export function App() {
             <section className="content">
               {!serial && tab !== 'scen' && tab !== 'settings' ? (
                 <div className="empty">
-                  {adbOk === false ? (
+                  {adbOk === null || !devicesLoaded ? (
+                    <div>기기 확인 중…</div>
+                  ) : adbOk === false ? (
                     <div>
                       adb를 찾지 못했습니다.
                       <br />

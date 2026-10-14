@@ -58,7 +58,9 @@ export function SettingsTab({ onAdbChange, updater }: { onAdbChange?(s: AdbStatu
       <div className="cards" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(420px, 1fr))' }}>
         <div className="card">
           <h5>adb</h5>
-          {adb?.ok ? (
+          {!adb ? (
+            <p className="muted">확인 중…</p>
+          ) : adb.ok ? (
             <p>
               <span className="pill accent">연결됨</span> <span className="mono">adb {adb.version}</span>
               <br />
@@ -94,11 +96,11 @@ Linux   sudo apt install adb`}
           </p>
           <div className="kv" style={{ marginBottom: 8 }}>
             <span>Claude Code</span>
-            <span>{integ?.claudeVersion ?? <span className="error">찾지 못함</span>}</span>
+            <span>{!integ ? <span className="muted">확인 중…</span> : integ.claudeVersion ?? <span className="error">찾지 못함</span>}</span>
             <span>MCP 등록</span>
-            <span>{integ?.registered ? <span style={{ color: 'var(--accent)' }}>등록됨</span> : '미등록'}</span>
+            <span>{!integ ? <span className="muted">확인 중…</span> : integ.registered ? <span style={{ color: 'var(--accent)' }}>등록됨</span> : '미등록'}</span>
             <span>MCP 스크립트</span>
-            <span style={{ fontSize: 11 }}>{integ?.mcpScriptExists ? integ.mcpScript : <span className="error">없음 (pnpm build 필요)</span>}</span>
+            <span style={{ fontSize: 11 }}>{!integ ? <span className="muted">확인 중…</span> : integ.mcpScriptExists ? integ.mcpScript : <span className="error">없음 (pnpm build 필요)</span>}</span>
           </div>
           <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
             <button className="btn primary" disabled={!integ?.claudeVersion || busy === 'mcp'} onClick={register}>

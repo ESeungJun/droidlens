@@ -15,10 +15,12 @@ function ReportsView() {
   const { run } = useApp();
   const [list, setList] = useState<ScenarioData[]>([]);
   const [sel, setSel] = useState<ScenarioData | null>(null);
+  const [loaded, setLoaded] = useState(false);
 
   const load = async () => {
     const l = (await run(api.scenarios())) ?? [];
     setList(l);
+    setLoaded(true);
     setSel((s) => (s ? l.find((x) => x.id === s.id) ?? null : l[0] ?? null));
   };
   useEffect(() => {
@@ -32,7 +34,8 @@ function ReportsView() {
     <div className="scen" style={{ height: 'calc(100% - 45px)' }}>
       <div className="scen-list">
         <div className="toolbar"><b>시나리오 검증 기록</b><span className="faint">({list.length})</span></div>
-        {list.length === 0 && (
+        {!loaded && <div className="empty" style={{ height: 'auto', padding: 24 }}>불러오는 중…</div>}
+        {loaded && list.length === 0 && (
           <div className="empty" style={{ height: 'auto', padding: 24 }}>
             아직 기록이 없습니다.
             <br />
