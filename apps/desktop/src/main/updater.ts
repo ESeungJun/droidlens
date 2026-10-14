@@ -114,9 +114,12 @@ export async function installUpdate(info: UpdateInfo, onProgress: (p: number, ms
     const newApp = join(unpacked, 'DroidLens.app');
     const target = macBundle();
     // 앱이 완전히 종료된 뒤 교체하고 다시 연다. 실패하면 기존 앱을 되돌린다.
+    const log = join(app.getPath('home'), '.droidlens', 'update.log');
     const script = `#!/bin/sh
+exec >>"${log}" 2>&1
+echo "[$(date)] DroidLens 업데이트 ${info.current} -> ${info.latest}"
 while kill -0 ${process.pid} 2>/dev/null; do sleep 0.3; done
-set -e
+set -ex
 mv "${target}" "${target}.old"
 if ditto "${newApp}" "${target}"; then
   rm -rf "${target}.old"

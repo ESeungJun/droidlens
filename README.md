@@ -29,6 +29,8 @@ xattr -dr com.apple.quarantine /Applications/DroidLens.app
 ```
 **Windows 첫 실행**: SmartScreen 경고가 뜨면 "추가 정보 → 실행"을 누르세요.
 
+**업데이트**: 새 버전이 나오면 상단 바에 **⬆ 업데이트** 버튼이 뜹니다. 누르면 내려받아 교체하고 다시 시작합니다 (설정·연동 탭에서도 확인 가능, macOS 로그는 `~/.droidlens/update.log`).
+
 ### 준비물: adb
 Android Studio가 설치되어 있으면 자동으로 찾습니다. 없다면 platform-tools만 설치하세요.
 ```
