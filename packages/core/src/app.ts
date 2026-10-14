@@ -175,6 +175,26 @@ export async function launchApp(dev: DeviceAdb, pkg: string, activity?: string):
   if (/No activities found/.test(out)) throw new Error(`${pkg}: 실행 가능한 런처 액티비티가 없습니다`);
 }
 
+/**
+ * 홈에서 아이콘을 누른 것처럼 앱을 앞으로 가져온다. 실행 중이면 보던 화면 그대로, 꺼져 있으면 새로 실행.
+ * (launchApp 은 태스크를 비우고 첫 화면부터 시작한다)
+ */
+export async function bringToFront(dev: DeviceAdb, pkg: string): Promise<void> {
+  assertPackage(pkg);
+  const component = await launcherComponent(dev, pkg);
+  if (component) {
+    // NEW_TASK|RESET_TASK_IF_NEEDED(0x10200000) + MAIN/LAUNCHER: 런처가 보내는 것과 같은 인텐트
+    const out = await dev.shell(
+      `am start -f 0x10200000 -a android.intent.action.MAIN -c android.intent.category.LAUNCHER -n ${quoteShell(component)}`,
+      { timeoutMs: 15_000 },
+    );
+    if (/Error:/.test(out)) throw new Error(out.trim());
+    return;
+  }
+  const out = await dev.shell(`monkey -p ${pkg} -c android.intent.category.LAUNCHER 1`);
+  if (/No activities found/.test(out)) throw new Error(`${pkg}: 실행 가능한 런처 액티비티가 없습니다`);
+}
+
 async function launcherComponent(dev: DeviceAdb, pkg: string): Promise<string | undefined> {
   const out = await dev
     .shell(`cmd package resolve-activity --brief -a android.intent.action.MAIN -c android.intent.category.LAUNCHER ${pkg}`)

@@ -158,6 +158,7 @@ handle('launch', (s: string, pkg: string, restart?: boolean) =>
   (restart ? dl.stopApp(dev(s), pkg) : Promise.resolve()).then(() => dl.launchApp(dev(s), pkg)),
 );
 handle('stop', (s: string, pkg: string) => dl.stopApp(dev(s), pkg));
+handle('bringToFront', (s: string, pkg: string) => dl.bringToFront(dev(s), pkg));
 handle('deeplink', (s: string, uri: string, pkg?: string) => dl.openDeepLink(dev(s), uri, pkg));
 handle('analyzeLibraries', async (s: string, pkg: string) => {
   send('progress', { kind: 'libs', message: 'APK 내려받는 중…' });
