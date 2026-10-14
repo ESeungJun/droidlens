@@ -9,6 +9,9 @@ SDK 없이 adb만으로 <b>모든 앱</b>을 분석하고, Claude Code 에이전
 
 <p align="center"><a href="README.md">English</a> · <b>한국어</b></p>
 
+<p align="center"><a href="docs/video/droidlens-demo.mp4"><img src="docs/images/demo.gif" width="100%" alt="DroidLens 소개: 미러링, 3D 뷰 계층, 화면 흐름, 라이브러리 탐지, Claude Code 에이전트"></a><br>
+<sub>▶ <a href="docs/video/droidlens-demo.mp4">원본 화질 영상 보기 (MP4, 28초, 영어)</a></sub></p>
+
 ---
 
 Meta의 [Flipper](https://github.com/facebook/flipper)(2025년 아카이브)를 대체하는 것을 목표로 합니다. 앱에 아무것도 심지 않아도 화면 미러링, 뷰 계층, 화면 이동 경로, 사용 라이브러리를 볼 수 있고, 내장 MCP 서버로 Claude Code 에이전트가 같은 기능을 그대로 사용합니다.
@@ -227,6 +230,7 @@ agents/           Claude Code 에이전트 정의
 | `feature/<이름>` | 기능·수정 작업. `develop`에서 따서 PR로 다시 합침 |
 | `release/<버전>` | 릴리스 준비(버전 올리기·노트). `develop`에서 따서 `master`·`develop`에 합친 뒤 태그 |
 | `hotfix/<버전>` | 긴급 수정. `master`에서 따서 `master`·`develop`에 합친 뒤 태그 |
+| `docs/<이름>` | README·문서만 바꾸는 변경(앱 코드 없음). `master`에서 따서 `master`·`develop`에 합치고 릴리스·태그는 하지 않음 |
 
 ### 커밋 메시지
 
