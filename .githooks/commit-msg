@@ -1,0 +1,14 @@
+#!/bin/sh
+# 커밋 메시지 첫 줄은 Conventional Commits 형식이어야 한다: <type>(<scope>)?!?: <설명>
+# 설치: pnpm install 시 자동으로 git config core.hooksPath .githooks 가 설정된다.
+first=$(head -n1 "$1")
+pattern='^(feat|fix|docs|style|refactor|perf|test|build|ci|chore|revert)(\([a-z0-9._/-]+\))?!?: .+'
+if printf '%s' "$first" | grep -Eq "$pattern" || printf '%s' "$first" | grep -Eq '^(fixup|squash|amend)! '; then
+  exit 0
+fi
+echo "커밋 메시지에 프리픽스가 필요합니다 (Conventional Commits)." >&2
+echo "  예) feat: 화면 녹화 일시정지" >&2
+echo "      fix(sdk): 소켓 UID 검사 누락" >&2
+echo "  type: feat fix docs style refactor perf test build ci chore revert" >&2
+echo "  현재: $first" >&2
+exit 1

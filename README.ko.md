@@ -13,9 +13,29 @@ SDK 없이 adb만으로 <b>모든 앱</b>을 분석하고, Claude Code 에이전
 
 Meta의 [Flipper](https://github.com/facebook/flipper)(2025년 아카이브)를 대체하는 것을 목표로 합니다. 앱에 아무것도 심지 않아도 화면 미러링, 뷰 계층, 화면 이동 경로, 사용 라이브러리를 볼 수 있고, 내장 MCP 서버로 Claude Code 에이전트가 같은 기능을 그대로 사용합니다.
 
+## 스크린샷
+
+<p align="center"><img src="docs/images/screen-ko.jpg" alt="화면 미러링과 조작" width="100%"></p>
+
+<table>
+  <tr>
+    <td align="center" width="50%"><b>클래스 라벨이 붙은 3D 뷰 계층</b><br><img src="docs/images/inspect-3d-ko.jpg" alt="클래스 라벨이 붙은 3D 뷰 계층"></td>
+    <td align="center" width="50%"><b>자동 탐색으로 만든 화면 흐름</b><br><img src="docs/images/flow-ko.jpg" alt="자동 탐색으로 만든 화면 흐름"></td>
+  </tr>
+  <tr>
+    <td align="center"><b>APK 기반 라이브러리 탐지</b><br><img src="docs/images/libs-ko.jpg" alt="APK 기반 라이브러리 탐지"></td>
+    <td align="center"><b>앱 정보</b><br><img src="docs/images/info-ko.jpg" alt="앱 정보"></td>
+  </tr>
+</table>
+
 ## 설치
 
-[Releases](https://github.com/ESeungJun/droidlens/releases/latest)에서 운영체제에 맞는 **설치 파일 하나만** 받으세요. 나머지(`.zip`, `.mjs`, `.apk`)는 앱 내 업데이트나 부가 도구용이라 받지 않아도 됩니다.
+**macOS · Linux — 터미널 한 줄** (최신 버전으로 설치·업데이트, macOS 에서는 보안 경고 없이 바로 열립니다):
+```bash
+curl -fsSL https://raw.githubusercontent.com/ESeungJun/droidlens/master/scripts/install.sh | bash
+```
+
+또는 [Releases](https://github.com/ESeungJun/droidlens/releases/latest)에서 운영체제에 맞는 **설치 파일 하나만** 받으세요. 나머지(`.zip`, `.mjs`, `.apk`)는 앱 내 업데이트나 부가 도구용이라 받지 않아도 됩니다.
 
 | 운영체제 | 파일 |
 | --- | --- |
@@ -25,7 +45,7 @@ Meta의 [Flipper](https://github.com/facebook/flipper)(2025년 아카이브)를 
 | Windows (ARM) | `DroidLens-x.y.z-win-arm64.exe` |
 | Linux | `DroidLens-x.y.z-linux-x86_64.AppImage` |
 
-**macOS 첫 실행**: 코드 서명 인증서가 없어 "손상되었기 때문에 열 수 없습니다"가 뜰 수 있습니다. 앱을 응용 프로그램 폴더로 옮긴 뒤 터미널에서 한 번 실행하세요.
+**macOS 첫 실행 (.dmg 로 받은 경우)**: 임시 서명만 되어 있고 Apple 공증은 받지 않아 "개발자를 확인할 수 없습니다"가 뜹니다. **시스템 설정 → 개인정보 보호 및 보안**에서 DroidLens 옆의 **그래도 열기**를 한 번 누르세요. 0.5.0 이전 버전은 "손상되었기 때문에 열 수 없습니다"가 뜨므로 대신 터미널에서 한 번 실행하세요.
 ```bash
 xattr -dr com.apple.quarantine /Applications/DroidLens.app
 ```
@@ -72,8 +92,8 @@ dependencyResolutionManagement {
 
 // app/build.gradle.kts
 dependencies {
-    debugImplementation("com.github.ESeungJun.droidlens:sdk:v0.4.0")
-    releaseImplementation("com.github.ESeungJun.droidlens:sdk-noop:v0.4.0")
+    debugImplementation("com.github.ESeungJun.droidlens:sdk:v0.5.0")
+    releaseImplementation("com.github.ESeungJun.droidlens:sdk-noop:v0.5.0")
 }
 
 // 네트워크 인스펙터 (OkHttp를 쓰는 경우)
@@ -88,6 +108,7 @@ DroidLens.event("purchase_clicked", JSONObject().put("itemId", 42))
 - 초기화 코드는 필요 없습니다 (ContentProvider로 자동 시작)
 - 앱 내부 유닉스 소켓(`localabstract:droidlens_sdk_<패키지>`)으로만 통신하므로 INTERNET 권한이 필요 없고, 접속 UID를 검사해 adb·앱 자신 외의 연결(같은 기기의 다른 앱 등)은 거부합니다
 - 요청·응답 본문은 각 256KB까지, 최근 500건을 메모리에만 보관합니다
+- 민감 정보는 **기기 안에서 저장하기 전에** 가립니다 — 헤더, URL 쿼리, `Location` 리다이렉트, JSON 본문(중첩 객체·배열, 문자열 안의 JSON 포함), GraphQL 인자, 폼·multipart·XML 본문, 오류 메시지, 커스텀 이벤트. 키는 대소문자·구분자와 상관없이 맞추고, 흔한 단어는 이름에 들어 있기만 해도 가립니다(`newPassword`, `fcmToken`, `X-Refresh-Token`). `jwt`·`otp`·`pin` 같은 짧은 이름은 정확히 같을 때만 가립니다. `DroidLens.redactHeaders("X-Session")`, `DroidLens.redactKeys("phone")` 로 추가하고, `DroidLens.clearDefaultRedaction()` 으로 기본 규칙을 끌 수 있습니다. 앱이 직접 압축을 요청한 본문(`Content-Encoding`)은 기록하지 않습니다
 - DB 쓰기 SQL은 명시적으로 허용했을 때만 실행됩니다
 
 ## Claude Code 연동
@@ -206,6 +227,22 @@ agents/           Claude Code 에이전트 정의
 | `feature/<이름>` | 기능·수정 작업. `develop`에서 따서 PR로 다시 합침 |
 | `release/<버전>` | 릴리스 준비(버전 올리기·노트). `develop`에서 따서 `master`·`develop`에 합친 뒤 태그 |
 | `hotfix/<버전>` | 긴급 수정. `master`에서 따서 `master`·`develop`에 합친 뒤 태그 |
+
+### 커밋 메시지
+
+모든 커밋과 PR 제목(머지 커밋 제목이 됨)은 [Conventional Commits](https://www.conventionalcommits.org) 형식을 씁니다: `<type>(<scope>)?: <설명>`.
+
+| type | 용도 |
+| --- | --- |
+| `feat` | 새 기능 |
+| `fix` | 버그 수정 |
+| `docs` | 문서만 변경 |
+| `refactor` / `perf` / `style` | 동작 변화 없는 코드 개선 / 성능 / 서식 |
+| `test` | 테스트 |
+| `build` / `ci` | 패키징·의존성 / GitHub Actions |
+| `chore` | 버전, 머지, 기타 관리 |
+
+`pnpm install` 하면 프리픽스 없는 커밋을 막는 `commit-msg` 훅(`.githooks/`)이 설치되고, CI가 push된 커밋과 PR 제목을 검사합니다.
 
 `v*` 태그를 푸시하면 GitHub Actions가 macOS(arm64/x64)·Windows(x64/arm64)·Linux 설치 파일을 빌드해 Releases에 올립니다. 로드맵은 [docs/ROADMAP.md](docs/ROADMAP.md).
 

@@ -158,6 +158,7 @@ handle('launch', (s: string, pkg: string, restart?: boolean) =>
   (restart ? dl.stopApp(dev(s), pkg) : Promise.resolve()).then(() => dl.launchApp(dev(s), pkg)),
 );
 handle('stop', (s: string, pkg: string) => dl.stopApp(dev(s), pkg));
+handle('bringToFront', (s: string, pkg: string) => dl.bringToFront(dev(s), pkg));
 handle('deeplink', (s: string, uri: string, pkg?: string) => dl.openDeepLink(dev(s), uri, pkg));
 handle('analyzeLibraries', async (s: string, pkg: string) => {
   send('progress', { kind: 'libs', message: 'APK 내려받는 중…' });
@@ -215,20 +216,29 @@ handle('graphRecordHere', async (s: string, pkg: string) => {
   return n.id;
 });
 let exploreAbort: AbortController | null = null;
-handle('explore', async (s: string, pkg: string, maxSteps: number, maxDepth: number) => {
+handle('explore', async (s: string, pkg: string, maxDepth: number, fromCurrent?: boolean) => {
   exploreAbort?.abort();
-  exploreAbort = new AbortController();
-  const r = await dl.explore(dev(s), {
-    packageName: pkg,
-    maxSteps,
-    maxDepth,
-    signal: exploreAbort.signal,
-    onProgress: (e) => send('progress', { kind: 'explore', ...e }),
-  });
-  exploreAbort = null;
-  return { steps: r.steps, skipped: r.skipped, errors: r.errors };
+  const ctrl = new AbortController();
+  exploreAbort = ctrl;
+  try {
+    const r = await dl.explore(dev(s), {
+      packageName: pkg,
+      maxDepth,
+      relaunch: !fromCurrent,
+      signal: ctrl.signal,
+      onProgress: (e) => send('progress', { kind: 'explore', ...e }),
+    });
+    return { steps: r.steps, limited: r.limited, skipped: r.skipped, errors: r.errors };
+  } finally {
+    // 오류로 끝나도 '탐색 중' 상태가 남지 않게. 나중에 시작한 탐색의 것은 지우지 않는다
+    if (exploreAbort === ctrl) exploreAbort = null;
+  }
 });
 handle('exploreStop', async () => exploreAbort?.abort());
+handle('graphReset', async (pkg: string) => {
+  if (exploreAbort) throw new Error('탐색 중에는 그래프를 초기화할 수 없습니다');
+  await dl.ScreenGraph.reset(pkg);
+});
 
 // ---------- 앱 SDK ----------
 const SDK_METHODS = ['info', 'network', 'networkDetail', 'clearNetwork', 'prefs', 'setPref', 'removePref', 'databases', 'query', 'events'] as const;
@@ -327,6 +337,20 @@ handle('scenarios', async () => {
   }
   return out;
 });
+handle('scenarioDelete', async (ids: string[]) => {
+  if (!Array.isArray(ids)) throw new Error('잘못된 요청입니다');
+  const fs = await import('node:fs/promises');
+  const dir = await dl.ensureDir('scenarios');
+  for (const id of ids) {
+    // 시나리오 폴더 바로 아래의 기록만 지운다 (경로 조작 방지)
+    if (typeof id !== 'string' || !id || id.includes('/') || id.includes('\\') || id.startsWith('.')) throw new Error(`잘못된 시나리오 id: ${id}`);
+    // 에이전트가 아직 기록 중인 리포트를 지우면 다음 단계 저장이 실패한다.
+    // 끝나지 않았어도 1시간이 지났으면 에이전트가 중간에 멈춘 것으로 보고 지울 수 있게 한다
+    const d = await dl.readJson<dl.ScenarioData>(join(dir, id, 'scenario.json'));
+    if (d && !d.finishedAt && Date.now() - d.startedAt < 60 * 60 * 1000) throw new Error('진행 중인 시나리오는 지울 수 없습니다');
+    await fs.rm(join(dir, id), { recursive: true, force: true });
+  }
+});
 handle('scenarioImage', async (dir: string, file: string) =>
   `data:image/png;base64,${(await readFile(insideHome(join(dir, basename(file))))).toString('base64')}`,
 );
@@ -359,6 +383,7 @@ async function runClaude(args: string[]): Promise<string> {
 }
 
 handle('appVersion', async () => currentVersion());
+handle('platform', async () => ({ platform: process.platform, arch: process.arch }));
 handle('updateCheck', () => checkForUpdate());
 handle('updateInstall', async (info: UpdateInfo) => {
   // 렌더러가 넘긴 정보 대신 다시 확인한 결과로 설치한다 (다운로드 URL을 렌더러에서 받지 않음)
