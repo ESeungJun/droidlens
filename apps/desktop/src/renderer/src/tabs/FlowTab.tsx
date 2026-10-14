@@ -55,6 +55,9 @@ const ScreenCard = memo(({ data }: NodeProps<Node<SNodeData>>) => {
       </div>
       <div className="s">{data.screen.signature} · {t('{n}회', { n: data.screen.visits })}</div>
       <Handle type="source" position={Position.Right} />
+      {/* 되돌아가는 연결은 카드 아래로 나가고 들어와 앞으로 가는 연결과 겹치지 않는다 */}
+      <Handle type="source" id="back-out" position={Position.Bottom} />
+      <Handle type="target" id="back-in" position={Position.Bottom} />
     </div>
   );
 });
@@ -74,11 +77,12 @@ const startOf = (g: GraphData) => [...g.nodes].sort((a, b) => a.firstSeen - b.fi
  * 다음 단계로 가는 연결만 배치에 써서 '홈으로 돌아가기' 같은 되돌아가는 연결이 시작 화면을 밀어내지 않게 한다.
  * 같은 열 안의 순서는 dagre 가 선이 덜 엇갈리게 정한다.
  */
-function layout(g: GraphData): Map<string, Pos> {
-  const pos = new Map<string, Pos>();
+/** 시작 화면에서 연결선을 따라 몇 단계 떨어졌는지 (BFS) */
+function levels(g: GraphData): Map<string, number> {
   const start = startOf(g);
-  if (!start) return pos;
-  const level = new Map([[start, 0]]);
+  const level = new Map<string, number>();
+  if (!start) return level;
+  level.set(start, 0);
   const q = [start];
   while (q.length) {
     const cur = q.shift()!;
@@ -89,6 +93,13 @@ function layout(g: GraphData): Map<string, Pos> {
       }
     }
   }
+  return level;
+}
+
+function layout(g: GraphData): Map<string, Pos> {
+  const pos = new Map<string, Pos>();
+  if (!startOf(g)) return pos;
+  const level = levels(g);
   const d = new Graph();
   d.setGraph({ rankdir: 'LR', nodesep: 40, ranksep: 110, marginx: 20, marginy: 20 });
   d.setDefaultEdgeLabel(() => ({}));
@@ -188,17 +199,28 @@ export function FlowTab() {
 
   const edges = useMemo<Edge[]>(() => {
     if (!g) return [];
+    const level = levels(g);
     return g.edges
       .filter((e) => e.from !== e.to)
-      .map((e) => ({
-        id: e.id,
-        source: e.from,
-        target: e.to,
-        label: e.action.type === 'tap' ? (e.action.label ?? 'tap') : e.action.type === 'key' ? e.action.key : e.action.type,
-        markerEnd: { type: MarkerType.ArrowClosed },
-        style: { stroke: sel && (e.from === sel || e.to === sel) ? '#7dd3a8' : '#4a505c' },
-        animated: !!sel && e.from === sel,
-      }));
+      .map((e) => {
+        const name = e.action.type === 'tap' ? (e.action.label ?? 'tap') : e.action.type === 'key' ? e.action.key : e.action.type;
+        // 시작 화면 쪽으로 되돌아가는 연결은 앞으로 가는 연결과 겹치지 않게 아래로 돌아가는 점선으로
+        const back = (level.get(e.to) ?? Infinity) <= (level.get(e.from) ?? Infinity);
+        const on = sel && (e.from === sel || e.to === sel);
+        return {
+          id: e.id,
+          source: e.from,
+          target: e.to,
+          type: back ? 'smoothstep' : 'default',
+          sourceHandle: back ? 'back-out' : undefined,
+          targetHandle: back ? 'back-in' : undefined,
+          pathOptions: back ? { offset: 36, borderRadius: 16 } : undefined,
+          label: back ? `↩ ${name}` : name,
+          markerEnd: { type: MarkerType.ArrowClosed },
+          style: { stroke: on ? '#7dd3a8' : back ? '#6b7280' : '#4a505c', strokeDasharray: back ? '5 4' : undefined },
+          animated: !!sel && e.from === sel,
+        };
+      });
   }, [g, sel]);
 
   if (!pkg) return <NeedPkg />;
