@@ -1,4 +1,5 @@
 export const common: Record<string, string> = {
+  '다시 확인': 'Check again',
   '폰이나 에뮬레이터가 연결되면 자동으로 인식합니다.': 'A phone or emulator is detected automatically once connected.',
   '기기 연결 도우미': 'Device setup',
   운영체제: 'OS',

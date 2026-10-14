@@ -7,36 +7,58 @@ import { DeviceSetup } from '../DeviceSetup';
 
 const REPO = 'https://github.com/ESeungJun/droidlens';
 
+// 앱 실행 중 한 번 조회한 결과. 탭을 다시 열 때마다 adb·Claude Code 를 새로 찾지 않고, 항목별 ↻ 로만 다시 조회한다
+const cache: { adb?: AdbStatus; integ?: Integration; version?: string; home?: string } = {};
+
 export function SettingsTab({ onAdbChange, updater }: { onAdbChange?(s: AdbStatus): void; updater: ReturnType<typeof useUpdater> }) {
   const { run, toast } = useApp();
   const { t, setting, setSetting } = useI18n();
-  const [adb, setAdb] = useState<AdbStatus | null>(null);
+  const [adb, setAdb] = useState<AdbStatus | null>(cache.adb ?? null);
   const [adbPath, setAdbPath] = useState('');
-  const [integ, setInteg] = useState<Integration | null>(null);
-  const [version, setVersion] = useState('');
+  const [integ, setInteg] = useState<Integration | null>(cache.integ ?? null);
+  const [version, setVersion] = useState(cache.version ?? '');
   const [busy, setBusy] = useState('');
-  const [home, setHome] = useState('');
+  const [home, setHome] = useState(cache.home ?? '');
+  const [checking, setChecking] = useState<{ adb?: boolean; integ?: boolean }>({});
 
-  const load = async () => {
-    const [a, i, v, h] = await Promise.all([run(api.adbStatus()), run(api.integration()), run(api.appVersion()), run(api.home())]);
+  const loadAdb = async () => {
+    setChecking((c) => ({ ...c, adb: true }));
+    const a = await run(api.adbStatus());
+    setChecking((c) => ({ ...c, adb: false }));
     if (a) {
+      cache.adb = a;
       setAdb(a);
       onAdbChange?.(a);
     }
-    setInteg(i ?? null);
-    setVersion(v ?? '');
-    setHome(h ?? '');
+  };
+  const loadInteg = async () => {
+    setChecking((c) => ({ ...c, integ: true }));
+    const i = await run(api.integration());
+    setChecking((c) => ({ ...c, integ: false }));
+    if (i) {
+      cache.integ = i;
+      setInteg(i);
+    }
   };
   useEffect(() => {
-    load();
+    if (!cache.adb) loadAdb();
+    if (!cache.integ) loadInteg();
+    if (cache.version === undefined) api.appVersion().then((v) => setVersion((cache.version = v))).catch(() => undefined);
+    if (cache.home === undefined) api.home().then((h) => setHome((cache.home = h))).catch(() => undefined);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  const refresh = (key: 'adb' | 'integ', onClick: () => void) => (
+    <button className="btn sm" style={{ float: 'right', marginTop: -4 }} disabled={checking[key]} onClick={onClick} title={t('다시 확인')}>
+      {checking[key] ? t('확인 중…') : '↻'}
+    </button>
+  );
 
   const saveAdb = async () => {
     const r = await run(api.setAdbPath(adbPath.trim()));
     if (r) {
       toast(r.ok ? t('adb {version} 연결됨', { version: r.version ?? '' }) : t('adb 실행 실패: {error}', { error: r.error ?? '' }), !r.ok);
-      load();
+      loadAdb();
     }
   };
 
@@ -45,7 +67,7 @@ export function SettingsTab({ onAdbChange, updater }: { onAdbChange?(s: AdbStatu
     const r = await run(api.registerMcp());
     setBusy('');
     if (r !== undefined) toast('Claude Code에 droidlens MCP를 등록했습니다. Claude Code를 재시작하세요.');
-    load();
+    loadInteg();
   };
 
   const agents = async () => {
@@ -53,14 +75,14 @@ export function SettingsTab({ onAdbChange, updater }: { onAdbChange?(s: AdbStatu
     const r = await run(api.installAgents());
     setBusy('');
     if (r) toast(t('에이전트 {n}개 설치: {list}', { n: r.length, list: r.join(', ') }));
-    load();
+    loadInteg();
   };
 
   return (
     <div className="scroll">
       <div className="cards" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(420px, 1fr))' }}>
         <div className="card">
-          <h5>adb</h5>
+          <h5>adb {refresh('adb', loadAdb)}</h5>
           {!adb ? (
             <p className="muted">{t('확인 중…')}</p>
           ) : adb.ok ? (
@@ -93,7 +115,7 @@ Linux   sudo apt install adb`}
         </div>
 
         <div className="card">
-          <h5>{t('Claude Code 연동')}</h5>
+          <h5>{t('Claude Code 연동')} {refresh('integ', loadInteg)}</h5>
           <p className="muted" style={{ fontSize: 12, marginTop: 0 }}>
             {t('DroidLens MCP 서버를 Claude Code에 등록하면, 에이전트가 기기를 직접 조작하고 시나리오를 검증할 수 있습니다. 별도 Node 설치 없이 이 앱에 내장된 런타임으로 동작합니다.')}
           </p>
