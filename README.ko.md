@@ -30,7 +30,12 @@ Meta의 [Flipper](https://github.com/facebook/flipper)(2025년 아카이브)를 
 
 ## 설치
 
-[Releases](https://github.com/ESeungJun/droidlens/releases/latest)에서 운영체제에 맞는 **설치 파일 하나만** 받으세요. 나머지(`.zip`, `.mjs`, `.apk`)는 앱 내 업데이트나 부가 도구용이라 받지 않아도 됩니다.
+**macOS · Linux — 터미널 한 줄** (최신 버전으로 설치·업데이트, macOS 에서는 보안 경고 없이 바로 열립니다):
+```bash
+curl -fsSL https://raw.githubusercontent.com/ESeungJun/droidlens/master/scripts/install.sh | bash
+```
+
+또는 [Releases](https://github.com/ESeungJun/droidlens/releases/latest)에서 운영체제에 맞는 **설치 파일 하나만** 받으세요. 나머지(`.zip`, `.mjs`, `.apk`)는 앱 내 업데이트나 부가 도구용이라 받지 않아도 됩니다.
 
 | 운영체제 | 파일 |
 | --- | --- |
@@ -40,7 +45,7 @@ Meta의 [Flipper](https://github.com/facebook/flipper)(2025년 아카이브)를 
 | Windows (ARM) | `DroidLens-x.y.z-win-arm64.exe` |
 | Linux | `DroidLens-x.y.z-linux-x86_64.AppImage` |
 
-**macOS 첫 실행**: 코드 서명 인증서가 없어 "손상되었기 때문에 열 수 없습니다"가 뜰 수 있습니다. 앱을 응용 프로그램 폴더로 옮긴 뒤 터미널에서 한 번 실행하세요.
+**macOS 첫 실행 (.dmg 로 받은 경우)**: 임시 서명만 되어 있고 Apple 공증은 받지 않아 "개발자를 확인할 수 없습니다"가 뜹니다. **시스템 설정 → 개인정보 보호 및 보안**에서 DroidLens 옆의 **그래도 열기**를 한 번 누르세요. 0.5.0 이전 버전은 "손상되었기 때문에 열 수 없습니다"가 뜨므로 대신 터미널에서 한 번 실행하세요.
 ```bash
 xattr -dr com.apple.quarantine /Applications/DroidLens.app
 ```

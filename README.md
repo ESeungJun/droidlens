@@ -30,7 +30,12 @@ DroidLens aims to replace Meta's [Flipper](https://github.com/facebook/flipper) 
 
 ## Installation
 
-Download **just one installer** for your OS from [Releases](https://github.com/ESeungJun/droidlens/releases/latest). The other files (`.zip`, `.mjs`, `.apk`) are used by in-app updates or optional tools — you don't need them.
+**macOS · Linux — one line in Terminal** (installs or updates to the latest version; on macOS it opens without any Gatekeeper warning):
+```bash
+curl -fsSL https://raw.githubusercontent.com/ESeungJun/droidlens/master/scripts/install.sh | bash
+```
+
+Or download **just one installer** for your OS from [Releases](https://github.com/ESeungJun/droidlens/releases/latest). The other files (`.zip`, `.mjs`, `.apk`) are used by in-app updates or optional tools — you don't need them.
 
 | OS | File |
 | --- | --- |
@@ -40,7 +45,7 @@ Download **just one installer** for your OS from [Releases](https://github.com/E
 | Windows (ARM) | `DroidLens-x.y.z-win-arm64.exe` |
 | Linux | `DroidLens-x.y.z-linux-x86_64.AppImage` |
 
-**First launch on macOS**: the app isn't code-signed, so you may see "DroidLens is damaged and can't be opened". Move the app to Applications and run this once in Terminal:
+**First launch on macOS (downloaded .dmg)**: the app is ad-hoc signed but not notarized by Apple, so macOS says it can't verify the developer. Open **System Settings → Privacy & Security** and click **Open Anyway** next to DroidLens (once). On versions before 0.5.0 the message was "damaged"; run this once instead:
 ```bash
 xattr -dr com.apple.quarantine /Applications/DroidLens.app
 ```
