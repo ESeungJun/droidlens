@@ -20,6 +20,50 @@ function nodeAt(root: ViewNode, x: number, y: number): ViewNode | undefined {
 
 const short = (c: string) => c.split('.').pop() ?? c;
 const rid = (r: string) => r.split(':id/')[1] ?? r;
+/** 드래그로 바꾼 패널 너비처럼 다음 실행에도 유지할 숫자 */
+function useStoredNumber(key: string, initial: number): [number, (v: number) => void] {
+  const [v, setV] = useState(() => {
+    try {
+      const n = Number(localStorage.getItem(key));
+      return n > 0 ? n : initial;
+    } catch {
+      return initial;
+    }
+  });
+  const set = (n: number) => {
+    setV(n);
+    try {
+      localStorage.setItem(key, String(Math.round(n)));
+    } catch {
+      /* 이번 실행 동안만 유지 */
+    }
+  };
+  return [v, set];
+}
+
+/** 패널 사이 경계선. 드래그해 옆 패널 너비를 바꾼다 (reverse: 오른쪽 패널) */
+function Splitter({ width, onResize, reverse }: { width: number; onResize(w: number): void; reverse?: boolean }) {
+  const [active, setActive] = useState(false);
+  return (
+    <div
+      className={`splitter ${active ? 'active' : ''}`}
+      onMouseDown={(e) => {
+        e.preventDefault();
+        const x0 = e.clientX;
+        setActive(true);
+        const move = (ev: MouseEvent) => onResize(Math.max(180, Math.min(900, width + (reverse ? x0 - ev.clientX : ev.clientX - x0))));
+        const up = () => {
+          setActive(false);
+          window.removeEventListener('mousemove', move);
+          window.removeEventListener('mouseup', up);
+        };
+        window.addEventListener('mousemove', move);
+        window.addEventListener('mouseup', up);
+      }}
+    />
+  );
+}
+
 /** 접고 펼 수 있는 패널의 열림 상태. 다음 실행에도 유지되도록 저장한다 */
 function usePanel(key: string): [boolean, (open: boolean) => void] {
   const [open, setOpen] = useState(() => {
@@ -57,11 +101,13 @@ export function InspectorTab() {
   const [mode, setMode] = useState<'2d' | '3d'>('2d');
   const [treeOpen, toggleTree] = usePanel('droidlens.inspector.tree');
   const [propsOpen, toggleProps] = usePanel('droidlens.inspector.props');
-  // 접힌 패널은 28px 막대만 남기고, 남는 너비는 스크린샷·3D 가 차지
+  const [treeW, setTreeW] = useStoredNumber('droidlens.inspector.treeW', 340);
+  const [propsW, setPropsW] = useStoredNumber('droidlens.inspector.propsW', 320);
+  // [트리 | 경계 | 화면 | 경계 | 속성]. 접힌 패널은 28px 막대만 남고, 남는 너비는 가운데 화면이 차지
   const cols = [
-    mode === '3d' || !treeOpen ? '1fr' : 'minmax(260px, 34%)',
-    treeOpen ? (mode === '3d' ? 'minmax(260px, 30%)' : '1fr') : '28px',
-    propsOpen ? (mode === '3d' ? '300px' : '320px') : '28px',
+    treeOpen ? `${treeW}px 5px` : '28px',
+    'minmax(0, 1fr)',
+    propsOpen ? `5px ${propsW}px` : '28px',
   ].join(' ');
 
   const load = async () => {
@@ -115,44 +161,50 @@ export function InspectorTab() {
         <div className="empty">{loading ? t('뷰 계층을 가져오는 중…') : t('캡처 버튼을 눌러 뷰 계층을 가져오세요')}</div>
       ) : (
         <div className={`inspector ${mode === '3d' ? 'is-3d' : ''}`} style={{ gridTemplateColumns: cols }}>
+          {!treeOpen ? (
+            <button className="panel-rail left" onClick={() => toggleTree(true)} title={t('트리 패널 펴기')}>
+              ▸ <span>{t('트리')}</span>
+            </button>
+          ) : (
+            <>
+              <div className="panel-col">
+                <button className="panel-toggle" onClick={() => toggleTree(false)} title={t('트리 패널 접기')}>◂</button>
+                <div className="tree">
+                  <TreeRow
+                    n={snap.hierarchy.root}
+                    sel={sel}
+                    hover={hover}
+                    depthDots={mode === '3d'}
+                    collapsed={collapsed}
+                    matchIds={matchIds}
+                    onToggle={(id) =>
+                      setCollapsed((c) => {
+                        const nx = new Set(c);
+                        nx.has(id) ? nx.delete(id) : nx.add(id);
+                        return nx;
+                      })
+                    }
+                    onSel={setSel}
+                    onHover={setHover}
+                  />
+                </div>
+              </div>
+              <Splitter width={treeW} onResize={setTreeW} />
+            </>
+          )}
           {mode === '3d' ? (
             <ThreeD snap={snap} sel={sel} setSel={setSel} hover={hover} onHover={setHover} />
           ) : (
             <ShotPane snap={snap} sel={sel} hover={hover} onPick={setSel} onHover={setHover} />
           )}
-          {!treeOpen ? (
-            <button className="panel-rail" onClick={() => toggleTree(true)} title={t('트리 패널 펴기')}>
-              ◂ <span>{t('트리')}</span>
-            </button>
-          ) : (
-            <div className="panel-col">
-              <button className="panel-toggle" onClick={() => toggleTree(false)} title={t('트리 패널 접기')}>▸</button>
-              <div className="tree">
-                <TreeRow
-                  n={snap.hierarchy.root}
-                  sel={sel}
-                  hover={hover}
-                  depthDots={mode === '3d'}
-                  collapsed={collapsed}
-                  matchIds={matchIds}
-                  onToggle={(id) =>
-                    setCollapsed((c) => {
-                      const nx = new Set(c);
-                      nx.has(id) ? nx.delete(id) : nx.add(id);
-                      return nx;
-                    })
-                  }
-                  onSel={setSel}
-                  onHover={setHover}
-                />
-              </div>
-            </div>
-          )}
           {propsOpen ? (
-            <div className="panel-col">
-              <button className="panel-toggle" onClick={() => toggleProps(false)} title={t('속성 패널 접기')}>▸</button>
-              <Props snap={snap} n={sel} />
-            </div>
+            <>
+              <Splitter width={propsW} onResize={setPropsW} reverse />
+              <div className="panel-col">
+                <button className="panel-toggle" onClick={() => toggleProps(false)} title={t('속성 패널 접기')}>▸</button>
+                <Props snap={snap} n={sel} />
+              </div>
+            </>
           ) : (
             <button className="panel-rail" onClick={() => toggleProps(true)} title={t('속성 패널 펴기')}>
               ◂ <span>{t('속성')}</span>
@@ -173,6 +225,14 @@ function ShotPane(p: {
 }) {
   const ref = useRef<HTMLImageElement>(null);
   const [scale, setScale] = useState(0);
+  // 패널 너비를 바꾸면 이미지 크기가 바뀌므로 강조 상자 비율을 다시 계산
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const ro = new ResizeObserver(() => el.naturalWidth && setScale(el.clientWidth / el.naturalWidth));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
   const box = (n: ViewNode, cls: string) => {
     const [l, t, r, b] = n.bounds;
     return <div className={`hl ${cls}`} style={{ left: l * scale, top: t * scale, width: (r - l) * scale, height: (b - t) * scale }} />;
@@ -389,7 +449,7 @@ function ThreeD({ snap, sel, setSel, hover, onHover }: {
   );
 
   return (
-    <div style={{ position: 'relative', height: '100%', minWidth: 0, overflow: 'hidden', borderRight: '1px solid var(--line)' }}>
+    <div style={{ position: 'relative', height: '100%', minWidth: 0, overflow: 'hidden' }}>
       <div style={{ position: 'absolute', zIndex: 2, left: 12, right: 12, top: 10, display: 'flex', flexWrap: 'wrap', gap: '6px 12px', alignItems: 'center' }} className="muted">
         <label>{t('간격')} <input type="range" min={0} max={80} value={gap} onChange={(e) => setGap(+e.target.value)} /></label>
         <label>{t('확대')} <input type="range" min={0.5} max={2} step={0.05} value={zoom} onChange={(e) => setZoom(+e.target.value)} /></label>
