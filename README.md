@@ -207,6 +207,22 @@ agents/           Claude Code agent definitions
 | `release/<version>` | Release prep (version bump, notes) from `develop`; merged into `master` and `develop`, then tagged |
 | `hotfix/<version>` | Urgent fixes from `master`; merged into `master` and `develop`, then tagged |
 
+### Commit messages
+
+Every commit (and PR title, which becomes the merge commit title) uses [Conventional Commits](https://www.conventionalcommits.org): `<type>(<scope>)?: <description>`.
+
+| Type | Use for |
+| --- | --- |
+| `feat` | New feature |
+| `fix` | Bug fix |
+| `docs` | Documentation only |
+| `refactor` / `perf` / `style` | Code change without behavior change / performance / formatting |
+| `test` | Tests |
+| `build` / `ci` | Packaging, dependencies / GitHub Actions |
+| `chore` | Versions, merges, other maintenance |
+
+`pnpm install` installs a `commit-msg` hook (`.githooks/`) that rejects commits without a prefix, and CI checks pushed commits and PR titles.
+
 Pushing a `v*` tag makes GitHub Actions build installers for macOS (arm64/x64), Windows (x64/arm64), and Linux and upload them to Releases. See the roadmap in [docs/ROADMAP.md](docs/ROADMAP.md).
 
 ## License
