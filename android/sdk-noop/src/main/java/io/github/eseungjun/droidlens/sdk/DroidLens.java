@@ -17,4 +17,10 @@ public final class DroidLens {
     public static void event(String name) {}
 
     public static void event(String name, JSONObject data) {}
+
+    public static void redactHeaders(String... names) {}
+
+    public static void redactKeys(String... keys) {}
+
+    public static void clearDefaultRedaction() {}
 }
