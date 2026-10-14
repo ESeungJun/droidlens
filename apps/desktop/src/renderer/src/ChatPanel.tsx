@@ -23,7 +23,13 @@ export function ChatPanel({ onClose }: { onClose(): void }) {
   const [agent, setAgent] = useState<(typeof AGENTS)[number]['id']>('droidlens-verifier');
   const [items, setItems] = useState<Item[]>([]);
   const [input, setInput] = useState('');
-  const [busy, setBusy] = useState(false);
+  const [busy, setBusyState] = useState(false);
+  // 확인창처럼 나중에 실행되는 콜백이 오래된 busy 값을 쓰지 않게 ref 로도 들고 있는다
+  const busyRef = useRef(false);
+  const setBusy = (v: boolean) => {
+    busyRef.current = v;
+    setBusyState(v);
+  };
   const [sessionId, setSessionId] = useState<string | undefined>();
   const [claude, setClaude] = useState<{ version?: string; error?: string } | null>(null);
   const bottom = useRef<HTMLDivElement>(null);
@@ -79,6 +85,11 @@ export function ChatPanel({ onClose }: { onClose(): void }) {
       await api.chatSend({ message, agent, sessionId, serial: serial ?? undefined, packageName: pkg ?? undefined });
     } catch (e) {
       setBusy(false);
+      // 지운 대화의 실행이 시작도 못 하고 실패했으면 done 이 오지 않으니 여기서 정리한다
+      if (stopped.current) {
+        stopped.current = null;
+        return;
+      }
       setItems((cur) => [...cur, { kind: 'note', text: (e as Error).message, error: true }]);
     }
   };
@@ -89,7 +100,7 @@ export function ChatPanel({ onClose }: { onClose(): void }) {
   };
 
   const reset = () => {
-    if (busy) {
+    if (busyRef.current) {
       stopped.current = 'reset';
       api.chatStop();
     }
@@ -100,7 +111,7 @@ export function ChatPanel({ onClose }: { onClose(): void }) {
   };
 
   /** 작업 중이면 진행 중인 작업을 버려도 되는지 먼저 묻는다 */
-  const guard = (action: () => void) => (busy ? setConfirm(() => action) : action());
+  const guard = (action: () => void) => (busyRef.current ? setConfirm(() => action) : action());
 
   const hint = t(AGENTS.find((a) => a.id === agent)!.hint);
 

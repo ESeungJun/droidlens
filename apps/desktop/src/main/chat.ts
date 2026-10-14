@@ -81,8 +81,11 @@ export interface ChatRequest {
 }
 
 let current: ChildProcess | null = null;
+// 실행 세대. claude 를 찾고 에이전트를 불러오는 동안(프로세스가 아직 없을 때) 누른 중지도 반영하려고 쓴다
+let generation = 0;
 
 export function stopChat(): void {
+  generation++;
   current?.kill('SIGINT');
   current = null;
 }
@@ -93,9 +96,15 @@ export async function sendChat(
   emit: (e: ChatEvent) => void,
 ): Promise<void> {
   stopChat();
+  const mine = ++generation;
   const claude = await resolveClaude();
   const agents = await loadAgents(ctx.agentsDir);
   if (!agents[req.agent]) throw new Error(`에이전트를 찾지 못했습니다: ${req.agent}`);
+  // 준비하는 사이 중지됐으면 프로세스를 띄우지 않는다
+  if (mine !== generation) {
+    emit({ kind: 'done', sessionId: req.sessionId });
+    return;
+  }
 
   const mcpConfig = {
     mcpServers: {
