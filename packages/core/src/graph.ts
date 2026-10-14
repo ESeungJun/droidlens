@@ -403,7 +403,7 @@ export interface ExploreOptions {
   /** 누르는 횟수의 안전 상한 (기본 500). 탐색 범위는 maxDepth 로 정하고 이건 끝없이 도는 것만 막는다 */
   maxSteps?: number;
   maxDepth?: number;
-  /** true면 앱을 재시작하고 시작 (기본 true) */
+  /** true면 앱을 재시작해 첫 화면부터, false면 지금 화면부터 탐색 (기본 true) */
   relaunch?: boolean;
   /** 위험 라벨 외에 추가로 피할 라벨 정규식 */
   avoid?: RegExp;
@@ -436,11 +436,15 @@ export async function explore(dev: DeviceAdb, opts: ExploreOptions): Promise<Exp
   let steps = 0;
   const log = (message: string, screen?: string) => opts.onProgress?.({ step: steps, message, screen });
 
-  let snap = opts.relaunch !== false ? await launchAndSettle(dev, pkg, { restart: true }) : await waitForSettle(dev);
+  const fromCurrent = opts.relaunch === false;
+  let snap = fromCurrent ? await waitForSettle(dev) : await launchAndSettle(dev, pkg, { restart: true });
+  if (fromCurrent && snap.screen.packageName !== pkg) throw new Error(`지금 화면이 ${pkg} 앱이 아닙니다. 앱을 열어 둔 상태에서 시작하세요`);
   const root = await graph.addSnapshot(snap, dev);
   log(`시작 화면: ${root.label}`, root.id);
 
   const replay = async (path: GraphAction[]): Promise<Snapshot> => {
+    // 현재 화면부터 시작했으면 앱을 재시작해 같은 경로로 돌아갈 수 없다
+    if (fromCurrent) throw new Error('현재 화면부터 시작한 탐색이라 경로를 다시 따라갈 수 없습니다');
     let s = await launchAndSettle(dev, pkg, { restart: true });
     for (const a of path) {
       if (a.type === 'tap') {
@@ -462,8 +466,15 @@ export async function explore(dev: DeviceAdb, opts: ExploreOptions): Promise<Exp
       if (screenId(snap) === target) return;
       if (snap.screen.packageName && snap.screen.packageName !== pkg && i === 1) break;
     }
+    if (fromCurrent) {
+      log('BACK 으로 돌아오지 못했습니다 (현재 화면 기준 탐색이라 이 갈래는 멈춤)');
+      return;
+    }
     log('BACK 복귀 실패 → 재실행 후 경로 재생');
-    snap = await replay(path);
+    snap = await replay(path).catch((e: Error) => {
+      log(e.message);
+      return snap;
+    });
   };
 
   const visit = async (path: GraphAction[], depth: number): Promise<void> => {
