@@ -250,14 +250,18 @@ export function structureSignature(root: ViewNode, maxDepth = 6): string {
 }
 
 /**
- * 화면 그래프에서 '같은 화면'을 판단하는 시그니처. structureSignature 와 같되 스크롤 영역의 내용은 빼서,
- * 피드·목록의 항목 종류가 바뀌어도(배너가 끼거나 로딩 중이거나) 같은 화면으로 본다.
+ * 화면 그래프에서 '같은 화면'을 판단하는 시그니처. structureSignature 와 같되
+ * - 스크롤 영역의 내용은 빼서 피드·목록의 항목 종류가 바뀌어도(배너가 끼거나 로딩 중이거나) 같은 화면으로 보고
+ * - 페이저(ViewPager·ViewPager2)의 페이지는 화면 자체가 바뀌는 것이라 스크롤 영역이어도 내용을 남기고
+ * - 선택 상태(하단 탭·탭 레이아웃의 고른 항목)를 넣어, 틀이 같은 탭 화면들이 하나로 합쳐지지 않게 한다
  */
 export function screenSignature(root: ViewNode, maxDepth = 6): string {
-  const skel = (n: ViewNode): string => {
+  const isPager = (n: ViewNode) => /Pager/.test(n.className);
+  const skel = (n: ViewNode, inPager = false): string => {
     if (n.depth > maxDepth) return '';
-    const kids = n.scrollable ? '' : [...new Set(n.children.map(skel))].join(',');
-    return `${n.className.split('.').pop()}#${n.resourceId.split(':id/')[1] ?? ''}(${kids})`;
+    const collapse = n.scrollable && !isPager(n) && !inPager;
+    const kids = collapse ? '' : [...new Set(n.children.map((c) => skel(c, isPager(n))))].join(',');
+    return `${n.className.split('.').pop()}#${n.resourceId.split(':id/')[1] ?? ''}${n.selected ? '*' : ''}(${kids})`;
   };
   return createHash('sha1').update(skel(root)).digest('hex').slice(0, 12);
 }

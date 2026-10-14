@@ -1,4 +1,6 @@
 export const core: Record<string, string> = {
+  '진행 중인 시나리오는 지울 수 없습니다': "Can't delete a scenario that is still running",
+  '잘못된 요청입니다': 'Invalid request',
   // 앱 정보
   '실행': 'Run',
   '재시작': 'Restart',
