@@ -11,7 +11,9 @@ import { SettingsTab } from './tabs/SettingsTab';
 import { NetworkTab } from './tabs/NetworkTab';
 import { AppDataTab } from './tabs/AppDataTab';
 import { ChatPanel } from './ChatPanel';
+import { DeviceSetup } from './DeviceSetup';
 import { UpdateButton, useUpdater } from './Updater';
+import { useT } from './i18n';
 
 interface Ctx {
   serial: string | null;
@@ -43,12 +45,22 @@ type TabId = (typeof TABS)[number][0];
 const initial = new URLSearchParams(location.hash.slice(1));
 
 export function App() {
+  const t = useT();
   const [devices, setDevices] = useState<DeviceSummary[]>([]);
+  const [devicesLoaded, setDevicesLoaded] = useState(false);
   const [serial, setSerial] = useState<string | null>(null);
   const [pkgs, setPkgs] = useState<PackageSummary[]>([]);
   const [pkg, setPkg] = useState<string | null>(initial.get('pkg'));
   const [screen, setScreen] = useState<CurrentScreen | null>(null);
   const fgPkg = screen?.packageName ?? '';
+  // 왼쪽 목록에서 앱을 고르면 그 앱을 기기 화면 앞으로 가져온다 (작업 중인 앱 = 화면에 보이는 앱이 되도록)
+  const [openOnSelect, setOpenOnSelect] = useState(() => {
+    try {
+      return localStorage.getItem('droidlens.openOnSelect') !== '0';
+    } catch {
+      return true;
+    }
+  });
   const [filter, setFilter] = useState('');
   const [thirdOnly, setThirdOnly] = useState(true);
   const [tab, setTab] = useState<TabId>((initial.get('tab') as TabId) || 'screen');
@@ -71,26 +83,36 @@ export function App() {
     api.adbStatus().then((s) => setAdbOk(s.ok)).catch(() => setAdbOk(false));
   }, []);
 
-  const toast = useCallback((msg: string, err?: boolean) => {
-    setToastMsg({ msg, err });
-    setTimeout(() => setToastMsg((t) => (t?.msg === msg ? null : t)), err ? 5000 : 2500);
-  }, []);
+  const toast = useCallback(
+    (raw: string, err?: boolean) => {
+      const msg = t(raw); // 메인 프로세스의 고정 문구도 사전에 있으면 번역된다
+      setToastMsg({ msg, err });
+      setTimeout(() => setToastMsg((cur) => (cur?.msg === msg ? null : cur)), err ? 5000 : 2500);
+    },
+    [t],
+  );
 
   const run = useCallback(
     async <T,>(p: Promise<T>) => {
       try {
         return await p;
       } catch (e) {
-        toast((e as Error).message, true);
+        toast((e as Error).message.replace(/^Error invoking remote method '[^']*': (?:\w*Error: )?/, ''), true);
         return undefined;
       }
     },
     [toast],
   );
 
+  const selectApp = (p: string) => {
+    setPkg(p);
+    if (serial && openOnSelect && fgPkg !== p) run(api.bringToFront(serial, p));
+  };
+
   const refreshDevices = useCallback(async () => {
     const list = (await run(api.devices())) ?? [];
     setDevices(list);
+    setDevicesLoaded(true);
     const online = list.filter((d) => d.state === 'device');
     setSerial((cur) => (cur && online.some((d) => d.serial === cur) ? cur : online[0]?.serial ?? null));
   }, [run]);
@@ -102,9 +124,14 @@ export function App() {
   }, [refreshDevices]);
 
   const [pkgTick, setPkgTick] = useState(0);
+  const [pkgsLoading, setPkgsLoading] = useState(false);
   useEffect(() => {
     if (!serial) return setPkgs([]);
-    run(api.packages(serial, thirdOnly)).then((p) => setPkgs(p ?? []));
+    setPkgsLoading(true);
+    run(api.packages(serial, thirdOnly)).then((p) => {
+      setPkgs(p ?? []);
+      setPkgsLoading(false);
+    });
   }, [serial, thirdOnly, run, pkgTick]);
 
   // 포그라운드 화면: 여기서만 폴링하고 컨텍스트로 공유 (탭마다 따로 폴링하면 기기 부하가 커진다)
@@ -146,7 +173,7 @@ export function App() {
             Droid<em>Lens</em>
           </span>
           <select className="input" value={serial ?? ''} onChange={(e) => setSerial(e.target.value || null)} style={{ minWidth: 220 }}>
-            {devices.length === 0 && <option value="">기기 없음</option>}
+            {devices.length === 0 && <option value="">{devicesLoaded ? t('기기 없음') : t('기기 찾는 중…')}</option>}
             {devices.map((d) => (
               <option key={d.serial} value={d.serial} disabled={d.state !== 'device'}>
                 {d.model ?? d.serial} · {d.serial} {d.state !== 'device' ? `(${d.state})` : ''}
@@ -161,8 +188,8 @@ export function App() {
               disabled={agentBusy}
               title={
                 agent?.running
-                  ? '온디바이스 에이전트 실행 중 — 뷰 계층이 빠르고 한글 입력이 됩니다. 클릭하면 중지'
-                  : `에이전트 꺼짐 — uiautomator로 동작 (느림, ASCII 입력만). 클릭하면 시작${agent?.error ? `\n최근 실패: ${agent.error}` : ''}`
+                  ? t('온디바이스 에이전트 실행 중 — 뷰 계층이 빠르고 한글 입력이 됩니다. 클릭하면 중지')
+                  : t('에이전트 꺼짐 — uiautomator로 동작 (느림, ASCII 입력만). 클릭하면 시작') + (agent?.error ? '\n' + t('최근 실패: {error}', { error: agent.error }) : '')
               }
               onClick={async () => {
                 if (!serial) return;
@@ -172,79 +199,111 @@ export function App() {
                 if (r) {
                   setAgent(r);
                   if (!r.running && !agent?.running)
-                    toast(`에이전트를 시작하지 못했습니다${r.error ? `: ${r.error}` : ''} — uiautomator로 계속 동작합니다`, true);
+                    toast(r.error ? t('에이전트를 시작하지 못했습니다: {error} — uiautomator로 계속 동작합니다', { error: r.error }) : t('에이전트를 시작하지 못했습니다 — uiautomator로 계속 동작합니다'), true);
                 }
               }}
             >
-              {agentBusy ? '에이전트 준비 중…' : agent?.running ? '⚡ 에이전트' : '에이전트 꺼짐'}
+              {agentBusy ? t('에이전트 준비 중…') : agent?.running ? t('⚡ 에이전트') : t('에이전트 꺼짐')}
             </button>
           )}
           <div className="spacer" />
           <UpdateButton u={updater} />
-          <button className={`btn sm ${chatOpen ? 'primary' : ''}`} onClick={() => setChatOpen((v) => !v)} title="에이전트와 대화">
-            💬 에이전트 대화
+          <button className={`btn sm ${chatOpen ? 'primary' : ''}`} onClick={() => setChatOpen((v) => !v)} title={t('에이전트와 대화')}>
+            {t('💬 에이전트 대화')}
           </button>
-          {fgPkg && (
-            <button className="btn sm" onClick={() => setPkg(fgPkg)} title="포그라운드 앱 선택">
-              포그라운드: <span className="mono">{fgPkg}</span>
-            </button>
+          {pkg && fgPkg && fgPkg !== pkg ? (
+            // 고른 앱과 화면에 떠 있는 앱이 다르면 지금 무엇을 보고 있는지 분명히 알린다
+            <span className="pill warn-pill" title={t('선택한 앱과 기기 화면에 떠 있는 앱이 다릅니다')}>
+              ⚠ {t('화면:')} <span className="mono">{fgPkg}</span>
+              <button className="btn sm" onClick={() => serial && run(api.bringToFront(serial, pkg))}>{t('선택한 앱 열기')}</button>
+              <button className="btn sm" onClick={() => setPkg(fgPkg)}>{t('이 앱으로 바꾸기')}</button>
+            </span>
+          ) : (
+            !pkg &&
+            fgPkg && (
+              <button className="btn sm" onClick={() => setPkg(fgPkg)} title={t('포그라운드 앱 선택')}>
+                {t('포그라운드:')} <span className="mono">{fgPkg}</span>
+              </button>
+            )
           )}
         </header>
         <div className="body" style={{ gridTemplateColumns: chatOpen ? '260px 1fr 400px' : undefined }}>
           <aside className="sidebar">
             <div className="search">
-              <input className="input" placeholder="패키지 검색" value={filter} onChange={(e) => setFilter(e.target.value)} />
+              <input className="input" placeholder={t('패키지 검색')} value={filter} onChange={(e) => setFilter(e.target.value)} />
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                 <label className="chk">
                   <input type="checkbox" checked={thirdOnly} onChange={(e) => setThirdOnly(e.target.checked)} />
-                  사용자 설치 앱만
+                  {t('사용자 설치 앱만')}
                 </label>
-                <button className="btn sm" onClick={() => setPkgTick((t) => t + 1)} title="앱 목록 새로고침">
+                <button className="btn sm" onClick={() => setPkgTick((t) => t + 1)} title={t('앱 목록 새로고침')}>
                   ↻
                 </button>
               </div>
+              <label className="chk" title={t('앱을 고르면 기기에서 그 앱을 앞으로 가져옵니다 (실행 중이면 보던 화면 그대로)')}>
+                <input
+                  type="checkbox"
+                  checked={openOnSelect}
+                  onChange={(e) => {
+                    setOpenOnSelect(e.target.checked);
+                    try {
+                      localStorage.setItem('droidlens.openOnSelect', e.target.checked ? '1' : '0');
+                    } catch {
+                      /* 이번 실행 동안만 유지 */
+                    }
+                  }}
+                />
+                {t('누르면 앱 열기')}
+              </label>
             </div>
             <div className="pkglist">
               {shown.map((p) => (
                 <button
                   key={p.packageName}
                   className={`pkg ${pkg === p.packageName ? 'active' : ''} ${fgPkg === p.packageName ? 'fg' : ''}`}
-                  onClick={() => setPkg(p.packageName)}
+                  onClick={() => selectApp(p.packageName)}
                   title={p.packageName}
                 >
                   {p.packageName}
                 </button>
               ))}
-              {serial && shown.length === 0 && <div className="empty">패키지가 없습니다</div>}
+              {serial && shown.length === 0 && <div className="empty">{pkgsLoading ? t('앱 목록 불러오는 중…') : t('패키지가 없습니다')}</div>}
             </div>
           </aside>
           <main className="main">
             <nav className="tabs">
               {TABS.map(([id, label]) => (
                 <button key={id} className={`tab ${tab === id ? 'active' : ''}`} onClick={() => setTab(id)}>
-                  {label}
+                  {t(label)}
                 </button>
               ))}
             </nav>
             <section className="content">
               {!serial && tab !== 'scen' && tab !== 'settings' ? (
-                <div className="empty">
-                  {adbOk === false ? (
-                    <div>
-                      adb를 찾지 못했습니다.
-                      <br />
-                      <button className="btn primary" style={{ marginTop: 10 }} onClick={() => setTab('settings')}>
-                        설정에서 adb 연결하기
-                      </button>
-                    </div>
-                  ) : (
-                    <div>
-                      연결된 기기가 없습니다.
-                      <br />
-                      USB 디버깅을 켜거나 에뮬레이터를 실행하세요.
-                    </div>
-                  )}
-                </div>
+                adbOk === null || !devicesLoaded ? (
+                  <div className="empty">
+                    <div>{t('기기 확인 중…')}</div>
+                  </div>
+                ) : (
+                  <div className="scroll" style={{ height: '100%', display: 'grid', justifyItems: 'center', alignContent: 'start', gap: 16, paddingTop: 40 }}>
+                    {adbOk === false ? (
+                      <div style={{ textAlign: 'center' }}>
+                        {t('adb를 찾지 못했습니다.')}
+                        <br />
+                        <button className="btn primary" style={{ marginTop: 10 }} onClick={() => setTab('settings')}>
+                          {t('설정에서 adb 연결하기')}
+                        </button>
+                      </div>
+                    ) : (
+                      <div style={{ textAlign: 'center' }}>
+                        <b>{t('연결된 기기가 없습니다.')}</b>
+                        <br />
+                        <span className="muted">{t('폰이나 에뮬레이터가 연결되면 자동으로 인식합니다.')}</span>
+                      </div>
+                    )}
+                    <DeviceSetup />
+                  </div>
+                )
               ) : (
                 <>
                   {tab === 'screen' && <ScreenTab />}
@@ -270,5 +329,6 @@ export function App() {
 }
 
 export function NeedPkg() {
-  return <div className="empty">왼쪽에서 앱을 선택하세요</div>;
+  const t = useT();
+  return <div className="empty">{t('왼쪽에서 앱을 선택하세요')}</div>;
 }

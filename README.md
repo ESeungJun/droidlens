@@ -13,9 +13,29 @@ Inspect <b>any app</b> with just adb, no SDK required, and let Claude Code agent
 
 DroidLens aims to replace Meta's [Flipper](https://github.com/facebook/flipper) (archived in 2025). Without adding anything to your app, you get screen mirroring, the view hierarchy, screen navigation paths, and the libraries an app uses — and the built-in MCP server lets Claude Code agents use the same features.
 
+## Screenshots
+
+<p align="center"><img src="docs/images/screen-en.jpg" alt="Screen mirroring and controls" width="100%"></p>
+
+<table>
+  <tr>
+    <td align="center" width="50%"><b>3D view hierarchy with class labels</b><br><img src="docs/images/inspect-3d-en.jpg" alt="3D view hierarchy with class labels"></td>
+    <td align="center" width="50%"><b>Screen flow from auto-exploration</b><br><img src="docs/images/flow-en.jpg" alt="Screen flow from auto-exploration"></td>
+  </tr>
+  <tr>
+    <td align="center"><b>Library detection from the APK</b><br><img src="docs/images/libs-en.jpg" alt="Library detection from the APK"></td>
+    <td align="center"><b>App info</b><br><img src="docs/images/info-en.jpg" alt="App info"></td>
+  </tr>
+</table>
+
 ## Installation
 
-Download **just one installer** for your OS from [Releases](https://github.com/ESeungJun/droidlens/releases/latest). The other files (`.zip`, `.mjs`, `.apk`) are used by in-app updates or optional tools — you don't need them.
+**macOS · Linux — one line in Terminal** (installs or updates to the latest version; on macOS it opens without any Gatekeeper warning):
+```bash
+curl -fsSL https://raw.githubusercontent.com/ESeungJun/droidlens/master/scripts/install.sh | bash
+```
+
+Or download **just one installer** for your OS from [Releases](https://github.com/ESeungJun/droidlens/releases/latest). The other files (`.zip`, `.mjs`, `.apk`) are used by in-app updates or optional tools — you don't need them.
 
 | OS | File |
 | --- | --- |
@@ -25,7 +45,7 @@ Download **just one installer** for your OS from [Releases](https://github.com/E
 | Windows (ARM) | `DroidLens-x.y.z-win-arm64.exe` |
 | Linux | `DroidLens-x.y.z-linux-x86_64.AppImage` |
 
-**First launch on macOS**: the app isn't code-signed, so you may see "DroidLens is damaged and can't be opened". Move the app to Applications and run this once in Terminal:
+**First launch on macOS (downloaded .dmg)**: the app is ad-hoc signed but not notarized by Apple, so macOS says it can't verify the developer. Open **System Settings → Privacy & Security** and click **Open Anyway** next to DroidLens (once). On versions before 0.5.0 the message was "damaged"; run this once instead:
 ```bash
 xattr -dr com.apple.quarantine /Applications/DroidLens.app
 ```
@@ -72,8 +92,8 @@ dependencyResolutionManagement {
 
 // app/build.gradle.kts
 dependencies {
-    debugImplementation("com.github.ESeungJun.droidlens:sdk:v0.4.0")
-    releaseImplementation("com.github.ESeungJun.droidlens:sdk-noop:v0.4.0")
+    debugImplementation("com.github.ESeungJun.droidlens:sdk:v0.5.0")
+    releaseImplementation("com.github.ESeungJun.droidlens:sdk-noop:v0.5.0")
 }
 
 // Network inspector (if you use OkHttp)
@@ -88,6 +108,7 @@ DroidLens.event("purchase_clicked", JSONObject().put("itemId", 42))
 - No initialization code needed (starts automatically via a ContentProvider)
 - Communicates only over an in-app Unix socket (`localabstract:droidlens_sdk_<package>`), so no INTERNET permission is required; it checks the peer UID and rejects any connection other than adb and the app itself (e.g. other apps on the same device)
 - Request and response bodies are capped at 256KB each; the latest 500 entries are kept in memory only
+- Sensitive values are masked **on the device, before they are stored** — in headers, URL queries, `Location` redirects, JSON bodies (including nested objects/arrays and JSON inside strings), GraphQL arguments, form, multipart and XML bodies, error messages and custom events. Keys match regardless of case and separators, and common words match anywhere in the name (`newPassword`, `fcmToken`, `X-Refresh-Token`); short ones like `jwt`, `otp`, `pin` match exactly. Add your own with `DroidLens.redactHeaders("X-Session")` / `DroidLens.redactKeys("phone")`, or call `DroidLens.clearDefaultRedaction()` to use only your list. Compressed bodies the app requested itself (`Content-Encoding`) are not recorded
 - DB write SQL runs only when explicitly allowed
 
 ## Claude Code integration
@@ -206,6 +227,22 @@ agents/           Claude Code agent definitions
 | `feature/<name>` | New features and fixes, branched from `develop` and merged back via PR |
 | `release/<version>` | Release prep (version bump, notes) from `develop`; merged into `master` and `develop`, then tagged |
 | `hotfix/<version>` | Urgent fixes from `master`; merged into `master` and `develop`, then tagged |
+
+### Commit messages
+
+Every commit (and PR title, which becomes the merge commit title) uses [Conventional Commits](https://www.conventionalcommits.org): `<type>(<scope>)?: <description>`.
+
+| Type | Use for |
+| --- | --- |
+| `feat` | New feature |
+| `fix` | Bug fix |
+| `docs` | Documentation only |
+| `refactor` / `perf` / `style` | Code change without behavior change / performance / formatting |
+| `test` | Tests |
+| `build` / `ci` | Packaging, dependencies / GitHub Actions |
+| `chore` | Versions, merges, other maintenance |
+
+`pnpm install` installs a `commit-msg` hook (`.githooks/`) that rejects commits without a prefix, and CI checks pushed commits and PR titles.
 
 Pushing a `v*` tag makes GitHub Actions build installers for macOS (arm64/x64), Windows (x64/arm64), and Linux and upload them to Releases. See the roadmap in [docs/ROADMAP.md](docs/ROADMAP.md).
 

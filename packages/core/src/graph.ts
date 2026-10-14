@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { writeFile } from 'node:fs/promises';
+import { rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { DeviceAdb, sleep } from './adb.js';
 import { ensureAgent } from './agent.js';
@@ -10,12 +10,13 @@ import {
   dumpHierarchy,
   flatten,
   labelOf,
+  screenSignature,
   structureSignature,
   type Hierarchy,
   type Selector,
   type ViewNode,
 } from './hierarchy.js';
-import { ensureDir, readJson, safeName, writeJson } from './workspace.js';
+import { droidlensHome, ensureDir, readJson, safeName, writeJson } from './workspace.js';
 
 // ---------- 스냅샷 ----------
 
@@ -172,7 +173,7 @@ function shortName(cls: string): string {
 }
 
 export function screenId(s: Snapshot): string {
-  return `${shortName(s.screen.activity) || 'unknown'}@${s.signature}`;
+  return `${shortName(s.screen.activity) || 'unknown'}@${screenSignature(s.hierarchy.root)}`;
 }
 
 export function actionLabel(a: GraphAction): string {
@@ -199,6 +200,12 @@ export class ScreenGraph {
   updatedAt = Date.now();
 
   constructor(readonly packageName: string, readonly dir: string) {}
+
+  /** 앱의 화면 그래프(화면·연결·스크린샷)를 모두 지운다 */
+  static async reset(packageName: string): Promise<void> {
+    assertPackage(packageName);
+    await rm(join(droidlensHome(), 'graphs', safeName(packageName)), { recursive: true, force: true });
+  }
 
   static async open(packageName: string): Promise<ScreenGraph> {
     const dir = await ensureDir('graphs', safeName(packageName));
@@ -236,7 +243,7 @@ export class ScreenGraph {
         packageName: s.screen.packageName,
         activity: s.screen.activity,
         fragments: s.screen.fragments,
-        signature: s.signature,
+        signature: screenSignature(s.hierarchy.root),
         label: `${outside}${shortName(s.screen.activity)}${frag}`,
         screenshot: shot,
         firstSeen: Date.now(),
@@ -386,11 +393,17 @@ export function candidateActions(s: Snapshot, pkg?: string): Candidate[] {
   return out;
 }
 
+/** 기록한 탭 행동(id·라벨)에 해당하는 버튼을 현재 화면에서 다시 찾는다 */
+function locate(s: Snapshot, a: Extract<GraphAction, { type: 'tap' }>, pkg: string): Candidate | undefined {
+  return candidateActions(s, pkg).find((c) => c.label === (a.label ?? '') && c.node.resourceId === (a.selector?.id ?? ''));
+}
+
 export interface ExploreOptions {
   packageName: string;
+  /** 누르는 횟수의 안전 상한 (기본 500). 탐색 범위는 maxDepth 로 정하고 이건 끝없이 도는 것만 막는다 */
   maxSteps?: number;
   maxDepth?: number;
-  /** true면 앱을 재시작하고 시작 (기본 true) */
+  /** true면 앱을 재시작해 첫 화면부터, false면 지금 화면부터 탐색 (기본 true) */
   relaunch?: boolean;
   /** 위험 라벨 외에 추가로 피할 라벨 정규식 */
   avoid?: RegExp;
@@ -401,6 +414,8 @@ export interface ExploreOptions {
 export interface ExploreResult {
   graph: GraphData;
   steps: number;
+  /** 안전 상한에 닿아 멈췄는지 */
+  limited: boolean;
   skipped: { screen: string; label: string; reason: string }[];
   errors: string[];
 }
@@ -412,7 +427,7 @@ export interface ExploreResult {
 export async function explore(dev: DeviceAdb, opts: ExploreOptions): Promise<ExploreResult> {
   const pkg = opts.packageName;
   assertPackage(pkg);
-  const maxSteps = opts.maxSteps ?? 40;
+  const maxSteps = opts.maxSteps ?? 500;
   const maxDepth = opts.maxDepth ?? 4;
   const graph = await ScreenGraph.open(pkg);
   const tried = new Set<string>();
@@ -421,14 +436,23 @@ export async function explore(dev: DeviceAdb, opts: ExploreOptions): Promise<Exp
   let steps = 0;
   const log = (message: string, screen?: string) => opts.onProgress?.({ step: steps, message, screen });
 
-  let snap = opts.relaunch !== false ? await launchAndSettle(dev, pkg, { restart: true }) : await waitForSettle(dev);
+  const fromCurrent = opts.relaunch === false;
+  let snap = fromCurrent ? await waitForSettle(dev) : await launchAndSettle(dev, pkg, { restart: true });
+  if (fromCurrent && snap.screen.packageName !== pkg) throw new Error(`지금 화면이 ${pkg} 앱이 아닙니다. 앱을 열어 둔 상태에서 시작하세요`);
   const root = await graph.addSnapshot(snap, dev);
   log(`시작 화면: ${root.label}`, root.id);
 
   const replay = async (path: GraphAction[]): Promise<Snapshot> => {
+    // 현재 화면부터 시작했으면 앱을 재시작해 같은 경로로 돌아갈 수 없다
+    if (fromCurrent) throw new Error('현재 화면부터 시작한 탐색이라 경로를 다시 따라갈 수 없습니다');
     let s = await launchAndSettle(dev, pkg, { restart: true });
     for (const a of path) {
-      await performAction(dev, a, pkg);
+      if (a.type === 'tap') {
+        const c = locate(s, a, pkg);
+        if (!c) throw new Error(`경로 재생 실패: "${a.label}"을(를) 찾을 수 없습니다`);
+        const { x, y } = center(c.node);
+        await tap(dev, x, y);
+      } else await performAction(dev, a, pkg);
       s = await waitForSettle(dev);
     }
     return s;
@@ -442,20 +466,46 @@ export async function explore(dev: DeviceAdb, opts: ExploreOptions): Promise<Exp
       if (screenId(snap) === target) return;
       if (snap.screen.packageName && snap.screen.packageName !== pkg && i === 1) break;
     }
+    if (fromCurrent) {
+      log('BACK 으로 돌아오지 못했습니다 (현재 화면 기준 탐색이라 이 갈래는 멈춤)');
+      return;
+    }
     log('BACK 복귀 실패 → 재실행 후 경로 재생');
-    snap = await replay(path);
+    snap = await replay(path).catch((e: Error) => {
+      log(e.message);
+      // 재생이 중간에 실패하면 기기 화면은 이미 바뀌었을 수 있으니 실제 화면을 다시 잡는다
+      return waitForSettle(dev).catch(() => snap);
+    });
   };
 
+  // 이번 실행에서 이미 들어가 본 화면. 저장된 그래프의 방문 수를 쓰면 다시 탐색할 때 깊이가 무시된다
+  const entered = new Set<string>();
   const visit = async (path: GraphAction[], depth: number): Promise<void> => {
     const hereId = screenId(snap);
-    for (const cand of candidateActions(snap, pkg)) {
+    entered.add(hereId);
+    for (const first of candidateActions(snap, pkg)) {
       if (steps >= maxSteps || opts.signal?.aborted) return;
-      const tkey = `${hereId}|${cand.key}`;
+      const tkey = `${hereId}|${first.key}`;
       if (tried.has(tkey)) continue;
       tried.add(tkey);
-      if (NAV_ONLY_LABELS.test(cand.label.trim())) continue;
-      if (DANGEROUS_LABELS.test(cand.label) || opts.avoid?.test(cand.label)) {
-        skipped.push({ screen: hereId, label: cand.label, reason: '위험 라벨' });
+      if (NAV_ONLY_LABELS.test(first.label.trim())) continue;
+      if (DANGEROUS_LABELS.test(first.label) || opts.avoid?.test(first.label)) {
+        skipped.push({ screen: hereId, label: first.label, reason: '위험 라벨' });
+        continue;
+      }
+      // 실제로 이 화면에 있는지 확인: 돌아오지 못했으면 다른 화면의 버튼을 이 화면 것으로 기록하게 되므로 멈춘다
+      if (screenId(snap) !== hereId) {
+        await returnTo(hereId, path).catch(() => undefined);
+        if (screenId(snap) !== hereId) {
+          errors.push(`${hereId}: 원래 화면으로 돌아오지 못해 남은 버튼은 건너뜀`);
+          log('원래 화면으로 돌아오지 못해 이 화면의 남은 버튼은 건너뜁니다');
+          return;
+        }
+      }
+      // 처음 본 좌표가 아니라 지금 화면에서 같은 버튼을 다시 찾는다 (돌아왔을 때 스크롤 위치가 바뀌었을 수 있다)
+      const cand = candidateActions(snap, pkg).find((c) => c.key === first.key);
+      if (!cand) {
+        skipped.push({ screen: hereId, label: first.label, reason: '현재 화면에서 찾을 수 없음' });
         continue;
       }
       const { x, y } = center(cand.node);
@@ -482,19 +532,21 @@ export async function explore(dev: DeviceAdb, opts: ExploreOptions): Promise<Exp
           continue;
         }
         const to = await graph.addSnapshot(after, dev);
-        graph.addEdge(hereId, to.id, action);
-        await graph.save();
         if (to.id === hereId) {
           snap = after;
           continue;
         }
+        graph.addEdge(hereId, to.id, action);
+        await graph.save();
         log(`"${cand.label}" → ${to.label}`, to.id);
         snap = after;
-        if (depth + 1 < maxDepth && to.visits === 1) await visit([...path, action], depth + 1);
+        if (depth + 1 < maxDepth && !entered.has(to.id)) await visit([...path, action], depth + 1);
         if (screenId(snap) !== hereId) await returnTo(hereId, path);
       } catch (e) {
         errors.push(`${hereId} "${cand.label}": ${(e as Error).message}`);
-        snap = await replay(path).catch(() => snap);
+        // 오류가 나면 지금 화면을 알 수 없으므로 경로를 다시 따라가거나, 그것도 안 되면 실제 화면을 다시 잡는다.
+        // 누르기 전 스냅샷을 그대로 두면 다음 버튼을 다른 화면에 누르고 엉뚱한 연결을 기록하게 된다
+        snap = await replay(path).catch(() => waitForSettle(dev)).catch(() => snap);
       }
     }
   };
@@ -502,5 +554,5 @@ export async function explore(dev: DeviceAdb, opts: ExploreOptions): Promise<Exp
   await visit([], 0);
   await graph.save();
   log(`탐색 완료: 화면 ${graph.nodes.size}개, 전이 ${graph.edges.size}개, ${steps}스텝`);
-  return { graph: graph.toJSON(), steps, skipped, errors };
+  return { graph: graph.toJSON(), steps, limited: steps >= maxSteps, skipped, errors };
 }

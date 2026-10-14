@@ -1,5 +1,6 @@
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from 'react';
 import { api } from './api';
+import { useT } from './i18n';
 
 /**
  * scrcpy H.264 스트림을 WebCodecs로 디코딩해 canvas에 그린다.
@@ -36,6 +37,7 @@ export const MirrorCanvas = forwardRef<
 >(function MirrorCanvas({ serial, maxSize, onError, onFps, ...canvasProps }, ref) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [size, setSize] = useState<{ width: number; height: number } | null>(null);
+  const t = useT();
   const [status, setStatus] = useState('연결 중…');
 
   useImperativeHandle(ref, () => ({ canvas: canvasRef.current, videoSize: size }), [size]);
@@ -68,7 +70,7 @@ export const MirrorCanvas = forwardRef<
           }
           frame.close();
         },
-        error: (e) => onError(`디코더 오류: ${e.message}`),
+        error: (e) => onError(t('디코더 오류: {message}', { message: e.message })),
       });
       configured = false;
     };
@@ -102,7 +104,7 @@ export const MirrorCanvas = forwardRef<
       decoder.decode(new EncodedVideoChunk({ type: p.key ? 'key' : 'delta', timestamp: p.pts, data }));
     });
     const offClosed = api.onMirrorClosed((c) => {
-      if (!closed) onError(`미러링이 끊겼습니다${c.reason ? `: ${c.reason}` : ''}`);
+      if (!closed) onError(c.reason ? t('미러링이 끊겼습니다: {reason}', { reason: c.reason }) : t('미러링이 끊겼습니다'));
     });
 
     // 화면이 정지해 있으면 scrcpy는 첫 프레임을 보내지 않으므로, 디코딩 전까지 스크린샷 한 장을 먼저 그려 둔다
@@ -140,7 +142,7 @@ export const MirrorCanvas = forwardRef<
   return (
     <>
       <canvas ref={canvasRef} {...canvasProps} style={{ ...canvasProps.style, display: size ? 'block' : 'none' }} />
-      {status && <div className="faint">{status}</div>}
+      {status && <div className="faint">{t(status)}</div>}
     </>
   );
 });
