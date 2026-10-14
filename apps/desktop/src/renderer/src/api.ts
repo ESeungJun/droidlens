@@ -125,6 +125,7 @@ export const api = {
   packages: (s: string, thirdPartyOnly: boolean) => call<PackageSummary[]>('packages', s, thirdPartyOnly),
   appInfo: (s: string, pkg: string) => call<AppInfo>('appInfo', s, pkg),
   launch: (s: string, pkg: string, restart?: boolean) => call<void>('launch', s, pkg, restart),
+  bringToFront: (s: string, pkg: string) => call<void>('bringToFront', s, pkg),
   stop: (s: string, pkg: string) => call<void>('stop', s, pkg),
   deeplink: (s: string, uri: string, pkg?: string) => call<string>('deeplink', s, uri, pkg),
   analyzeLibraries: (s: string, pkg: string) => call<ApkAnalysis>('analyzeLibraries', s, pkg),

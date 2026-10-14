@@ -53,6 +53,14 @@ export function App() {
   const [pkg, setPkg] = useState<string | null>(initial.get('pkg'));
   const [screen, setScreen] = useState<CurrentScreen | null>(null);
   const fgPkg = screen?.packageName ?? '';
+  // 왼쪽 목록에서 앱을 고르면 그 앱을 기기 화면 앞으로 가져온다 (작업 중인 앱 = 화면에 보이는 앱이 되도록)
+  const [openOnSelect, setOpenOnSelect] = useState(() => {
+    try {
+      return localStorage.getItem('droidlens.openOnSelect') !== '0';
+    } catch {
+      return true;
+    }
+  });
   const [filter, setFilter] = useState('');
   const [thirdOnly, setThirdOnly] = useState(true);
   const [tab, setTab] = useState<TabId>((initial.get('tab') as TabId) || 'screen');
@@ -95,6 +103,11 @@ export function App() {
     },
     [toast],
   );
+
+  const selectApp = (p: string) => {
+    setPkg(p);
+    if (serial && openOnSelect && fgPkg !== p) run(api.bringToFront(serial, p));
+  };
 
   const refreshDevices = useCallback(async () => {
     const list = (await run(api.devices())) ?? [];
@@ -198,10 +211,20 @@ export function App() {
           <button className={`btn sm ${chatOpen ? 'primary' : ''}`} onClick={() => setChatOpen((v) => !v)} title={t('에이전트와 대화')}>
             {t('💬 에이전트 대화')}
           </button>
-          {fgPkg && (
-            <button className="btn sm" onClick={() => setPkg(fgPkg)} title={t('포그라운드 앱 선택')}>
-              {t('포그라운드:')} <span className="mono">{fgPkg}</span>
-            </button>
+          {pkg && fgPkg && fgPkg !== pkg ? (
+            // 고른 앱과 화면에 떠 있는 앱이 다르면 지금 무엇을 보고 있는지 분명히 알린다
+            <span className="pill warn-pill" title={t('선택한 앱과 기기 화면에 떠 있는 앱이 다릅니다')}>
+              ⚠ {t('화면:')} <span className="mono">{fgPkg}</span>
+              <button className="btn sm" onClick={() => serial && run(api.bringToFront(serial, pkg))}>{t('선택한 앱 열기')}</button>
+              <button className="btn sm" onClick={() => setPkg(fgPkg)}>{t('이 앱으로 바꾸기')}</button>
+            </span>
+          ) : (
+            !pkg &&
+            fgPkg && (
+              <button className="btn sm" onClick={() => setPkg(fgPkg)} title={t('포그라운드 앱 선택')}>
+                {t('포그라운드:')} <span className="mono">{fgPkg}</span>
+              </button>
+            )
           )}
         </header>
         <div className="body" style={{ gridTemplateColumns: chatOpen ? '260px 1fr 400px' : undefined }}>
@@ -217,13 +240,28 @@ export function App() {
                   ↻
                 </button>
               </div>
+              <label className="chk" title={t('앱을 고르면 기기에서 그 앱을 앞으로 가져옵니다 (실행 중이면 보던 화면 그대로)')}>
+                <input
+                  type="checkbox"
+                  checked={openOnSelect}
+                  onChange={(e) => {
+                    setOpenOnSelect(e.target.checked);
+                    try {
+                      localStorage.setItem('droidlens.openOnSelect', e.target.checked ? '1' : '0');
+                    } catch {
+                      /* 이번 실행 동안만 유지 */
+                    }
+                  }}
+                />
+                {t('누르면 앱 열기')}
+              </label>
             </div>
             <div className="pkglist">
               {shown.map((p) => (
                 <button
                   key={p.packageName}
                   className={`pkg ${pkg === p.packageName ? 'active' : ''} ${fgPkg === p.packageName ? 'fg' : ''}`}
-                  onClick={() => setPkg(p.packageName)}
+                  onClick={() => selectApp(p.packageName)}
                   title={p.packageName}
                 >
                   {p.packageName}
