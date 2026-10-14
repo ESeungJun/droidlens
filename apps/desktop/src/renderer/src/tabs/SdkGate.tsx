@@ -9,8 +9,8 @@ dependencyResolutionManagement {
 }
 
 // app/build.gradle.kts
-debugImplementation("com.github.ESeungJun.droidlens:sdk:v0.4.0")
-releaseImplementation("com.github.ESeungJun.droidlens:sdk-noop:v0.4.0")
+debugImplementation("com.github.ESeungJun.droidlens:sdk:v0.5.0")
+releaseImplementation("com.github.ESeungJun.droidlens:sdk-noop:v0.5.0")
 
 // 네트워크 인스펙터 (OkHttp)
 OkHttpClient.Builder()
