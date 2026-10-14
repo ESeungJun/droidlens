@@ -211,7 +211,7 @@ label.chk { display: inline-flex; gap: 6px; align-items: center; color: var(--fg
 .scen-group { display: flex; align-items: center; gap: 6px; padding: 7px 12px; background: var(--panel-2); border-bottom: 1px solid var(--line); cursor: pointer; font-size: 12px; font-weight: 600; position: sticky; top: 0; z-index: 1; }
 .scen-group .n { color: var(--fg-faint); font-weight: 400; }
 .scen-item { display: flex; gap: 8px; align-items: flex-start; }
-.scen-item .body { flex: 1; min-width: 0; }
+.scen-item .scen-body { flex: 1; min-width: 0; }
 .step pre { white-space: pre-wrap; font-family: var(--mono); font-size: 11px; color: var(--fg-dim); margin: 6px 0 0; }
 .badge { font-size: 10px; font-weight: 700; padding: 1px 7px; border-radius: 5px; color: #0b0b0b; margin-right: 6px; }
 .b-pass { background: var(--accent); } .b-fail { background: var(--err); } .b-info { background: var(--info); } .b-skip { background: var(--fg-faint); }
