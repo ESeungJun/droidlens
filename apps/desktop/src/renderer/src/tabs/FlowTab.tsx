@@ -2,6 +2,7 @@ import { memo, useCallback, useEffect, useMemo, useState } from 'react';
 import { Background, Controls, Handle, MarkerType, MiniMap, Position, ReactFlow, type Edge, type Node, type NodeProps } from '@xyflow/react';
 import { api, type GraphData, type ScreenNode } from '../api';
 import { NeedPkg, useApp } from '../App';
+import { useT } from '../i18n';
 
 const imgCache = new Map<string, string>();
 
@@ -21,12 +22,13 @@ type SNodeData = { screen: ScreenNode; pkg: string; selected: boolean };
 
 const ScreenCard = memo(({ data }: NodeProps<Node<SNodeData>>) => {
   const src = useShot(data.pkg, data.screen.screenshot);
+  const t = useT();
   return (
     <div className={`screen-node ${data.selected ? 'sel' : ''}`}>
       <Handle type="target" position={Position.Left} />
       {src ? <img src={src} alt="" /> : <img alt="" />}
       <div className="t" title={data.screen.label}>{data.screen.label}</div>
-      <div className="s">{data.screen.signature} · {data.screen.visits}회</div>
+      <div className="s">{data.screen.signature} · {t('{n}회', { n: data.screen.visits })}</div>
       <Handle type="source" position={Position.Right} />
     </div>
   );
@@ -63,6 +65,7 @@ function layout(g: GraphData): Map<string, { x: number; y: number }> {
 
 export function FlowTab() {
   const { serial, pkg, run, toast } = useApp();
+  const t = useT();
   const [g, setG] = useState<GraphData | null>(null);
   const [sel, setSel] = useState<string | null>(null);
   const [exploring, setExploring] = useState(false);
@@ -122,22 +125,22 @@ export function FlowTab() {
     const r = await run(api.explore(serial, pkg, steps, depth));
     setExploring(false);
     await reload();
-    if (r) toast(`탐색 완료: ${r.steps}스텝${r.skipped.length ? `, 위험 라벨 ${r.skipped.length}개 건너뜀` : ''}`);
+    if (r) toast(t('탐색 완료: {n}스텝', { n: r.steps }) + (r.skipped.length ? t(', 위험 라벨 {n}개 건너뜀', { n: r.skipped.length }) : ''));
   };
 
   return (
     <>
       <div className="toolbar">
         <button className="btn primary" onClick={start} disabled={exploring}>
-          {exploring ? '탐색 중…' : '▶ 자동 탐색'}
+          {exploring ? t('탐색 중…') : t('▶ 자동 탐색')}
         </button>
-        {exploring && <button className="btn danger" onClick={() => api.exploreStop()}>중지</button>}
-        <label className="muted">스텝 <input className="input" type="number" min={1} max={300} value={steps} onChange={(e) => setSteps(+e.target.value)} style={{ width: 64 }} /></label>
-        <label className="muted">깊이 <input className="input" type="number" min={1} max={10} value={depth} onChange={(e) => setDepth(+e.target.value)} style={{ width: 52 }} /></label>
-        <button className="btn" onClick={async () => serial && (await run(api.graphRecordHere(serial, pkg))) && reload()}>＋ 현재 화면 추가</button>
+        {exploring && <button className="btn danger" onClick={() => api.exploreStop()}>{t('중지')}</button>}
+        <label className="muted">{t('스텝')} <input className="input" type="number" min={1} max={300} value={steps} onChange={(e) => setSteps(+e.target.value)} style={{ width: 64 }} /></label>
+        <label className="muted">{t('깊이')} <input className="input" type="number" min={1} max={10} value={depth} onChange={(e) => setDepth(+e.target.value)} style={{ width: 52 }} /></label>
+        <button className="btn" onClick={async () => serial && (await run(api.graphRecordHere(serial, pkg))) && reload()}>{t('＋ 현재 화면 추가')}</button>
         <button className="btn" onClick={reload}>↻</button>
-        <span className="muted">화면 {g?.nodes.length ?? 0} · 전이 {g?.edges.length ?? 0}</span>
-        <span className="faint" style={{ fontSize: 11 }}>결제·삭제·로그아웃·전송 같은 버튼은 자동 탐색에서 누르지 않습니다</span>
+        <span className="muted">{t('화면 {n} · 전이 {e}', { n: g?.nodes.length ?? 0, e: g?.edges.length ?? 0 })}</span>
+        <span className="faint" style={{ fontSize: 11 }}>{t('결제·삭제·로그아웃·전송 같은 버튼은 자동 탐색에서 누르지 않습니다')}</span>
       </div>
       <div className="flow" style={{ position: 'relative' }}>
         {g && g.nodes.length ? (
@@ -157,9 +160,9 @@ export function FlowTab() {
           </ReactFlow>
         ) : (
           <div className="empty">
-            아직 기록된 화면이 없습니다.
+            {t('아직 기록된 화면이 없습니다.')}
             <br />
-            자동 탐색을 실행하거나, 화면 탭에서 "화면 흐름 기록"을 켜고 직접 조작하세요.
+            {t('자동 탐색을 실행하거나, 화면 탭에서 "화면 흐름 기록"을 켜고 직접 조작하세요.')}
           </div>
         )}
         {(selNode || progress.length > 0) && (
@@ -167,7 +170,7 @@ export function FlowTab() {
             {selNode ? <ScreenDetail g={g!} n={selNode} pkg={pkg} /> : null}
             {progress.length > 0 && (
               <>
-                <h4 className="faint" style={{ margin: '10px 0 4px', fontSize: 11 }}>탐색 로그</h4>
+                <h4 className="faint" style={{ margin: '10px 0 4px', fontSize: 11 }}>{t('탐색 로그')}</h4>
                 <div className="log-mini">{progress.join('\n')}</div>
               </>
             )}
@@ -179,6 +182,7 @@ export function FlowTab() {
 }
 
 function ScreenDetail({ g, n, pkg }: { g: GraphData; n: ScreenNode; pkg: string }) {
+  const t = useT();
   const src = useShot(pkg, n.screenshot);
   const outs = g.edges.filter((e) => e.from === n.id && e.to !== n.id);
   const ins = g.edges.filter((e) => e.to === n.id && e.from !== n.id);
@@ -189,23 +193,23 @@ function ScreenDetail({ g, n, pkg }: { g: GraphData; n: ScreenNode; pkg: string 
       <div style={{ fontWeight: 600, marginTop: 8 }}>{n.label}</div>
       <div className="kv" style={{ marginTop: 6 }}>
         <span>Activity</span><span>{n.activity}</span>
-        <span>시그니처</span><span>{n.signature}</span>
-        <span>노드/깊이</span><span>{n.nodeCount} / {n.maxDepth}</span>
-        <span>방문</span><span>{n.visits}</span>
+        <span>{t('시그니처')}</span><span>{n.signature}</span>
+        <span>{t('노드/깊이')}</span><span>{n.nodeCount} / {n.maxDepth}</span>
+        <span>{t('방문')}</span><span>{n.visits}</span>
       </div>
       {ins.length > 0 && (
         <>
-          <h4 className="faint" style={{ margin: '10px 0 4px', fontSize: 11 }}>들어오는 경로</h4>
+          <h4 className="faint" style={{ margin: '10px 0 4px', fontSize: 11 }}>{t('들어오는 경로')}</h4>
           {ins.map((e) => <div key={e.id} className="mono" style={{ fontSize: 11 }}>{name(e.from)} → {e.action.type === 'tap' ? e.action.label : e.action.type}</div>)}
         </>
       )}
       {outs.length > 0 && (
         <>
-          <h4 className="faint" style={{ margin: '10px 0 4px', fontSize: 11 }}>나가는 경로</h4>
+          <h4 className="faint" style={{ margin: '10px 0 4px', fontSize: 11 }}>{t('나가는 경로')}</h4>
           {outs.map((e) => <div key={e.id} className="mono" style={{ fontSize: 11 }}>{e.action.type === 'tap' ? e.action.label : e.action.type} → {name(e.to)}</div>)}
         </>
       )}
-      <h4 className="faint" style={{ margin: '10px 0 4px', fontSize: 11 }}>탭 가능한 요소 ({n.actions.length})</h4>
+      <h4 className="faint" style={{ margin: '10px 0 4px', fontSize: 11 }}>{t('탭 가능한 요소 ({n})', { n: n.actions.length })}</h4>
       <div className="mono" style={{ fontSize: 11, color: 'var(--fg-dim)' }}>{n.actions.join(' · ')}</div>
     </div>
   );

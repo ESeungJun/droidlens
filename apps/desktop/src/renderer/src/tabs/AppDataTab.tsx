@@ -1,9 +1,11 @@
 import { useCallback, useEffect, useState } from 'react';
 import { api, type DbInfo, type PrefsFile, type QueryResult, type SdkEvent } from '../api';
 import { useApp } from '../App';
+import { useT } from '../i18n';
 import { SdkGate } from './SdkGate';
 
 export function AppDataTab() {
+  const t = useT();
   const [view, setView] = useState<'prefs' | 'db' | 'events'>('prefs');
   return (
     <SdkGate>
@@ -11,7 +13,7 @@ export function AppDataTab() {
         <>
           <div className="toolbar">
             {([['prefs', 'SharedPreferences'], ['db', '데이터베이스'], ['events', '커스텀 이벤트']] as const).map(([k, l]) => (
-              <button key={k} className={`btn ${view === k ? 'primary' : ''}`} onClick={() => setView(k)}>{l}</button>
+              <button key={k} className={`btn ${view === k ? 'primary' : ''}`} onClick={() => setView(k)}>{t(l)}</button>
             ))}
             <span className="faint" style={{ fontSize: 11 }}>SDK {info.sdkVersion} · PID {info.pid}</span>
           </div>
@@ -26,6 +28,7 @@ export function AppDataTab() {
 
 function Prefs() {
   const { serial, pkg, run, toast } = useApp();
+  const t = useT();
   const [files, setFiles] = useState<PrefsFile[] | null>(null);
   const [editing, setEditing] = useState<{ file: string; key: string; type: string; value: string } | null>(null);
   const load = useCallback(async () => {
@@ -39,7 +42,7 @@ function Prefs() {
     if (!editing || !serial || !pkg) return;
     const r = await run(api.sdk(serial, pkg, 'setPref', editing.file, editing.key, editing.type, editing.value));
     if (r !== undefined) {
-      toast(`${editing.key} 저장됨`);
+      toast(t('{key} 저장됨', { key: editing.key }));
       setEditing(null);
       load();
     }
@@ -47,8 +50,8 @@ function Prefs() {
 
   return (
     <div className="scroll">
-      <button className="btn sm" onClick={load} style={{ marginBottom: 10 }}>↻ 새로고침</button>
-      {files === null ? <div className="faint">불러오는 중…</div> : files.length === 0 && <div className="faint">SharedPreferences 파일이 없습니다</div>}
+      <button className="btn sm" onClick={load} style={{ marginBottom: 10 }}>↻ {t('새로고침')}</button>
+      {files === null ? <div className="faint">{t('불러오는 중…')}</div> : files.length === 0 && <div className="faint">{t('SharedPreferences 파일이 없습니다')}</div>}
       <div className="cards" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(420px, 1fr))' }}>
         {(files ?? []).map((f) => (
           <div className="card" key={f.name}>
@@ -72,13 +75,13 @@ function Prefs() {
                               ) : (
                                 <input className="input" style={{ flex: 1 }} autoFocus value={editing.value} onChange={(e) => setEditing({ ...editing, value: e.target.value })} />
                               )}
-                              <button className="btn sm primary">저장</button>
-                              <button type="button" className="btn sm" onClick={() => setEditing(null)}>취소</button>
+                              <button className="btn sm primary">{t('저장')}</button>
+                              <button type="button" className="btn sm" onClick={() => setEditing(null)}>{t('취소')}</button>
                             </form>
                           ) : (
                             <span
                               style={{ cursor: v.type === 'unknown' ? 'default' : 'pointer' }}
-                              title="클릭해서 편집"
+                              title={t('클릭해서 편집')}
                               onClick={() => v.type !== 'unknown' && setEditing({ file: f.name, key: k, type: v.type, value: typeof v.value === 'object' ? JSON.stringify(v.value) : String(v.value) })}
                             >
                               {typeof v.value === 'object' ? JSON.stringify(v.value) : String(v.value)} <span className="faint">{v.type}</span>
@@ -100,6 +103,7 @@ function Prefs() {
 
 function Db() {
   const { serial, pkg, run, toast } = useApp();
+  const t = useT();
   const [dbs, setDbs] = useState<DbInfo[] | null>(null);
   const [db, setDb] = useState('');
   const [sql, setSql] = useState('');
@@ -125,7 +129,7 @@ function Db() {
     if (r) {
       setRes(r);
       if (r.changes !== undefined) {
-        toast(`${r.changes}행 변경`);
+        toast(t('{n}행 변경', { n: r.changes }));
         load();
       }
     }
@@ -141,14 +145,14 @@ function Db() {
   return (
     <div style={{ display: 'grid', gridTemplateColumns: '260px 1fr', height: 'calc(100% - 45px)' }}>
       <div style={{ borderRight: '1px solid var(--line)', overflow: 'auto', padding: 10 }}>
-        {dbs === null ? <div className="faint">불러오는 중…</div> : dbs.length === 0 && <div className="faint">DB가 없습니다</div>}
+        {dbs === null ? <div className="faint">{t('불러오는 중…')}</div> : dbs.length === 0 && <div className="faint">{t('DB가 없습니다')}</div>}
         {(dbs ?? []).map((d) => (
           <div key={d.name} style={{ marginBottom: 12 }}>
             <div style={{ fontWeight: 600 }}>{d.name} <span className="faint" style={{ fontWeight: 400, fontSize: 11 }}>{(d.size / 1024).toFixed(0)}KB</span></div>
             {d.error && <div className="error" style={{ fontSize: 11 }}>{d.error}</div>}
-            {d.tables.map((t) => (
-              <div key={t.name} className="pkg" style={{ padding: '3px 8px' }} onClick={() => openTable(d.name, t.name)} title={t.columns.map((c) => `${c.name} ${c.type}`).join('\n')}>
-                {t.type === 'view' ? '👁 ' : ''}{t.name} <span className="faint">{t.rowCount ?? ''}</span>
+            {d.tables.map((tb) => (
+              <div key={tb.name} className="pkg" style={{ padding: '3px 8px' }} onClick={() => openTable(d.name, tb.name)} title={tb.columns.map((c) => `${c.name} ${c.type}`).join('\n')}>
+                {tb.type === 'view' ? '👁 ' : ''}{tb.name} <span className="faint">{tb.rowCount ?? ''}</span>
               </div>
             ))}
           </div>
@@ -170,12 +174,12 @@ function Db() {
             <select className="input" value={db} onChange={(e) => setDb(e.target.value)}>
               {(dbs ?? []).map((d) => <option key={d.name}>{d.name}</option>)}
             </select>
-            <button className="btn primary" disabled={busy} onClick={() => exec()}>실행 (⌘↵)</button>
-            <label className="chk" title="INSERT/UPDATE/DELETE 등 앱 데이터를 바꾸는 SQL 허용">
+            <button className="btn primary" disabled={busy} onClick={() => exec()}>{t('실행 (⌘↵)')}</button>
+            <label className="chk" title={t('INSERT/UPDATE/DELETE 등 앱 데이터를 바꾸는 SQL 허용')}>
               <input type="checkbox" checked={write} onChange={(e) => setWrite(e.target.checked)} />
-              <span style={{ color: write ? 'var(--warn)' : undefined }}>쓰기 허용</span>
+              <span style={{ color: write ? 'var(--warn)' : undefined }}>{t('쓰기 허용')}</span>
             </label>
-            {res?.total !== undefined && <span className="muted">{res.truncated ? `${res.total}행 중 500행` : `${res.total}행`}</span>}
+            {res?.total !== undefined && <span className="muted">{res.truncated ? t('{n}행 중 500행', { n: res.total }) : t('{n}행', { n: res.total })}</span>}
           </div>
         </div>
         <div style={{ overflow: 'auto' }}>
@@ -201,7 +205,7 @@ function Db() {
               </tbody>
             </table>
           )}
-          {!res && <div className="empty">왼쪽에서 테이블을 고르거나 SQL을 실행하세요</div>}
+          {!res && <div className="empty">{t('왼쪽에서 테이블을 고르거나 SQL을 실행하세요')}</div>}
         </div>
       </div>
     </div>
@@ -210,19 +214,20 @@ function Db() {
 
 function Events() {
   const { serial, pkg } = useApp();
+  const t = useT();
   const [events, setEvents] = useState<SdkEvent[]>([]);
   useEffect(() => {
     if (!serial || !pkg) return;
     const tick = () => api.sdk<SdkEvent[]>(serial, pkg, 'events', 0).then(setEvents).catch(() => undefined);
     tick();
-    const t = setInterval(tick, 1500);
-    return () => clearInterval(t);
+    const timer = setInterval(tick, 1500);
+    return () => clearInterval(timer);
   }, [serial, pkg]);
   return (
     <div className="logs">
       {events.length === 0 && (
         <div className="empty">
-          앱에서 <span className="mono">DroidLens.event("name", data)</span>로 남긴 이벤트가 여기에 표시됩니다
+          {t('앱에서')} <span className="mono">DroidLens.event("name", data)</span>{t('로 남긴 이벤트가 여기에 표시됩니다')}
         </div>
       )}
       {events.slice().reverse().map((e) => (

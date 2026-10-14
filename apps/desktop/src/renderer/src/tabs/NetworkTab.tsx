@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { api, type NetworkDetail, type NetworkEntry } from '../api';
 import { useApp } from '../App';
+import { useT } from '../i18n';
 import { SdkGate } from './SdkGate';
 
 export function NetworkTab() {
@@ -23,6 +24,7 @@ function pretty(body?: string): string {
 
 function NetworkInspector() {
   const { serial, pkg, run } = useApp();
+  const t = useT();
   const [entries, setEntries] = useState<NetworkEntry[]>([]);
   const [sel, setSel] = useState<number | null>(null);
   const [detail, setDetail] = useState<NetworkDetail | null>(null);
@@ -87,16 +89,16 @@ function NetworkInspector() {
   return (
     <>
       <div className="toolbar">
-        <button className={`btn ${live ? 'on' : 'primary'}`} onClick={() => setLive((v) => !v)}>{live ? '⏸ 실시간' : '▶ 실시간'}</button>
-        <input className="input" placeholder="URL 필터" value={filter} onChange={(e) => setFilter(e.target.value)} style={{ width: 260 }} />
-        <label className="chk"><input type="checkbox" checked={onlyErr} onChange={(e) => setOnlyErr(e.target.checked)} />실패·4xx/5xx만</label>
-        <button className="btn" onClick={async () => { if (serial && pkg) { await run(api.sdk(serial, pkg, 'clearNetwork')); setSel(null); lastId.current = 0; setEntries([]); } }}>지우기</button>
+        <button className={`btn ${live ? 'on' : 'primary'}`} onClick={() => setLive((v) => !v)}>{live ? t('⏸ 실시간') : t('▶ 실시간')}</button>
+        <input className="input" placeholder={t('URL 필터')} value={filter} onChange={(e) => setFilter(e.target.value)} style={{ width: 260 }} />
+        <label className="chk"><input type="checkbox" checked={onlyErr} onChange={(e) => setOnlyErr(e.target.checked)} />{t('실패·4xx/5xx만')}</label>
+        <button className="btn" onClick={async () => { if (serial && pkg) { await run(api.sdk(serial, pkg, 'clearNetwork')); setSel(null); lastId.current = 0; setEntries([]); } }}>{t('지우기')}</button>
         <span className="muted">{shown.length} / {entries.length}</span>
       </div>
       <div style={{ display: 'grid', gridTemplateColumns: detail ? '1fr 46%' : '1fr', height: 'calc(100% - 45px)' }}>
         <div className="logs" style={{ height: '100%' }}>
           <div className="ll" style={{ gridTemplateColumns: '54px 44px 60px 1fr 70px 64px', color: 'var(--fg-faint)', position: 'sticky', top: 0, background: 'var(--bg)' }}>
-            <span>#</span><span>메서드</span><span>상태</span><span>URL</span><span>시간</span><span>크기</span>
+            <span>#</span><span>{t('메서드')}</span><span>{t('상태')}</span><span>URL</span><span>{t('시간')}</span><span>{t('크기')}</span>
           </div>
           {shown.map((e) => (
             <div
@@ -113,7 +115,7 @@ function NetworkInspector() {
               <span className="faint">{size(e.responseSize)}</span>
             </div>
           ))}
-          {entries.length === 0 && <div className="empty" style={{ height: 'auto', padding: 30 }}>아직 요청이 없습니다. OkHttp에 DroidLensInterceptor를 추가했는지 확인하세요.</div>}
+          {entries.length === 0 && <div className="empty" style={{ height: 'auto', padding: 30 }}>{t('아직 요청이 없습니다. OkHttp에 DroidLensInterceptor를 추가했는지 확인하세요.')}</div>}
         </div>
         {detail && (
           <div style={{ borderLeft: '1px solid var(--line)', overflow: 'auto', padding: 12 }}>
@@ -121,21 +123,21 @@ function NetworkInspector() {
               <b style={{ color: statusColor(detail) }}>{detail.state === 'failed' ? 'FAIL' : `${detail.status} ${detail.message ?? ''}`}</b>
               <span className="faint">{detail.durationMs}ms · {detail.protocol}</span>
               <div className="spacer" />
-              <button className="btn sm" onClick={copyCurl}>cURL 복사</button>
+              <button className="btn sm" onClick={copyCurl}>{t('cURL 복사')}</button>
               <button className="btn sm" onClick={() => setSel(null)}>✕</button>
             </div>
             <div className="mono" style={{ fontSize: 11.5, wordBreak: 'break-all', marginBottom: 8 }}>{detail.method} {detail.url}</div>
             {detail.error && <pre className="mono error" style={{ whiteSpace: 'pre-wrap', fontSize: 11.5 }}>{detail.error}</pre>}
             <div style={{ display: 'flex', gap: 2, marginBottom: 8 }}>
               {([['res', '응답'], ['req', '요청'], ['headers', '헤더']] as const).map(([k, l]) => (
-                <button key={k} className={`btn sm ${pane === k ? 'primary' : ''}`} onClick={() => setPane(k)}>{l}</button>
+                <button key={k} className={`btn sm ${pane === k ? 'primary' : ''}`} onClick={() => setPane(k)}>{t(l)}</button>
               ))}
             </div>
             {pane === 'headers' ? (
               <div className="props">
-                <h4 className="faint">요청 헤더</h4>
+                <h4 className="faint">{t('요청 헤더')}</h4>
                 <Headers h={detail.requestHeaders} />
-                <h4 className="faint" style={{ marginTop: 12 }}>응답 헤더</h4>
+                <h4 className="faint" style={{ marginTop: 12 }}>{t('응답 헤더')}</h4>
                 <Headers h={detail.responseHeaders} />
               </div>
             ) : (
@@ -154,8 +156,9 @@ function NetworkInspector() {
 }
 
 function Headers({ h }: { h: Record<string, string[]> }) {
+  const t = useT();
   const rows = Object.entries(h ?? {});
-  if (!rows.length) return <div className="faint">없음</div>;
+  if (!rows.length) return <div className="faint">{t('없음')}</div>;
   return (
     <table>
       <tbody>
@@ -171,14 +174,15 @@ function Headers({ h }: { h: Record<string, string[]> }) {
 }
 
 function Body({ text, b64, ct, truncated }: { text?: string; b64?: string; ct?: string; truncated: boolean }) {
+  const t = useT();
   if (b64) {
     if (ct?.startsWith('image/')) return <img src={`data:${ct};base64,${b64}`} style={{ maxWidth: '100%' }} alt="" />;
-    return <div className="faint">바이너리 {Math.floor(b64.length * 0.75)}B ({ct ?? '알 수 없는 형식'})</div>;
+    return <div className="faint">{t('바이너리 {n}B', { n: Math.floor(b64.length * 0.75) })} ({ct ?? t('알 수 없는 형식')})</div>;
   }
-  if (!text) return <div className="faint">본문 없음</div>;
+  if (!text) return <div className="faint">{t('본문 없음')}</div>;
   return (
     <>
-      {truncated && <div className="pill" style={{ marginBottom: 6 }}>앞부분만 기록됨</div>}
+      {truncated && <div className="pill" style={{ marginBottom: 6 }}>{t('앞부분만 기록됨')}</div>}
       <pre className="mono" style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-all', fontSize: 11.5, margin: 0 }}>{pretty(text)}</pre>
     </>
   );
