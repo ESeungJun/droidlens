@@ -146,6 +146,7 @@ export const api = {
   home: () => call<string>('home'),
   scenarios: () => call<ScenarioData[]>('scenarios'),
   scenarioImage: (dir: string, file: string) => call<string>('scenarioImage', dir, file),
+  scenarioDelete: (ids: string[]) => call<void>('scenarioDelete', ids),
   agentStatus: (s: string) => call<AgentStatus>('agentStatus', s),
   agentStart: (s: string) => call<AgentStatus>('agentStart', s),
   agentStop: (s: string) => call<AgentStatus>('agentStop', s),

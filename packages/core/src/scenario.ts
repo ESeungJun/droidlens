@@ -102,7 +102,7 @@ main{max-width:880px;margin:0 auto;padding:24px 16px}
 .badge{color:#fff;font-size:11px;font-weight:700;padding:2px 8px;border-radius:6px}
 pre{white-space:pre-wrap;background:rgba(127,127,127,.1);padding:8px;border-radius:8px;font-size:12px}
 .screen{color:#888;font-size:12px}
-img{max-width:280px;border-radius:10px;border:1px solid var(--line);margin-top:8px}
+img{display:block;max-width:280px;margin:10px auto 0;border-radius:10px;border:1px solid var(--line)}
 </style></head><body><main>
 <h1>${esc(d.name)}</h1>
 <span class="verdict">${v.toUpperCase()}</span>

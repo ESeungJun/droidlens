@@ -334,6 +334,15 @@ handle('scenarios', async () => {
   }
   return out;
 });
+handle('scenarioDelete', async (ids: string[]) => {
+  const fs = await import('node:fs/promises');
+  const dir = await dl.ensureDir('scenarios');
+  for (const id of ids) {
+    // 시나리오 폴더 바로 아래의 기록만 지운다 (경로 조작 방지)
+    if (!id || id.includes('/') || id.includes('\\') || id.startsWith('.')) throw new Error(`잘못된 시나리오 id: ${id}`);
+    await fs.rm(join(dir, id), { recursive: true, force: true });
+  }
+});
 handle('scenarioImage', async (dir: string, file: string) =>
   `data:image/png;base64,${(await readFile(insideHome(join(dir, basename(file))))).toString('base64')}`,
 );
