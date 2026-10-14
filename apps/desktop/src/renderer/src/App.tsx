@@ -11,6 +11,7 @@ import { SettingsTab } from './tabs/SettingsTab';
 import { NetworkTab } from './tabs/NetworkTab';
 import { AppDataTab } from './tabs/AppDataTab';
 import { ChatPanel } from './ChatPanel';
+import { UpdateButton, useUpdater } from './Updater';
 
 interface Ctx {
   serial: string | null;
@@ -54,6 +55,7 @@ export function App() {
   const [toastMsg, setToastMsg] = useState<{ msg: string; err?: boolean } | null>(null);
   const [adbOk, setAdbOk] = useState<boolean | null>(null);
   const [chatOpen, setChatOpen] = useState(initial.get('chat') === '1');
+  const updater = useUpdater();
   const [agent, setAgent] = useState<AgentStatus | null>(null);
   const [agentBusy, setAgentBusy] = useState(false);
 
@@ -167,6 +169,7 @@ export function App() {
             </button>
           )}
           <div className="spacer" />
+          <UpdateButton u={updater} />
           <button className={`btn sm ${chatOpen ? 'primary' : ''}`} onClick={() => setChatOpen((v) => !v)} title="에이전트와 대화">
             💬 에이전트 대화
           </button>
@@ -237,7 +240,7 @@ export function App() {
                   {tab === 'libs' && <LibsTab />}
                   {tab === 'info' && <AppInfoTab />}
                   {tab === 'scen' && <ScenariosTab />}
-                  {tab === 'settings' && <SettingsTab onAdbChange={(a) => setAdbOk(a.ok)} />}
+                  {tab === 'settings' && <SettingsTab onAdbChange={(a) => setAdbOk(a.ok)} updater={updater} />}
                 </>
               )}
             </section>
