@@ -9,6 +9,9 @@ Inspect <b>any app</b> with just adb, no SDK required, and let Claude Code agent
 
 <p align="center"><b>English</b> · <a href="README.ko.md">한국어</a></p>
 
+<p align="center"><a href="docs/video/droidlens-demo.mp4"><img src="docs/images/demo.gif" width="100%" alt="DroidLens demo: mirroring, 3D view hierarchy, screen flow, library detection and Claude Code agents"></a><br>
+<sub>▶ <a href="docs/video/droidlens-demo.mp4">Watch the full-quality video (MP4, 28s)</a></sub></p>
+
 ---
 
 DroidLens aims to replace Meta's [Flipper](https://github.com/facebook/flipper) (archived in 2025). Without adding anything to your app, you get screen mirroring, the view hierarchy, screen navigation paths, and the libraries an app uses — and the built-in MCP server lets Claude Code agents use the same features.
@@ -227,6 +230,7 @@ agents/           Claude Code agent definitions
 | `feature/<name>` | New features and fixes, branched from `develop` and merged back via PR |
 | `release/<version>` | Release prep (version bump, notes) from `develop`; merged into `master` and `develop`, then tagged |
 | `hotfix/<version>` | Urgent fixes from `master`; merged into `master` and `develop`, then tagged |
+| `docs/<name>` | README and docs only (no app code), from `master`; merged into `master` and `develop` with no release or tag |
 
 ### Commit messages
 
