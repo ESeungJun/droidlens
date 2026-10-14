@@ -1,4 +1,18 @@
 export const data: Record<string, string> = {
+  '앱 정보 없음': 'No app',
+  '리포트 {n}개를 지웠습니다': 'Deleted {n} reports',
+  묶기: 'Group by',
+  '묶지 않음': 'No grouping',
+  앱별: 'By app',
+  날짜별: 'By date',
+  이름별: 'By name',
+  '선택 끝': 'Done',
+  선택: 'Select',
+  '모두 해제': 'Deselect all',
+  '모두 선택': 'Select all',
+  '선택한 리포트 {n}개를 지울까요?': 'Delete {n} selected reports?',
+  '선택 삭제 ({n})': 'Delete selected ({n})',
+  '"{name}" 리포트를 지울까요?': 'Delete the "{name}" report?',
   // 앱 데이터
   데이터베이스: 'Database',
   '커스텀 이벤트': 'Custom events',
