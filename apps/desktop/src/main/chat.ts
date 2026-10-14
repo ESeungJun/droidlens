@@ -1,5 +1,5 @@
 import { execFile, spawn, type ChildProcess } from 'node:child_process';
-import { readdir, readFile } from 'node:fs/promises';
+import { mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
 import * as dl from '@droidlens/core';
@@ -20,13 +20,18 @@ export interface ClaudeEnv {
 
 let resolved: Promise<ClaudeEnv> | null = null;
 
+/** cmd.exe 에 넘길 인자: 공백·따옴표가 있으면 큰따옴표로 감싼다 */
+function winQuote(a: string): string {
+  return /[\s"]/.test(a) ? `"${a.replace(/"/g, '\\"')}"` : a;
+}
+
 /** GUI 앱은 셸 PATH를 물려받지 않으므로 로그인 셸에서 claude 위치와 PATH를 한 번 알아낸다 */
 export function resolveClaude(): Promise<ClaudeEnv> {
   resolved ??= (async () => {
     if (process.platform === 'win32') {
       const { stdout } = await run('where', ['claude'], { timeout: 10_000 });
       const bin = stdout.split(/\r?\n/)[0].trim();
-      const { stdout: v } = await run(bin, ['--version'], { timeout: 15_000, shell: true });
+      const { stdout: v } = await run(winQuote(bin), ['--version'], { timeout: 15_000, shell: true });
       return { bin, path: process.env.PATH ?? '', version: v.trim() };
     }
     const sh = process.env.SHELL || '/bin/zsh';
@@ -124,9 +129,23 @@ export async function sendChat(
     .filter(Boolean)
     .join('\n');
 
+  // 복잡한 인자(JSON·여러 줄 프롬프트)는 파일과 표준 입력으로 넘긴다. Windows 에서 claude.cmd 는 셸로 실행해야 하는데
+  // cmd.exe 가 JSON 의 따옴표·공백을 망가뜨리므로, 셸에는 공백 없는 단순 토큰과 따옴표로 감싼 파일 경로만 남긴다.
+  const cwd = await dl.ensureDir('chat');
+  const runDir = await mkdtemp(join(cwd, 'run-'));
+  const mcpFile = join(runDir, 'mcp.json');
+  const agentsFile = join(runDir, 'agents.json');
+  const promptFile = join(runDir, 'system.txt');
+  await Promise.all([
+    writeFile(mcpFile, JSON.stringify(mcpConfig)),
+    writeFile(agentsFile, JSON.stringify(agents)),
+    writeFile(promptFile, context),
+  ]);
+  const win = process.platform === 'win32';
+  const path = (p: string) => (win ? winQuote(p) : p);
+
   const args = [
     '-p',
-    req.message,
     '--output-format',
     'stream-json',
     '--verbose',
@@ -134,27 +153,29 @@ export async function sendChat(
     '--setting-sources',
     'project',
     '--mcp-config',
-    JSON.stringify(mcpConfig),
+    path(mcpFile),
     '--strict-mcp-config',
     '--agents',
-    JSON.stringify(agents),
+    path(agentsFile),
     '--agent',
     req.agent,
     // 비대화형이라 권한 확인 창을 띄울 수 없으므로 DroidLens 도구만 미리 허용한다
     '--allowedTools',
     'mcp__droidlens__*',
-    '--append-system-prompt',
-    context,
+    '--append-system-prompt-file',
+    path(promptFile),
   ];
   if (req.sessionId) args.push('--resume', req.sessionId);
 
-  const cwd = await dl.ensureDir('chat');
-  const child = spawn(claude.bin, args, {
+  const child = spawn(win ? winQuote(claude.bin) : claude.bin, args, {
     cwd,
     env: { ...process.env, PATH: claude.path },
-    stdio: ['ignore', 'pipe', 'pipe'],
-    shell: process.platform === 'win32',
+    stdio: ['pipe', 'pipe', 'pipe'],
+    shell: win,
   });
+  // 사용자 메시지는 표준 입력으로 (-p 는 인자가 없으면 stdin 을 프롬프트로 읽는다)
+  child.stdin!.end(req.message);
+  child.on('close', () => rm(runDir, { recursive: true, force: true }).catch(() => undefined));
   current = child;
 
   let buf = '';
