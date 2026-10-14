@@ -1,5 +1,5 @@
 import { app, BrowserWindow, clipboard, ipcMain, shell } from 'electron';
-import { exec, execFile } from 'node:child_process';
+import { execFile } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { copyFile, mkdir, readdir, readFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
@@ -11,7 +11,6 @@ import { checkForUpdate, cleanupOldUpdates, currentVersion, installUpdate, type 
 
 let adb = new dl.Adb();
 const run = promisify(execFile);
-const runShell = promisify(exec);
 let win: BrowserWindow | null = null;
 
 function createWindow(): void {
@@ -370,16 +369,20 @@ function mcpAddArgs(): string[] {
 
 /** GUI 앱은 로그인 셸 PATH를 못 받으므로 로그인 셸을 거쳐 claude를 실행한다 */
 async function runClaude(args: string[]): Promise<string> {
-  if (process.platform === 'win32') {
-    // cmd.exe가 해석하므로 공백·따옴표가 있는 인자만 큰따옴표로 감싼다
-    const line = ['claude', ...args].map((a) => (/[\s"]/.test(a) ? `"${a.replace(/"/g, '\\"')}"` : a)).join(' ');
-    const { stdout } = await runShell(line, { timeout: 30_000 });
-    return stdout;
-  }
-  // -i: .zshrc/.bashrc에 PATH를 둔 경우까지 반영
-  const sh = process.env.SHELL || '/bin/zsh';
-  const { stdout } = await run(sh, ['-ilc', ['claude', ...args].map(q).join(' ')], { timeout: 30_000 });
+  // claude 위치·PATH는 resolveClaude()가 로그인 셸에서 한 번만 찾아 캐시한다 (매번 로그인 셸을 띄우면 수 초씩 걸림)
+  const c = await resolveClaude();
+  const { stdout } = await run(c.bin, args, { timeout: 30_000, env: { ...process.env, PATH: c.path }, shell: process.platform === 'win32' });
   return stdout;
+}
+
+/** user 범위 MCP 등록 여부. `claude mcp list`는 등록된 서버를 하나씩 띄워 검사해 느리므로 설정 파일을 직접 읽는다 */
+async function droidlensRegistered(): Promise<boolean> {
+  try {
+    const cfg = JSON.parse(await readFile(join(homedir(), '.claude.json'), 'utf8')) as { mcpServers?: Record<string, unknown> };
+    return !!cfg.mcpServers?.droidlens;
+  } catch {
+    return false;
+  }
 }
 
 handle('appVersion', async () => currentVersion());
@@ -408,10 +411,9 @@ handle('integration', async () => {
   const src = agentsSrc();
   const agents = existsSync(src) ? (await readdir(src)).filter((f) => f.endsWith('.md')) : [];
   let claudeVersion: string | null = null;
-  let registered = false;
+  const registered = await droidlensRegistered();
   try {
-    claudeVersion = (await runClaude(['--version'])).trim();
-    registered = /droidlens/.test(await runClaude(['mcp', 'list']).catch(() => ''));
+    claudeVersion = (await resolveClaude()).version;
   } catch {
     /* claude CLI 없음 */
   }
