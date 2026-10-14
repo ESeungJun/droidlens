@@ -6,6 +6,7 @@ import { homedir } from 'node:os';
 import { basename, join, resolve, sep } from 'node:path';
 import { promisify } from 'node:util';
 import * as dl from '@droidlens/core';
+import { resolveClaude, sendChat, stopChat, type ChatRequest } from './chat';
 
 let adb = new dl.Adb();
 const run = promisify(execFile);
@@ -288,6 +289,17 @@ handle('scriptRun', async (s: string, names: string[]) => {
 });
 handle('scriptStop', async () => scriptAbort?.abort());
 
+// ---------- 에이전트 대화 ----------
+handle('chatStatus', async () => {
+  const c = await resolveClaude();
+  return { version: c.version };
+});
+handle('chatSend', async (req: ChatRequest) => {
+  await sendChat(req, { execPath: process.execPath, mcpScript: mcpScript(), agentsDir: agentsSrc() }, (e) => send('chat:event', e));
+  return true;
+});
+handle('chatStop', async () => stopChat());
+
 // ---------- 기타 ----------
 /** 렌더러가 넘긴 경로는 DroidLens 데이터 폴더 안쪽만 허용 (openPath는 실행 파일도 열 수 있으므로) */
 function insideHome(p: string): string {
@@ -417,6 +429,7 @@ app.whenReady().then(() => {
   createWindow();
 });
 app.on('window-all-closed', () => {
+  stopChat();
   logStream?.stop();
   mirror?.m.stop();
   app.quit();

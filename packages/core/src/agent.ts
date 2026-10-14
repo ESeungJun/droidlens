@@ -72,6 +72,19 @@ export class AgentClient {
 
 const clients = new Map<string, AgentClient>();
 const failed = new Map<string, number>(); // serial → 실패 시각 (잠시 재시도 안 함)
+const lastError = new Map<string, string>(); // serial → 마지막 실패 원인 (UI에 표시)
+
+/** APK 설치. 기기에 더 높은 버전이 있으면(다른 DroidLens 버전이 설치) 지우고 다시 설치한다 */
+async function installAgent(dev: DeviceAdb, apk: string): Promise<void> {
+  try {
+    await dev.raw(['install', '-r', '-t', apk], { timeoutMs: 60_000 });
+  } catch (e) {
+    const msg = (e as Error).message;
+    if (!/DOWNGRADE|UPDATE_INCOMPATIBLE|signatures do not match/i.test(msg)) throw e;
+    await dev.raw(['uninstall', AGENT_PACKAGE], { timeoutMs: 30_000 }).catch(() => undefined);
+    await dev.raw(['install', '-t', apk], { timeoutMs: 60_000 });
+  }
+}
 const starting = new Map<string, Promise<AgentClient | undefined>>();
 
 export function agentFor(serial: string): AgentClient | undefined {
@@ -117,8 +130,8 @@ export async function ensureAgent(dev: DeviceAdb, opts: { force?: boolean } = {}
       const apk = agentApkPath();
       const ver = await installedVersion(dev);
       if (ver !== AGENT_VERSION) {
-        if (!apk) throw new Error('에이전트 APK가 없습니다');
-        await dev.raw(['install', '-r', '-t', apk], { timeoutMs: 60_000 });
+        if (!apk) throw new Error('에이전트 APK를 찾지 못했습니다 (앱을 다시 설치하거나 DROIDLENS_AGENT_APK 지정)');
+        await installAgent(dev, apk);
       }
       await dev.shell(`am force-stop ${AGENT_PACKAGE}`).catch(() => undefined);
       await dev.shell(`setsid am instrument -w ${INSTRUMENT} </dev/null >/dev/null 2>&1 &`);
@@ -126,15 +139,17 @@ export async function ensureAgent(dev: DeviceAdb, opts: { force?: boolean } = {}
       for (let i = 0; i < 50; i++) {
         await sleep(500);
         const r = await client.ping().catch(() => undefined);
-        if (r?.ok) {
+        if (r?.ok && r.version === AGENT_VERSION) {
           clients.set(dev.serial, client);
           failed.delete(dev.serial);
+          lastError.delete(dev.serial);
           return client;
         }
       }
-      throw new Error('에이전트가 응답하지 않습니다');
-    } catch {
+      throw new Error('에이전트가 25초 안에 응답하지 않았습니다. 기기가 매우 느리거나 다른 UiAutomation 도구(Appium 등)가 실행 중일 수 있습니다');
+    } catch (e) {
       failed.set(dev.serial, Date.now());
+      lastError.set(dev.serial, (e as Error).message);
       return undefined;
     } finally {
       starting.delete(dev.serial);
@@ -150,7 +165,9 @@ export async function stopAgent(dev: DeviceAdb): Promise<void> {
   await dev.shell(`am force-stop ${AGENT_PACKAGE}`).catch(() => undefined);
 }
 
-export async function agentStatus(dev: DeviceAdb): Promise<{ installed?: number; running: boolean; apk?: string; disabled: boolean }> {
+export async function agentStatus(
+  dev: DeviceAdb,
+): Promise<{ installed?: number; expected: number; running: boolean; apk?: string; disabled: boolean; error?: string }> {
   // 다른 DroidLens 프로세스(데스크톱 앱 ↔ MCP)가 띄운 에이전트도 감지한다
   let c = clients.get(dev.serial);
   if (!c) {
@@ -160,5 +177,12 @@ export async function agentStatus(dev: DeviceAdb): Promise<{ installed?: number;
   const alive = c ? await c.ping().catch(() => undefined) : undefined;
   const running = !!alive && alive.version === AGENT_VERSION;
   if (running && c) clients.set(dev.serial, c);
-  return { installed: await installedVersion(dev), running, apk: agentApkPath(), disabled: agentDisabled() };
+  return {
+    installed: await installedVersion(dev),
+    expected: AGENT_VERSION,
+    running,
+    apk: agentApkPath(),
+    disabled: agentDisabled(),
+    error: running ? undefined : lastError.get(dev.serial),
+  };
 }

@@ -10,6 +10,7 @@ import { ScenariosTab } from './tabs/ScenariosTab';
 import { SettingsTab } from './tabs/SettingsTab';
 import { NetworkTab } from './tabs/NetworkTab';
 import { AppDataTab } from './tabs/AppDataTab';
+import { ChatPanel } from './ChatPanel';
 
 interface Ctx {
   serial: string | null;
@@ -52,6 +53,7 @@ export function App() {
   const [tab, setTab] = useState<TabId>((initial.get('tab') as TabId) || 'screen');
   const [toastMsg, setToastMsg] = useState<{ msg: string; err?: boolean } | null>(null);
   const [adbOk, setAdbOk] = useState<boolean | null>(null);
+  const [chatOpen, setChatOpen] = useState(initial.get('chat') === '1');
   const [agent, setAgent] = useState<AgentStatus | null>(null);
   const [agentBusy, setAgentBusy] = useState(false);
 
@@ -147,7 +149,7 @@ export function App() {
               title={
                 agent?.running
                   ? '온디바이스 에이전트 실행 중 — 뷰 계층이 빠르고 한글 입력이 됩니다. 클릭하면 중지'
-                  : '에이전트 없음 — uiautomator로 동작 (느림, ASCII 입력만). 클릭하면 시작'
+                  : `에이전트 꺼짐 — uiautomator로 동작 (느림, ASCII 입력만). 클릭하면 시작${agent?.error ? `\n최근 실패: ${agent.error}` : ''}`
               }
               onClick={async () => {
                 if (!serial) return;
@@ -156,7 +158,8 @@ export function App() {
                 setAgentBusy(false);
                 if (r) {
                   setAgent(r);
-                  if (!r.running && !agent?.running) toast('에이전트를 시작하지 못했습니다. uiautomator로 계속 동작합니다.', true);
+                  if (!r.running && !agent?.running)
+                    toast(`에이전트를 시작하지 못했습니다${r.error ? `: ${r.error}` : ''} — uiautomator로 계속 동작합니다`, true);
                 }
               }}
             >
@@ -164,13 +167,16 @@ export function App() {
             </button>
           )}
           <div className="spacer" />
+          <button className={`btn sm ${chatOpen ? 'primary' : ''}`} onClick={() => setChatOpen((v) => !v)} title="에이전트와 대화">
+            💬 에이전트 대화
+          </button>
           {fgPkg && (
             <button className="btn sm" onClick={() => setPkg(fgPkg)} title="포그라운드 앱 선택">
               포그라운드: <span className="mono">{fgPkg}</span>
             </button>
           )}
         </header>
-        <div className="body">
+        <div className="body" style={{ gridTemplateColumns: chatOpen ? '260px 1fr 400px' : undefined }}>
           <aside className="sidebar">
             <div className="search">
               <input className="input" placeholder="패키지 검색" value={filter} onChange={(e) => setFilter(e.target.value)} />
@@ -236,6 +242,7 @@ export function App() {
               )}
             </section>
           </main>
+          {chatOpen && <ChatPanel onClose={() => setChatOpen(false)} />}
         </div>
         {toastMsg && <div className={`toast ${toastMsg.err ? 'err' : ''}`}>{toastMsg.msg}</div>}
       </div>
