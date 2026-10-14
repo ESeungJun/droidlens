@@ -1,4 +1,10 @@
 export const common: Record<string, string> = {
+  '앱을 고르면 기기에서 그 앱을 앞으로 가져옵니다 (실행 중이면 보던 화면 그대로)': 'Bring the app to the front on the device when selected (keeps its current screen if running)',
+  '누르면 앱 열기': 'Open app on select',
+  '선택한 앱과 기기 화면에 떠 있는 앱이 다릅니다': 'The selected app differs from the app on the device screen',
+  '화면:': 'On screen:',
+  '선택한 앱 열기': 'Open selected app',
+  '이 앱으로 바꾸기': 'Switch to this app',
   '다시 확인': 'Check again',
   '폰이나 에뮬레이터가 연결되면 자동으로 인식합니다.': 'A phone or emulator is detected automatically once connected.',
   '기기 연결 도우미': 'Device setup',
