@@ -1,5 +1,19 @@
-import { memo, useCallback, useEffect, useMemo, useState } from 'react';
-import { Background, Controls, Handle, MarkerType, MiniMap, Position, ReactFlow, type Edge, type Node, type NodeProps } from '@xyflow/react';
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import {
+  Background,
+  Controls,
+  Handle,
+  MarkerType,
+  MiniMap,
+  Position,
+  ReactFlow,
+  type Edge,
+  type Node,
+  type NodeChange,
+  type NodeProps,
+  type ReactFlowInstance,
+} from '@xyflow/react';
+import { Graph, layout as dagreLayout } from '@dagrejs/dagre';
 import { api, type GraphData, type ScreenNode } from '../api';
 import { NeedPkg, useApp } from '../App';
 import { useT } from '../i18n';
@@ -36,30 +50,25 @@ const ScreenCard = memo(({ data }: NodeProps<Node<SNodeData>>) => {
 
 const nodeTypes = { screen: ScreenCard };
 
-/** 시작 화면부터 BFS 깊이로 열을 나누는 단순 레이아웃 */
-function layout(g: GraphData): Map<string, { x: number; y: number }> {
-  const pos = new Map<string, { x: number; y: number }>();
-  if (!g.nodes.length) return pos;
-  const start = [...g.nodes].sort((a, b) => a.firstSeen - b.firstSeen)[0].id;
-  const level = new Map([[start, 0]]);
-  const q = [start];
-  while (q.length) {
-    const cur = q.shift()!;
-    for (const e of g.edges) {
-      if (e.from === cur && !level.has(e.to)) {
-        level.set(e.to, level.get(cur)! + 1);
-        q.push(e.to);
-      }
-    }
+type Pos = { x: number; y: number };
+// 화면 카드 크기 (styles.css .screen-node 150px + 여백, 세로 스크린샷 기준)
+const CARD_W = 162;
+const CARD_H = 380;
+
+/** 화면 흐름을 왼쪽 → 오른쪽 계층으로 배치 (연결이 겹치지 않게 dagre 로 정렬) */
+function layout(g: GraphData): Map<string, Pos> {
+  const d = new Graph();
+  d.setGraph({ rankdir: 'LR', nodesep: 40, ranksep: 110, marginx: 20, marginy: 20 });
+  d.setDefaultEdgeLabel(() => ({}));
+  for (const n of g.nodes) d.setNode(n.id, { width: CARD_W, height: CARD_H });
+  for (const e of g.edges) if (e.from !== e.to && d.hasNode(e.from) && d.hasNode(e.to)) d.setEdge(e.from, e.to);
+  dagreLayout(d);
+  const pos = new Map<string, Pos>();
+  // dagre 는 카드 중심 좌표를 준다 → React Flow 는 왼쪽 위 기준
+  for (const n of g.nodes) {
+    const p = d.node(n.id);
+    pos.set(n.id, { x: p.x - CARD_W / 2, y: p.y - CARD_H / 2 });
   }
-  let maxL = Math.max(...level.values());
-  for (const n of g.nodes) if (!level.has(n.id)) level.set(n.id, ++maxL);
-  const cols = new Map<number, string[]>();
-  for (const n of [...g.nodes].sort((a, b) => a.firstSeen - b.firstSeen)) {
-    const l = level.get(n.id)!;
-    cols.set(l, [...(cols.get(l) ?? []), n.id]);
-  }
-  for (const [l, ids] of cols) ids.forEach((id, i) => pos.set(id, { x: l * 240, y: i * 400 - ((ids.length - 1) * 400) / 2 }));
   return pos;
 }
 
@@ -73,6 +82,41 @@ export function FlowTab() {
   const [depth, setDepth] = useState(3);
   const [progress, setProgress] = useState<string[]>([]);
   const [confirmReset, setConfirmReset] = useState(false);
+  const [fromCurrent, setFromCurrent] = useState(false);
+  // 카드 위치: 처음엔 자동 배치, 사용자가 드래그하면 그 위치를 유지하고 '정리'로 다시 자동 배치
+  const [pos, setPos] = useState<Map<string, Pos>>(new Map());
+  const moved = useRef(false);
+  const rf = useRef<ReactFlowInstance<Node<SNodeData>, Edge> | null>(null);
+
+  const arrange = useCallback(() => {
+    if (!g) return;
+    moved.current = false;
+    setPos(layout(g));
+    requestAnimationFrame(() => rf.current?.fitView({ padding: 0.15, duration: 300 }));
+  }, [g]);
+
+  // 그래프가 바뀌면: 직접 옮긴 적이 없으면 전체 다시 배치, 옮겼으면 새 화면만 자동 위치에 추가
+  useEffect(() => {
+    if (!g) return;
+    const auto = layout(g);
+    setPos((cur) => {
+      if (!moved.current) return auto;
+      const next = new Map(cur);
+      for (const [id, p] of auto) if (!next.has(id)) next.set(id, p);
+      return next;
+    });
+  }, [g]);
+
+  const onNodesChange = useCallback((changes: NodeChange<Node<SNodeData>>[]) => {
+    const drags = changes.filter((c) => c.type === 'position' && c.position);
+    if (!drags.length) return;
+    moved.current = true;
+    setPos((cur) => {
+      const next = new Map(cur);
+      for (const c of drags) if (c.type === 'position' && c.position) next.set(c.id, c.position);
+      return next;
+    });
+  }, []);
 
   const reload = useCallback(async () => {
     if (pkg) setG((await run(api.graphGet(pkg))) ?? null);
@@ -96,7 +140,6 @@ export function FlowTab() {
 
   const { nodes, edges } = useMemo(() => {
     if (!g || !pkg) return { nodes: [], edges: [] };
-    const pos = layout(g);
     const nodes: Node<SNodeData>[] = g.nodes.map((n) => ({
       id: n.id,
       type: 'screen',
@@ -115,7 +158,7 @@ export function FlowTab() {
         animated: !!sel && e.from === sel,
       }));
     return { nodes, edges };
-  }, [g, pkg, sel]);
+  }, [g, pkg, sel, pos]);
 
   if (!pkg) return <NeedPkg />;
   const selNode = g?.nodes.find((n) => n.id === sel);
@@ -125,7 +168,7 @@ export function FlowTab() {
     setExploring(true);
     setProgress([]);
     setTapCount(0);
-    const r = await run(api.explore(serial, pkg, depth));
+    const r = await run(api.explore(serial, pkg, depth, fromCurrent));
     setExploring(false);
     await reload();
     if (r) {
@@ -158,12 +201,17 @@ export function FlowTab() {
           {exploring ? t('탐색 중…') : t('▶ 자동 탐색')}
         </button>
         {exploring && <button className="btn danger" onClick={() => api.exploreStop()}>{t('중지')}</button>}
+        <select className="input" value={fromCurrent ? 'current' : 'launch'} onChange={(e) => setFromCurrent(e.target.value === 'current')} disabled={exploring}>
+          <option value="launch">{t('앱 첫 화면부터')}</option>
+          <option value="current">{t('현재 화면부터')}</option>
+        </select>
         <label className="muted" title={t('시작 화면에서 몇 화면 안쪽까지 들어갈지 정합니다. 1이면 시작 화면의 버튼만 눌러 보고, 2면 거기서 열린 화면의 버튼까지 눌러 봅니다.')}>
           {t('최대 깊이')} <input className="input" type="number" min={1} max={10} value={depth} onChange={(e) => setDepth(+e.target.value)} style={{ width: 52 }} />
         </label>
         {exploring && <span className="muted">{t('버튼 {n}번 누름', { n: tapCount })}</span>}
         <button className="btn" onClick={async () => serial && (await run(api.graphRecordHere(serial, pkg))) && reload()}>{t('＋ 현재 화면 추가')}</button>
         <button className="btn" onClick={reload}>↻</button>
+        <button className="btn" disabled={!g?.nodes.length} onClick={arrange} title={t('화면 카드를 자동으로 다시 배치하고 전체가 보이게 맞춥니다')}>{t('⊞ 정리')}</button>
         {confirmReset ? (
           <>
             <span className="muted">{t('이 앱의 화면과 연결을 모두 지울까요?')}</span>
@@ -174,7 +222,13 @@ export function FlowTab() {
           <button className="btn" disabled={exploring || !g?.nodes.length} onClick={() => setConfirmReset(true)}>{t('그래프 초기화')}</button>
         )}
         <span className="muted">{t('화면 {n} · 전이 {e}', { n: g?.nodes.length ?? 0, e: g?.edges.length ?? 0 })}</span>
-        <span className="faint" style={{ fontSize: 11 }}>{t('결제·삭제·로그아웃·전송 같은 버튼은 자동 탐색에서 누르지 않습니다')}</span>
+        <span
+          className="faint"
+          style={{ fontSize: 11, cursor: 'help' }}
+          title={t('지금 화면의 누를 수 있는 버튼을 위에서부터 하나씩 누릅니다. 새 화면이 열리면 최대 깊이 안에서 그 화면으로 들어가 같은 방식으로 탐색하고, 다 보면 뒤로 가기로 돌아와 다음 버튼을 누릅니다. 결제·삭제·로그아웃·전송 같은 버튼과 뒤로·닫기는 누르지 않습니다.')}
+        >
+          ⓘ {t('탐색 방식')}
+        </span>
       </div>
       <div className="flow" style={{ position: 'relative' }}>
         {g && g.nodes.length ? (
@@ -183,6 +237,8 @@ export function FlowTab() {
             edges={edges}
             nodeTypes={nodeTypes}
             onNodeClick={(_, n) => setSel(n.id)}
+            onNodesChange={onNodesChange}
+            onInit={(i) => (rf.current = i)}
             onPaneClick={() => setSel(null)}
             fitView
             colorMode="dark"

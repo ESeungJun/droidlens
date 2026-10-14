@@ -1,5 +1,11 @@
 // 뷰 계층 · 화면 흐름 · 네트워크 탭
 export const inspect: Record<string, string> = {
+  '앱 첫 화면부터': 'From app start',
+  '현재 화면부터': 'From current screen',
+  '⊞ 정리': '⊞ Arrange',
+  '화면 카드를 자동으로 다시 배치하고 전체가 보이게 맞춥니다': 'Re-arrange screen cards automatically and fit them in view',
+  '탐색 방식': 'How it explores',
+  '지금 화면의 누를 수 있는 버튼을 위에서부터 하나씩 누릅니다. 새 화면이 열리면 최대 깊이 안에서 그 화면으로 들어가 같은 방식으로 탐색하고, 다 보면 뒤로 가기로 돌아와 다음 버튼을 누릅니다. 결제·삭제·로그아웃·전송 같은 버튼과 뒤로·닫기는 누르지 않습니다.': 'Taps each tappable button on the screen from the top. When a new screen opens, it goes into it (within the max depth) and explores it the same way, then presses Back and moves to the next button. It never taps payment, delete, log-out or send buttons, or back/close.',
   '탐색 완료: 버튼 {n}번 누름': 'Exploration done: {n} taps',
   ', 화면에서 못 찾은 버튼 {n}개': ', {n} buttons not found on screen',
   '화면 그래프를 초기화했습니다': 'Screen graph cleared',
@@ -46,7 +52,6 @@ export const inspect: Record<string, string> = {
   '중지': 'Stop',
   '＋ 현재 화면 추가': '＋ Add current screen',
   '화면 {n} · 전이 {e}': '{n} screens · {e} transitions',
-  '결제·삭제·로그아웃·전송 같은 버튼은 자동 탐색에서 누르지 않습니다': 'Auto-explore never taps buttons like pay, delete, log out, or send',
   '아직 기록된 화면이 없습니다.': 'No screens recorded yet.',
   '자동 탐색을 실행하거나, 화면 탭에서 "화면 흐름 기록"을 켜고 직접 조작하세요.': 'Run auto-explore, or turn on "Record screen flow" in the Screen tab and use the app yourself.',
   '탐색 로그': 'Exploration log',
