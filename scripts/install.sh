@@ -12,7 +12,6 @@ set -euo pipefail
 
 main() {
   local REPO="ESeungJun/droidlens"
-  local API="https://api.github.com/repos/${REPO}/releases/latest"
 
   say() { printf '\033[1;32m==>\033[0m %s\n' "$*"; }
   die() { printf '\033[1;31m오류:\033[0m %s\n' "$*" >&2; exit 1; }
@@ -24,13 +23,12 @@ main() {
   trap 'rm -rf "$TMP"' EXIT
 
   say "최신 릴리스 확인 중…"
-  # 응답을 파일로 먼저 받는다 (파이프로 grep 하면 curl 이 SIGPIPE 로 조용히 끝날 수 있다)
-  if ! curl -fsSL -o "$TMP/release.json" "$API"; then
-    die "GitHub 에서 최신 릴리스를 가져오지 못했습니다. 네트워크를 확인하거나 잠시 뒤 다시 시도하세요 (GitHub API 요청 한도: 시간당 60회)"
-  fi
-  local TAG
-  TAG=$(grep -m1 '"tag_name"' "$TMP/release.json" | sed -E 's/.*"tag_name": *"([^"]+)".*/\1/' || true)
-  [ -n "$TAG" ] || die "릴리스 정보에서 버전을 찾지 못했습니다"
+  # GitHub API(비로그인 시간당 60회, 같은 IP 공유) 대신 releases/latest 주소의 리다이렉트로 최신 태그를 알아낸다
+  local LATEST TAG
+  LATEST=$(curl -fsSLI -o /dev/null -w '%{url_effective}' "https://github.com/${REPO}/releases/latest") ||
+    die "GitHub 에서 최신 릴리스를 확인하지 못했습니다. 네트워크를 확인하세요"
+  TAG="${LATEST##*/tag/}"
+  case "$TAG" in v[0-9]*) ;; *) die "최신 릴리스 버전을 알아내지 못했습니다 (${LATEST})" ;; esac
   local VERSION="${TAG#v}"
   local BASE="https://github.com/${REPO}/releases/download/${TAG}"
 
