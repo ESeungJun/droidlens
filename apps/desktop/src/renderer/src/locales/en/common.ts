@@ -1,4 +1,5 @@
 export const common: Record<string, string> = {
+  '확인 실패 — ↻ 로 다시 시도하세요': 'Check failed — retry with ↻',
   '앱을 고르면 기기에서 그 앱을 앞으로 가져옵니다 (실행 중이면 보던 화면 그대로)': 'Bring the app to the front on the device when selected (keeps its current screen if running)',
   '누르면 앱 열기': 'Open app on select',
   '선택한 앱과 기기 화면에 떠 있는 앱이 다릅니다': 'The selected app differs from the app on the device screen',

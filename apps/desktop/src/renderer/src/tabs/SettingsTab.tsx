@@ -20,11 +20,14 @@ export function SettingsTab({ onAdbChange, updater }: { onAdbChange?(s: AdbStatu
   const [busy, setBusy] = useState('');
   const [home, setHome] = useState(cache.home ?? '');
   const [checking, setChecking] = useState<{ adb?: boolean; integ?: boolean }>({});
+  // 조회가 실패하면 '확인 중'에 머물지 않고 실패로 표시한다
+  const [failed, setFailed] = useState<{ adb?: boolean; integ?: boolean }>({});
 
   const loadAdb = async () => {
     setChecking((c) => ({ ...c, adb: true }));
     const a = await run(api.adbStatus());
     setChecking((c) => ({ ...c, adb: false }));
+    setFailed((f) => ({ ...f, adb: !a }));
     if (a) {
       cache.adb = a;
       setAdb(a);
@@ -35,6 +38,7 @@ export function SettingsTab({ onAdbChange, updater }: { onAdbChange?(s: AdbStatu
     setChecking((c) => ({ ...c, integ: true }));
     const i = await run(api.integration());
     setChecking((c) => ({ ...c, integ: false }));
+    setFailed((f) => ({ ...f, integ: !i }));
     if (i) {
       cache.integ = i;
       setInteg(i);
@@ -47,6 +51,9 @@ export function SettingsTab({ onAdbChange, updater }: { onAdbChange?(s: AdbStatu
     if (cache.home === undefined) api.home().then((h) => setHome((cache.home = h))).catch(() => undefined);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  const pending = (key: 'adb' | 'integ') =>
+    failed[key] && !checking[key] ? <span className="error">{t('확인 실패 — ↻ 로 다시 시도하세요')}</span> : <span className="muted">{t('확인 중…')}</span>;
 
   const refresh = (key: 'adb' | 'integ', onClick: () => void) => (
     <button className="btn sm" style={{ float: 'right', marginTop: -4 }} disabled={checking[key]} onClick={onClick} title={t('다시 확인')}>
@@ -84,7 +91,7 @@ export function SettingsTab({ onAdbChange, updater }: { onAdbChange?(s: AdbStatu
         <div className="card">
           <h5>adb {refresh('adb', loadAdb)}</h5>
           {!adb ? (
-            <p className="muted">{t('확인 중…')}</p>
+            <p>{pending('adb')}</p>
           ) : adb.ok ? (
             <p>
               <span className="pill accent">{t('연결됨')}</span> <span className="mono">adb {adb.version}</span>
@@ -121,11 +128,11 @@ Linux   sudo apt install adb`}
           </p>
           <div className="kv" style={{ marginBottom: 8 }}>
             <span>Claude Code</span>
-            <span>{!integ ? <span className="muted">{t('확인 중…')}</span> : integ.claudeVersion ?? <span className="error">{t('찾지 못함')}</span>}</span>
+            <span>{!integ ? pending('integ') : integ.claudeVersion ?? <span className="error">{t('찾지 못함')}</span>}</span>
             <span>{t('MCP 등록')}</span>
-            <span>{!integ ? <span className="muted">{t('확인 중…')}</span> : integ.registered ? <span style={{ color: 'var(--accent)' }}>{t('등록됨')}</span> : t('미등록')}</span>
+            <span>{!integ ? pending('integ') : integ.registered ? <span style={{ color: 'var(--accent)' }}>{t('등록됨')}</span> : t('미등록')}</span>
             <span>{t('MCP 스크립트')}</span>
-            <span style={{ fontSize: 11 }}>{!integ ? <span className="muted">{t('확인 중…')}</span> : integ.mcpScriptExists ? integ.mcpScript : <span className="error">{t('없음 (pnpm build 필요)')}</span>}</span>
+            <span style={{ fontSize: 11 }}>{!integ ? pending('integ') : integ.mcpScriptExists ? integ.mcpScript : <span className="error">{t('없음 (pnpm build 필요)')}</span>}</span>
           </div>
           <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
             <button className="btn primary" disabled={!integ?.claudeVersion || busy === 'mcp'} onClick={register}>
