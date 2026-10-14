@@ -20,6 +20,7 @@ function nodeAt(root: ViewNode, x: number, y: number): ViewNode | undefined {
 
 const short = (c: string) => c.split('.').pop() ?? c;
 const rid = (r: string) => r.split(':id/')[1] ?? r;
+const PROPS_KEY = 'droidlens.inspector.props';
 /** 깊이별 색: 3D 층 테두리와 트리의 색 점이 같은 색을 써서 조각과 목록을 맞춰 볼 수 있다 */
 const depthColor = (d: number, a = 1) => `hsla(${150 + d * 18}, 60%, 65%, ${a})`;
 const label = (n: ViewNode) => `${short(n.className) || 'root'}${n.resourceId ? ' #' + rid(n.resourceId) : ''}`;
@@ -34,6 +35,21 @@ export function InspectorTab() {
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   const [query, setQuery] = useState('');
   const [mode, setMode] = useState<'2d' | '3d'>('2d');
+  const [propsOpen, setPropsOpen] = useState(() => {
+    try {
+      return localStorage.getItem(PROPS_KEY) !== '0';
+    } catch {
+      return true;
+    }
+  });
+  const toggleProps = (open: boolean) => {
+    setPropsOpen(open);
+    try {
+      localStorage.setItem(PROPS_KEY, open ? '1' : '0');
+    } catch {
+      /* 이번 실행 동안만 유지 */
+    }
+  };
 
   const load = async () => {
     if (!serial) return;
@@ -85,7 +101,7 @@ export function InspectorTab() {
       {!snap ? (
         <div className="empty">{loading ? t('뷰 계층을 가져오는 중…') : t('캡처 버튼을 눌러 뷰 계층을 가져오세요')}</div>
       ) : (
-        <div className={`inspector ${mode === '3d' ? 'is-3d' : ''}`}>
+        <div className={`inspector ${mode === '3d' ? 'is-3d' : ''} ${propsOpen ? '' : 'props-closed'}`}>
           {mode === '3d' ? (
             <ThreeD snap={snap} sel={sel} setSel={setSel} hover={hover} onHover={setHover} />
           ) : (
@@ -110,7 +126,16 @@ export function InspectorTab() {
               onHover={setHover}
             />
           </div>
-          <Props snap={snap} n={sel} />
+          {propsOpen ? (
+            <div className="props-col">
+              <button className="props-toggle" onClick={() => toggleProps(false)} title={t('속성 패널 접기')}>▸</button>
+              <Props snap={snap} n={sel} />
+            </div>
+          ) : (
+            <button className="props-rail" onClick={() => toggleProps(true)} title={t('속성 패널 펴기')}>
+              ◂ <span>{t('속성')}</span>
+            </button>
+          )}
         </div>
       )}
     </>

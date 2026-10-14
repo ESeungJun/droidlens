@@ -111,6 +111,14 @@ label.chk { display: inline-flex; gap: 6px; align-items: center; color: var(--fg
 .shot-box img { display: block; max-width: 100%; max-height: calc(100vh - 140px); border-radius: 8px; }
 .hl { position: absolute; pointer-events: none; border: 2px solid var(--accent); background: rgba(125,211,168,.15); border-radius: 2px; }
 .hl.hover { border-color: var(--info); background: rgba(124,180,242,.12); }
+.inspector.props-closed { grid-template-columns: minmax(260px, 34%) 1fr 28px; }
+.inspector.is-3d.props-closed { grid-template-columns: 1fr minmax(260px, 30%) 28px; }
+.props-col { position: relative; min-height: 0; display: flex; flex-direction: column; }
+.props-col .props { flex: 1; min-height: 0; padding-top: 34px; }
+.props-toggle { position: absolute; top: 6px; right: 6px; z-index: 1; width: 22px; height: 22px; border: 1px solid var(--line); border-radius: 5px; background: var(--panel); color: var(--fg-dim); cursor: pointer; }
+.props-toggle:hover, .props-rail:hover { color: var(--fg); background: var(--panel-2, var(--panel)); }
+.props-rail { border: 0; border-left: 1px solid var(--line); background: var(--panel); color: var(--fg-dim); cursor: pointer; display: flex; flex-direction: column; align-items: center; gap: 8px; padding-top: 10px; font-size: 11px; }
+.props-rail span { writing-mode: vertical-rl; letter-spacing: .1em; }
 .tree { overflow: auto; padding: 6px 0; font-family: var(--mono); font-size: 12px; border-right: 1px solid var(--line); }
 .row { display: flex; align-items: center; gap: 4px; padding: 1px 8px; cursor: pointer; white-space: nowrap; }
 .row:hover { background: var(--panel-2); }
