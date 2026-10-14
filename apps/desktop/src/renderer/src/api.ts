@@ -170,6 +170,7 @@ export const api = {
   updateCheck: () => call<UpdateInfo>('updateCheck'),
   updateInstall: (info: UpdateInfo) => call<void>('updateInstall', info),
   onUpdateProgress: (fn: (p: { p: number; message: string }) => void) => window.dl.on('update:progress', (x) => fn(x as never)),
+  platform: () => call<{ platform: string; arch: string }>('platform'),
   appVersion: () => call<string>('appVersion'),
   adbStatus: () => call<AdbStatus>('adbStatus'),
   setAdbPath: (p: string) => call<AdbStatus>('setAdbPath', p),

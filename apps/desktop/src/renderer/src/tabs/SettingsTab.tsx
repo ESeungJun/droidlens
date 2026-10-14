@@ -3,6 +3,7 @@ import { api, type AdbStatus, type Integration } from '../api';
 import { useApp } from '../App';
 import type { useUpdater } from '../Updater';
 import { useI18n, type LangSetting } from '../i18n';
+import { DeviceSetup } from '../DeviceSetup';
 
 const REPO = 'https://github.com/ESeungJun/droidlens';
 
@@ -165,6 +166,7 @@ Linux   sudo apt install adb`}
             <button className="btn" onClick={() => api.openExternal(REPO)}>GitHub</button>
           </div>
         </div>
+        <DeviceSetup />
       </div>
     </div>
   );
