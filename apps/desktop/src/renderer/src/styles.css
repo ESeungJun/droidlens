@@ -5,8 +5,8 @@
   --line: #262a32;
   --line-2: #323743;
   --fg: #e6e8ec;
-  --fg-dim: #9aa1ad;
-  --fg-faint: #646b78;
+  --fg-dim: #b3b9c4;
+  --fg-faint: #8d94a1;
   --accent: #7dd3a8;
   --accent-dim: rgba(125, 211, 168, 0.14);
   --warn: #f2b46d;
@@ -205,8 +205,13 @@ label.chk { display: inline-flex; gap: 6px; align-items: center; color: var(--fg
 .scen-item.sel { background: var(--accent-dim); }
 .v-pass { color: var(--accent); } .v-fail { color: var(--err); } .v-blocked { color: var(--warn); }
 .steps { overflow: auto; padding: 14px; }
-.step { display: grid; grid-template-columns: 1fr 200px; gap: 12px; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; margin-bottom: 8px; }
-.step img { width: 100%; border-radius: 8px; }
+.step { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; margin-bottom: 8px; }
+.step .shot { display: flex; justify-content: center; margin-top: 10px; }
+.step .shot img { width: 100%; max-width: 280px; border-radius: 8px; border: 1px solid var(--line); }
+.scen-group { display: flex; align-items: center; gap: 6px; padding: 7px 12px; background: var(--panel-2); border-bottom: 1px solid var(--line); cursor: pointer; font-size: 12px; font-weight: 600; position: sticky; top: 0; z-index: 1; }
+.scen-group .n { color: var(--fg-faint); font-weight: 400; }
+.scen-item { display: flex; gap: 8px; align-items: flex-start; }
+.scen-item .body { flex: 1; min-width: 0; }
 .step pre { white-space: pre-wrap; font-family: var(--mono); font-size: 11px; color: var(--fg-dim); margin: 6px 0 0; }
 .badge { font-size: 10px; font-weight: 700; padding: 1px 7px; border-radius: 5px; color: #0b0b0b; margin-right: 6px; }
 .b-pass { background: var(--accent); } .b-fail { background: var(--err); } .b-info { background: var(--info); } .b-skip { background: var(--fg-faint); }
