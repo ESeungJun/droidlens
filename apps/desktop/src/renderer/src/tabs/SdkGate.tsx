@@ -1,6 +1,7 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { api, type SdkInfo } from '../api';
 import { NeedPkg, useApp } from '../App';
+import { useT } from '../i18n';
 
 const SNIPPET = `// settings.gradle
 dependencyResolutionManagement {
@@ -19,6 +20,8 @@ OkHttpClient.Builder()
 /** 선택한 앱에서 SDK가 실행 중일 때만 children을 그리고, 아니면 설치 안내를 보여준다 */
 export function SdkGate({ children }: { children: (info: SdkInfo) => ReactNode }) {
   const { serial, pkg, toast } = useApp();
+  const t = useT();
+  const snippet = SNIPPET.replace('네트워크 인스펙터 (OkHttp)', t('네트워크 인스펙터 (OkHttp)'));
   const [info, setInfo] = useState<SdkInfo | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [tick, setTick] = useState(0);
@@ -38,18 +41,17 @@ export function SdkGate({ children }: { children: (info: SdkInfo) => ReactNode }
   return (
     <div className="scroll">
       <div className="card" style={{ maxWidth: 720 }}>
-        <h5>DroidLens SDK 필요</h5>
+        <h5>{t('DroidLens SDK 필요')}</h5>
         <p className="muted" style={{ marginTop: 0 }}>
-          {err ? err : 'SDK 연결 확인 중…'}
+          {err ? t(err) : t('SDK 연결 확인 중…')}
         </p>
         <p style={{ fontSize: 12 }}>
-          네트워크·SharedPreferences·DB·커스텀 이벤트는 앱 내부 정보라 debug 빌드에 SDK를 넣어야 볼 수 있습니다. release 빌드에는
-          아무 동작도 하지 않는 <span className="mono">sdk-noop</span>이 들어가고, INTERNET 권한도 필요 없습니다.
+          {t('네트워크·SharedPreferences·DB·커스텀 이벤트는 앱 내부 정보라 debug 빌드에 SDK를 넣어야 볼 수 있습니다. release 빌드에는 아무 동작도 하지 않는 sdk-noop이 들어가고, INTERNET 권한도 필요 없습니다.')}
         </p>
-        <pre className="mono card" style={{ fontSize: 11.5, whiteSpace: 'pre-wrap' }}>{SNIPPET}</pre>
+        <pre className="mono card" style={{ fontSize: 11.5, whiteSpace: 'pre-wrap' }}>{snippet}</pre>
         <div style={{ display: 'flex', gap: 6 }}>
-          <button className="btn" onClick={() => api.copy(SNIPPET).then(() => toast('복사했습니다'))}>코드 복사</button>
-          <button className="btn primary" onClick={() => setTick((t) => t + 1)}>다시 연결</button>
+          <button className="btn" onClick={() => api.copy(snippet).then(() => toast('복사했습니다'))}>{t('코드 복사')}</button>
+          <button className="btn primary" onClick={() => setTick((n) => n + 1)}>{t('다시 연결')}</button>
         </div>
       </div>
     </div>
