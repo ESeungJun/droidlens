@@ -37,6 +37,8 @@ export interface SnapshotDTO {
 
 export interface AgentStatus {
   installed?: number;
+  expected?: number;
+  error?: string;
   running: boolean;
   apk?: string;
   disabled: boolean;
@@ -59,6 +61,14 @@ export interface Integration {
   agents: { file: string; installed: boolean }[];
   agentsDir: string;
 }
+
+export type ChatEvent =
+  | { kind: 'session'; sessionId: string; model?: string }
+  | { kind: 'text'; text: string }
+  | { kind: 'tool'; id: string; name: string; input: unknown }
+  | { kind: 'toolResult'; id: string; text: string; isError: boolean }
+  | { kind: 'done'; sessionId?: string; costUsd?: number; durationMs?: number; error?: string }
+  | { kind: 'stderr'; text: string };
 
 export interface ScriptEntry {
   file: string;
@@ -141,6 +151,10 @@ export const api = {
   scriptRun: (s: string, names: string[]) => call<ScriptRunResult[]>('scriptRun', s, names),
   scriptStop: () => call<void>('scriptStop'),
   onScriptProgress: (fn: (p: ScriptProgress) => void) => window.dl.on('script:progress', (p) => fn(p as ScriptProgress)),
+  chatStatus: () => call<{ version: string }>('chatStatus'),
+  chatSend: (req: { message: string; agent: string; sessionId?: string; serial?: string; packageName?: string }) => call<boolean>('chatSend', req),
+  chatStop: () => call<void>('chatStop'),
+  onChatEvent: (fn: (e: ChatEvent) => void) => window.dl.on('chat:event', (p) => fn(p as ChatEvent)),
   sdkApps: (s: string) => call<string[]>('sdkApps', s),
   sdk: <T,>(s: string, pkg: string, method: string, ...args: unknown[]) => call<T>('sdk', s, pkg, method, ...args),
   appVersion: () => call<string>('appVersion'),
