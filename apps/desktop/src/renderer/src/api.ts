@@ -137,9 +137,10 @@ export const api = {
     call<{ from: string; to: string; isNew: boolean }>('graphRecordTap', s, pkg, x, y, label),
   graphRecordKey: (s: string, pkg: string, key: string) => call<{ from: string; to: string; isNew: boolean }>('graphRecordKey', s, pkg, key),
   graphRecordHere: (s: string, pkg: string) => call<string>('graphRecordHere', s, pkg),
-  explore: (s: string, pkg: string, maxSteps: number, maxDepth: number) =>
-    call<{ steps: number; skipped: { label: string }[]; errors: string[] }>('explore', s, pkg, maxSteps, maxDepth),
+  explore: (s: string, pkg: string, maxDepth: number, fromCurrent: boolean) =>
+    call<{ steps: number; limited: boolean; skipped: { label: string; reason: string }[]; errors: string[] }>('explore', s, pkg, maxDepth, fromCurrent),
   exploreStop: () => call<void>('exploreStop'),
+  graphReset: (pkg: string) => call<void>('graphReset', pkg),
   reveal: (p: string) => call<void>('reveal', p),
   openPath: (p: string) => call<string>('openPath', p),
   home: () => call<string>('home'),
