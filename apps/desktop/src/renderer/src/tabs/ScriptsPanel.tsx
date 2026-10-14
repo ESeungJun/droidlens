@@ -30,7 +30,11 @@ export function ScriptsPanel({ onFinished }: { onFinished(): void }) {
   const [steps, setSteps] = useState<StepLine[]>([]);
   const [results, setResults] = useState<ScriptRunResult[] | null>(null);
 
-  const load = useCallback(async () => setList((await run(api.scriptsList())) ?? []), [run]);
+  const [loaded, setLoaded] = useState(false);
+  const load = useCallback(async () => {
+    setList((await run(api.scriptsList())) ?? []);
+    setLoaded(true);
+  }, [run]);
   useEffect(() => {
     load();
   }, [load]);
@@ -103,7 +107,8 @@ export function ScriptsPanel({ onFinished }: { onFinished(): void }) {
             ＋ 새 스크립트
           </button>
         </div>
-        {list.length === 0 && (
+        {!loaded && <div className="empty" style={{ height: 'auto', padding: 20, fontSize: 12 }}>불러오는 중…</div>}
+        {loaded && list.length === 0 && (
           <div className="empty" style={{ height: 'auto', padding: 20, fontSize: 12 }}>
             저장된 스크립트가 없습니다.
             <br />
