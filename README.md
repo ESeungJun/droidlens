@@ -13,6 +13,21 @@ Inspect <b>any app</b> with just adb, no SDK required, and let Claude Code agent
 
 DroidLens aims to replace Meta's [Flipper](https://github.com/facebook/flipper) (archived in 2025). Without adding anything to your app, you get screen mirroring, the view hierarchy, screen navigation paths, and the libraries an app uses — and the built-in MCP server lets Claude Code agents use the same features.
 
+## Screenshots
+
+<p align="center"><img src="docs/images/screen-en.jpg" alt="Screen mirroring and controls" width="100%"></p>
+
+<table>
+  <tr>
+    <td align="center" width="50%"><b>3D view hierarchy with class labels</b><br><img src="docs/images/inspect-3d-en.jpg" alt="3D view hierarchy with class labels"></td>
+    <td align="center" width="50%"><b>Screen flow from auto-exploration</b><br><img src="docs/images/flow-en.jpg" alt="Screen flow from auto-exploration"></td>
+  </tr>
+  <tr>
+    <td align="center"><b>Library detection from the APK</b><br><img src="docs/images/libs-en.jpg" alt="Library detection from the APK"></td>
+    <td align="center"><b>App info</b><br><img src="docs/images/info-en.jpg" alt="App info"></td>
+  </tr>
+</table>
+
 ## Installation
 
 Download **just one installer** for your OS from [Releases](https://github.com/ESeungJun/droidlens/releases/latest). The other files (`.zip`, `.mjs`, `.apk`) are used by in-app updates or optional tools — you don't need them.

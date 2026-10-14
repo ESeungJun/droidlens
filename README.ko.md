@@ -13,6 +13,21 @@ SDK 없이 adb만으로 <b>모든 앱</b>을 분석하고, Claude Code 에이전
 
 Meta의 [Flipper](https://github.com/facebook/flipper)(2025년 아카이브)를 대체하는 것을 목표로 합니다. 앱에 아무것도 심지 않아도 화면 미러링, 뷰 계층, 화면 이동 경로, 사용 라이브러리를 볼 수 있고, 내장 MCP 서버로 Claude Code 에이전트가 같은 기능을 그대로 사용합니다.
 
+## 스크린샷
+
+<p align="center"><img src="docs/images/screen-ko.jpg" alt="화면 미러링과 조작" width="100%"></p>
+
+<table>
+  <tr>
+    <td align="center" width="50%"><b>클래스 라벨이 붙은 3D 뷰 계층</b><br><img src="docs/images/inspect-3d-ko.jpg" alt="클래스 라벨이 붙은 3D 뷰 계층"></td>
+    <td align="center" width="50%"><b>자동 탐색으로 만든 화면 흐름</b><br><img src="docs/images/flow-ko.jpg" alt="자동 탐색으로 만든 화면 흐름"></td>
+  </tr>
+  <tr>
+    <td align="center"><b>APK 기반 라이브러리 탐지</b><br><img src="docs/images/libs-ko.jpg" alt="APK 기반 라이브러리 탐지"></td>
+    <td align="center"><b>앱 정보</b><br><img src="docs/images/info-ko.jpg" alt="앱 정보"></td>
+  </tr>
+</table>
+
 ## 설치
 
 [Releases](https://github.com/ESeungJun/droidlens/releases/latest)에서 운영체제에 맞는 **설치 파일 하나만** 받으세요. 나머지(`.zip`, `.mjs`, `.apk`)는 앱 내 업데이트나 부가 도구용이라 받지 않아도 됩니다.
