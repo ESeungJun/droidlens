@@ -98,7 +98,7 @@ function ReportsView() {
   const item = (s: ScenarioData) => (
     <div key={s.id} className={`scen-item ${sel?.id === s.id ? 'sel' : ''}`} onClick={() => (picking ? setPicked((c) => toggle(c, [s.id], !c.has(s.id))) : setSel(s))}>
       {picking && <input type="checkbox" checked={picked.has(s.id)} readOnly style={{ marginTop: 3 }} />}
-      <div className="body">
+      <div className="scen-body">
         <div style={{ display: 'flex', justifyContent: 'space-between', gap: 6 }}>
           <b style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.name}</b>
           <span className={`v-${s.verdict ?? 'blocked'}`}>{s.verdict ? s.verdict.toUpperCase() : t('진행 중')}</span>
