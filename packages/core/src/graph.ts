@@ -566,18 +566,17 @@ export async function followPath(dev: DeviceAdb, pkg: string, start: Snapshot, p
   let s = start;
   for (const { action: a, to } of path) {
     if (!isReplayable(a)) throw new Error(`다시 실행하지 않는 동작이라 멈춥니다: ${actionLabel(a)}`);
+    // 기록된 좌표·시간은 쓰지 않는다: 요소는 지금 화면에서 다시 찾아 그 중심을 누르고, 스와이프는 방향으로 다시 계산한다
     if (a.type === 'tap' || a.type === 'longpress') {
-      const c = a.label ? locate(s, a, pkg) : targetAt(s, pkg, a.x, a.y);
-      if (!c) {
-        if (a.label) throw new Error(`경로 재생 실패: "${a.label}"을(를) 찾을 수 없습니다`);
-        await performAction(dev, a, pkg);
-      } else if (DANGEROUS_LABELS.test(c.label)) {
-        throw new Error(`위험 버튼("${c.label}")을 누르게 되어 멈춥니다`);
-      } else {
-        const { x, y } = center(c.node);
-        await performAction(dev, { ...a, x, y }, pkg);
-      }
-    } else await performAction(dev, a, pkg);
+      const c = locate(s, a, pkg);
+      if (!c) throw new Error(`경로 재생 실패: "${a.label}"을(를) 찾을 수 없습니다`);
+      if (DANGEROUS_LABELS.test(c.label)) throw new Error(`위험 버튼("${c.label}")을 누르게 되어 멈춥니다`);
+      const { x, y } = center(c.node);
+      await (a.type === 'tap' ? tap(dev, x, y) : longPress(dev, x, y));
+    } else if (a.type === 'swipe') {
+      const [x1, y1, x2, y2] = swipeVector((await getDeviceInfo(dev)).screen, a.direction!);
+      await swipe(dev, x1, y1, x2, y2);
+    } else await pressKey(dev, 'back');
     s = await waitForSettle(dev);
     if (screenId(s) !== to) throw new Error(`경로를 따라가다 예상과 다른 화면(${s.screen.packageName} ${shortName(s.screen.activity)})에 도착해 멈췄습니다`);
   }
