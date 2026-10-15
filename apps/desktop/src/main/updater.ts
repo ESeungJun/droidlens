@@ -179,11 +179,11 @@ rm -rf "${dir}"
     const sh = join(dir, 'update.sh');
     await writeFile(sh, script);
     await chmod(sh, 0o755);
-    spawn('/bin/sh', [sh], { detached: true, stdio: 'ignore' }).unref();
+    spawn('/bin/sh', [sh], { detached: true, stdio: 'ignore', env: cleanEnv() }).unref();
   } else if (process.platform === 'win32') {
     onProgress(1, '설치 프로그램 실행 중…');
     // 조용히 설치(/S)한 뒤 앱을 다시 실행(--force-run). 설치 파일이 실행 중인 앱 종료를 기다린다
-    spawn(file, ['/S', '--force-run'], { detached: true, stdio: 'ignore' }).unref();
+    spawn(file, ['/S', '--force-run'], { detached: true, stdio: 'ignore', env: cleanEnv() }).unref();
   } else {
     onProgress(1, '교체 중…');
     const target = process.env.APPIMAGE!;
@@ -196,9 +196,18 @@ nohup "${target}" >/dev/null 2>&1 &
     const sh = join(dir, 'update.sh');
     await writeFile(sh, script);
     await chmod(sh, 0o755);
-    spawn('/bin/sh', [sh], { detached: true, stdio: 'ignore' }).unref();
+    spawn('/bin/sh', [sh], { detached: true, stdio: 'ignore', env: cleanEnv() }).unref();
   }
   setTimeout(() => app.quit(), 300);
+}
+
+/**
+ * 업데이트 뒤 새로 뜨는 앱에 개발·테스트용 환경 변수(DROIDLENS_FAKE_VERSION, DROIDLENS_UPDATE_SELFTEST 등)가
+ * 넘어가지 않게 한다. macOS `open`은 호출한 셸의 환경을 새 앱에 넘기므로, 넘어가면 새 앱이 자기를 옛 버전으로
+ * 착각해 업데이트를 반복한다.
+ */
+function cleanEnv(): NodeJS.ProcessEnv {
+  return Object.fromEntries(Object.entries(process.env).filter(([k]) => !k.startsWith('DROIDLENS_') && k !== 'ELECTRON_RUN_AS_NODE'));
 }
 
 export async function cleanupOldUpdates(): Promise<void> {
