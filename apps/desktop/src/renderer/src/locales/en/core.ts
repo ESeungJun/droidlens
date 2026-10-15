@@ -94,7 +94,6 @@ export const core: Record<string, string> = {
   '포커스된 입력창에 입력 (에이전트 실행 시 한글 가능)': 'Types into the focused field (non-ASCII needs the agent)',
   '입력': 'Type',
   '화면 흐름 기록': 'Screen flow recording',
-  '탭/뒤로 동작을 화면 그래프에 기록': 'Record taps and back presses in the screen graph',
   '앱을 선택하면 사용할 수 있습니다': 'Select an app to use this',
   '현재 화면': 'Current screen',
   '패키지': 'Package',
