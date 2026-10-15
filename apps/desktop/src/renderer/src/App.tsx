@@ -48,6 +48,9 @@ export function App() {
   const t = useT();
   const [devices, setDevices] = useState<DeviceSummary[]>([]);
   const [devicesLoaded, setDevicesLoaded] = useState(false);
+  // 이 컴퓨터의 가상 기기(AVD). 꺼져 있는 것은 기기 목록에서 고르면 띄운다
+  const [avds, setAvds] = useState<{ name: string; serial?: string }[]>([]);
+  const [booting, setBooting] = useState<{ name: string; message: string } | null>(null);
   const [serial, setSerial] = useState<string | null>(null);
   const [pkgs, setPkgs] = useState<PackageSummary[]>([]);
   const [pkg, setPkg] = useState<string | null>(initial.get('pkg'));
@@ -123,6 +126,32 @@ export function App() {
     return () => clearInterval(t);
   }, [refreshDevices]);
 
+  // AVD 목록은 emulator 실행 파일을 불러야 해서, 연결된 기기 구성이 바뀔 때만 다시 읽는다
+  const deviceKey = devices.map((d) => `${d.serial}:${d.state}`).join(',');
+  const refreshAvds = useCallback(() => {
+    api.avds().then((r) => setAvds(r.avds)).catch(() => setAvds([]));
+  }, []);
+  useEffect(refreshAvds, [deviceKey, refreshAvds]);
+  useEffect(() => api.onProgress((p) => p.kind === 'avd' && setBooting((b) => (b ? { ...b, message: p.message } : b))), []);
+
+  const launchAvd = async (name: string) => {
+    setBooting({ name, message: t('{name} 실행 중…', { name }) });
+    const s = await run(api.avdStart(name));
+    setBooting(null);
+    if (!s) return;
+    await refreshDevices();
+    setSerial(s);
+    toast(t('가상 기기를 켰습니다: {name}', { name }));
+  };
+
+  const stopAvd = async (s: string) => {
+    if ((await run(api.avdStop(s))) === undefined) return;
+    toast(t('가상 기기를 껐습니다'));
+    setTimeout(refreshDevices, 1500);
+  };
+  const offAvds = avds.filter((a) => !a.serial);
+  const current = devices.find((d) => d.serial === serial);
+
   const [pkgTick, setPkgTick] = useState(0);
   const [pkgsLoading, setPkgsLoading] = useState(false);
   useEffect(() => {
@@ -172,14 +201,33 @@ export function App() {
           <span className="brand">
             Droid<em>Lens</em>
           </span>
-          <select className="input" value={serial ?? ''} onChange={(e) => setSerial(e.target.value || null)} style={{ minWidth: 220 }}>
+          <select
+            className="input"
+            value={serial ?? ''}
+            disabled={!!booting}
+            onChange={(e) => (e.target.value.startsWith('avd:') ? launchAvd(e.target.value.slice(4)) : setSerial(e.target.value || null))}
+            style={{ minWidth: 220 }}
+          >
             {devices.length === 0 && <option value="">{devicesLoaded ? t('기기 없음') : t('기기 찾는 중…')}</option>}
             {devices.map((d) => (
               <option key={d.serial} value={d.serial} disabled={d.state !== 'device'}>
-                {d.model ?? d.serial} · {d.serial} {d.state !== 'device' ? `(${d.state})` : ''}
+                {(d.emulator && avds.find((a) => a.serial === d.serial)?.name) || d.model || d.serial} · {d.serial} {d.state !== 'device' ? `(${d.state})` : ''}
               </option>
             ))}
+            {offAvds.length > 0 && (
+              <optgroup label={t('가상 기기 (고르면 실행)')}>
+                {offAvds.map((a) => (
+                  <option key={a.name} value={`avd:${a.name}`}>▶ {a.name}</option>
+                ))}
+              </optgroup>
+            )}
           </select>
+          {booting && <span className="muted" style={{ fontSize: 12 }}>{booting.message}</span>}
+          {current?.emulator && !booting && (
+            <button className="btn sm" onClick={() => stopAvd(current.serial)} title={t('이 가상 기기(에뮬레이터)를 끕니다')}>
+              {t('■ 가상 기기 끄기')}
+            </button>
+          )}
           {pkg && <span className="pill accent mono">{pkg}</span>}
           {serial && (
             <button
@@ -299,6 +347,20 @@ export function App() {
                         <b>{t('연결된 기기가 없습니다.')}</b>
                         <br />
                         <span className="muted">{t('폰이나 에뮬레이터가 연결되면 자동으로 인식합니다.')}</span>
+                      </div>
+                    )}
+                    {offAvds.length > 0 && (
+                      <div className="card" style={{ maxWidth: 760, width: '100%', textAlign: 'left' }}>
+                        <h5>{t('이 컴퓨터의 가상 기기')}</h5>
+                        <p className="muted" style={{ marginTop: 0 }}>{t('폰이나 태블릿 없이 에뮬레이터로 바로 시작할 수 있습니다. 처음 켤 때는 1~2분 걸립니다.')}</p>
+                        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
+                          {offAvds.map((a) => (
+                            <button key={a.name} className="btn" disabled={!!booting} onClick={() => launchAvd(a.name)}>
+                              ▶ {a.name}
+                            </button>
+                          ))}
+                          {booting && <span className="muted">{booting.message}</span>}
+                        </div>
                       </div>
                     )}
                     <DeviceSetup />
