@@ -7,6 +7,7 @@ import { assertPackage, currentScreen, launchApp, topFragments, type CurrentScre
 import { z } from 'zod';
 import { getDeviceInfo, KEYCODES, longPress, pressKey, screenshot, swipe, swipeVector, tap, type SwipeDirection } from './device.js';
 import {
+  actionKey,
   actionLabel,
   DANGEROUS_LABELS,
   isReplayable,
@@ -266,6 +267,8 @@ export class ScreenGraph {
         longClickable: c.node.longClickable || undefined,
         danger: DANGEROUS_LABELS.test(c.label) || undefined,
       }));
+      const sel = flatten(s.hierarchy.root).filter((n) => n.selected && n.depth > 0 && (n.resourceId || n.text || n.contentDesc));
+      node.selectedKeys = [...new Set(sel.map((n) => `${n.resourceId}|${elementLabel(n)}`))];
     }
     node.visits++;
     node.lastSeen = Date.now();
@@ -584,30 +587,64 @@ export async function followPath(dev: DeviceAdb, pkg: string, start: Snapshot, p
 }
 
 /**
+ * 지금 화면에서 target 까지 다시 따라갈 단계. 기록된 연결이 있으면 그대로 쓴다.
+ * 없으면 (다시 열 때 마지막 탭을 띄우는 앱처럼 지도의 첫 화면과 다른 화면에서 시작하면) 지금 화면에 있는 같은 요소를
+ * 실마리로 아는 화면으로 건너간 뒤 기록된 경로를 따른다:
+ * - 다른 화면에서 같은 요소(key)를 눌러 간 연결이 있으면 그 도착 화면
+ * - 그 요소가 선택된 상태(선택된 탭)로 기록된 화면
+ * 건너가는 첫 단계는 짐작이므로 followPath 가 도착 화면을 확인해 어긋나면 멈춘다. 위험 라벨 요소는 쓰지 않는다.
+ */
+export function planRoute(graph: ScreenGraph, s: Snapshot, target: string): PathStep[] | undefined {
+  const here = screenId(s);
+  if (here === target) return [];
+  const direct = graph.replayPath(here, target);
+  if (direct) return direct;
+  const cands = new Map(
+    candidateActions(s, graph.packageName)
+      .filter((c) => !DANGEROUS_LABELS.test(c.label))
+      .map((c) => [c.key, c]),
+  );
+  // 도착 화면 → 지금 화면에서 누를 요소
+  const hops = new Map<string, { c: Candidate; type: 'tap' | 'longpress' }>();
+  for (const e of graph.edges.values()) {
+    const k = isReplayable(e.action) ? actionKey(e.action) : undefined;
+    const c = k ? cands.get(k) : undefined;
+    if (c && e.to !== here && !hops.has(e.to)) hops.set(e.to, { c, type: e.action.type === 'longpress' ? 'longpress' : 'tap' });
+  }
+  for (const n of graph.nodes.values()) {
+    if (n.id === here || hops.has(n.id)) continue;
+    const k = n.selectedKeys?.find((x) => cands.has(x));
+    if (k) hops.set(n.id, { c: cands.get(k)!, type: 'tap' });
+  }
+  let best: PathStep[] | undefined;
+  for (const [to, { c, type }] of hops) {
+    const rest = to === target ? [] : graph.replayPath(to, target);
+    if (rest && (!best || rest.length + 1 < best.length)) best = [{ action: pressAction(type, c), to }, ...rest];
+  }
+  return best;
+}
+
+/**
  * 지도에 기록된 경로를 따라 기기를 그 화면으로 옮긴다. 이미 그 화면이면 그대로 두고,
- * 아니면 앱을 다시 실행해 첫 화면부터 다시 따라가도 안전한 최단 경로를 따라간다.
- * path 는 앱 실행부터 그 화면까지의 단계 (같은 화면으로 다시 돌아올 때 쓴다). 돌아올 방법을 모르면 undefined.
+ * 아니면 앱을 다시 실행해 뜬 화면에서 planRoute 로 짠 단계를 따라간다.
+ * 기록에 없던 첫 단계로 도착했으면 그 연결을 지도에 배운다 (다음부터는 기록된 경로로 간다).
  */
 export async function navigateTo(
   dev: DeviceAdb,
   graph: ScreenGraph,
   target: string,
   log: (m: string) => void = () => undefined,
-): Promise<{ snap: Snapshot; path?: PathStep[]; moved: boolean }> {
+): Promise<{ snap: Snapshot; path: PathStep[]; moved: boolean }> {
   const pkg = graph.packageName;
   if (!graph.nodes.has(target)) throw new Error('지도에 없는 화면입니다');
   const here = await waitForSettle(dev);
-  if (screenId(here) === target) {
-    // 실제로 앱을 실행해 확인한 첫 화면이 있을 때만 돌아오는 경로를 안다 (추정한 첫 화면으로 재생하면 엉뚱하게 실패한다)
-    return { snap: here, path: graph.launchScreen ? graph.replayPath(graph.launchScreen, target) : undefined, moved: false };
-  }
+  if (screenId(here) === target) return { snap: here, path: [], moved: false };
   const launched = await launchAndSettle(dev, pkg, { restart: true });
   const root = screenId(launched);
   graph.launchScreen = root;
   await graph.addSnapshot(launched, dev);
   await graph.save();
-  if (root === target) return { snap: launched, path: [], moved: true };
-  const path = graph.replayPath(root, target);
+  const path = planRoute(graph, launched, target);
   if (!path) {
     throw new Error(
       graph.path(root, target)
@@ -615,8 +652,14 @@ export async function navigateTo(
         : '앱 첫 화면에서 이 화면까지 기록된 경로가 없습니다. 기기에서 직접 이 화면을 열어 두고 다시 시도하세요',
     );
   }
+  if (!path.length) return { snap: launched, path, moved: true };
   log(`기록된 경로로 이동: ${path.map((e) => actionLabel(e.action)).join(' → ')}`);
-  return { snap: await followPath(dev, pkg, launched, path), path, moved: true };
+  const snap = await followPath(dev, pkg, launched, path);
+  if (![...graph.edges.values()].some((e) => e.from === root && e.to === path[0].to)) {
+    graph.addEdge(root, path[0].to, path[0].action);
+    await graph.save();
+  }
+  return { snap, path, moved: true };
 }
 
 // ---------- 자동 탐색 ----------
@@ -630,6 +673,12 @@ export interface Candidate {
   key: string;
 }
 
+/** 요소 라벨. 컨테이너(…Layout 등)는 자식 텍스트로 만든다. 요소 key 는 `리소스 id|라벨` */
+function elementLabel(n: ViewNode): string {
+  const own = labelOf(n);
+  return own && !/Layout$|View$|Group$/.test(own) ? own : flatten(n).map((c) => c.text || c.contentDesc).find(Boolean) ?? own;
+}
+
 export function candidateActions(s: Snapshot, pkg?: string): Candidate[] {
   const seen = new Set<string>();
   const out: Candidate[] = [];
@@ -639,11 +688,7 @@ export function candidateActions(s: Snapshot, pkg?: string): Candidate[] {
     const [l, t, r, b] = n.bounds;
     if (r - l < 8 || b - t < 8) continue;
     if (n.className.endsWith('EditText')) continue;
-    // 클릭 가능한 컨테이너는 자식 텍스트로 라벨을 만든다
-    const label =
-      labelOf(n) && !/Layout$|View$|Group$/.test(labelOf(n))
-        ? labelOf(n)
-        : flatten(n).map((c) => c.text || c.contentDesc).find(Boolean) ?? labelOf(n);
+    const label = elementLabel(n);
     const key = `${n.resourceId}|${label}`;
     if (seen.has(key)) continue;
     seen.add(key);
@@ -721,32 +766,27 @@ export async function explore(dev: DeviceAdb, opts: ExploreOptions): Promise<Exp
   let steps = 0;
   const log = (message: string, screen?: string) => opts.onProgress?.({ step: steps, message, screen });
 
-  // 앱 실행부터 탐색 시작 화면까지의 단계. undefined 면 앱을 다시 실행해 돌아올 방법이 없다 (현재 화면부터 시작)
-  let base: PathStep[] | undefined;
+  // 현재 화면부터 시작한 탐색은 앱을 다시 실행해 돌아오지 않는다 (사용자가 열어 둔 상태를 지우지 않게)
+  const canReplay = !!opts.startAt || opts.relaunch !== false;
   let snap: Snapshot;
   if (opts.startAt) {
-    const nav = await navigateTo(dev, graph, opts.startAt, log);
-    snap = nav.snap;
-    base = nav.path;
+    snap = (await navigateTo(dev, graph, opts.startAt, log)).snap;
   } else if (opts.relaunch === false) {
     snap = await waitForSettle(dev);
     if (snap.screen.packageName !== pkg) throw new Error(`지금 화면이 ${pkg} 앱이 아닙니다. 앱을 열어 둔 상태에서 시작하세요`);
   } else {
     snap = await launchAndSettle(dev, pkg, { restart: true });
     graph.launchScreen = screenId(snap);
-    base = [];
   }
-  const launchRoot = graph.launchScreen;
   const root = await graph.addSnapshot(snap, dev);
   touched.nodes.add(root.id);
   log(`시작 화면: ${root.label}`, root.id);
 
+  /** 앱을 다시 실행해 탐색 시작 화면으로 간 뒤 (다시 열 때 다른 화면이 떠도 navigateTo 가 건너간다) 경로를 따라간다 */
   const replay = async (path: PathStep[]): Promise<Snapshot> => {
-    // 현재 화면부터 시작했으면 앱을 재시작해 같은 경로로 돌아갈 수 없다
-    if (!base) throw new Error('현재 화면부터 시작한 탐색이라 경로를 다시 따라갈 수 없습니다');
-    const launched = await launchAndSettle(dev, pkg, { restart: true });
-    if (screenId(launched) !== launchRoot) throw new Error('앱을 다시 실행했더니 첫 화면이 달라 경로를 따라갈 수 없습니다');
-    return followPath(dev, pkg, launched, [...base, ...path]);
+    if (!canReplay) throw new Error('현재 화면부터 시작한 탐색이라 경로를 다시 따라갈 수 없습니다');
+    const nav = await navigateTo(dev, graph, root.id, log);
+    return followPath(dev, pkg, nav.snap, path);
   };
 
   /** BACK을 최대 2번(키보드·다이얼로그 닫기 포함) 눌러 원래 화면으로 돌아가고, 실패하면 재실행 후 경로 재생 */
@@ -757,7 +797,7 @@ export async function explore(dev: DeviceAdb, opts: ExploreOptions): Promise<Exp
       if (screenId(snap) === target) return;
       if (snap.screen.packageName && snap.screen.packageName !== pkg && i === 1) break;
     }
-    if (!base) {
+    if (!canReplay) {
       log('BACK 으로 돌아오지 못했습니다 (현재 화면 기준 탐색이라 이 갈래는 멈춤)');
       return;
     }

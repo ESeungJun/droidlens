@@ -32,6 +32,11 @@ export interface ScreenNode {
   targets?: ScreenTarget[];
   /** 눌러 본 요소의 key (탐색 커버리지) */
   tried?: string[];
+  /**
+   * 이 화면에서 선택된 상태인 요소의 key (하단 탭·탭 레이아웃의 고른 항목). 선택된 탭은 보통 누를 수 없어 targets 에 없다.
+   * 다른 화면에서 같은 key 의 요소를 누르면 이 화면으로 온다고 보고 화면 이동에 쓴다
+   */
+  selectedKeys?: string[];
   lastSeen?: number;
 }
 
