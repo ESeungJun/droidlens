@@ -63,7 +63,7 @@ macOS    brew install --cask android-platform-tools
 Windows  winget install Google.PlatformTools
 Linux    sudo apt install adb
 ```
-그다음 기기에서 **개발자 옵션 → USB 디버깅**을 켜고 연결하거나 에뮬레이터를 실행하면 됩니다. adb 경로는 앱의 **설정·연동** 탭에서 직접 지정할 수도 있습니다.
+그다음 기기에서 **개발자 옵션 → USB 디버깅**을 켜고 연결하거나 에뮬레이터를 실행하면 됩니다. 이 컴퓨터에 만들어 둔 가상 기기(AVD)는 상단 기기 목록에 함께 나오고, 고르면 DroidLens 가 띄워서 부팅이 끝나면 바로 선택합니다(끄기 버튼도 있음). 가상 기기가 없으면 **기기 연결 도우미**가 설치를 안내합니다. adb 경로는 앱의 **설정·연동** 탭에서 직접 지정할 수도 있습니다.
 
 ## 기능
 
