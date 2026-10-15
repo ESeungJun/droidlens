@@ -74,6 +74,10 @@ function handle<A extends unknown[], R>(channel: string, fn: (...args: A) => Pro
 
 // ---------- 기기 / 화면 ----------
 handle('devices', () => dl.listDevices(adb));
+// 가상 기기 (이미 만든 AVD 실행·종료)
+handle('avds', () => dl.listAvds(adb));
+handle('avdStart', (name: string) => dl.startAvd(adb, name, { onProgress: (message) => send('progress', { kind: 'avd', message }) }));
+handle('avdStop', (s: string) => dl.stopAvd(adb, s));
 handle('deviceInfo', (s: string) => dl.getDeviceInfo(dev(s)));
 handle('screenshot', async (s: string) => `data:image/png;base64,${(await dl.screenshot(dev(s))).toString('base64')}`);
 handle('saveScreenshot', async (s: string, label?: string) => {
