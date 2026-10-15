@@ -75,7 +75,7 @@ export async function tap(dev: DeviceAdb, x: number, y: number): Promise<void> {
 export async function longPress(dev: DeviceAdb, x: number, y: number, durationMs = 800): Promise<void> {
   const xi = Math.round(x);
   const yi = Math.round(y);
-  await dev.shell(`input swipe ${xi} ${yi} ${xi} ${yi} ${durationMs}`);
+  await dev.shell(`input swipe ${xi} ${yi} ${xi} ${yi} ${Math.round(durationMs) || 800}`);
 }
 
 export async function swipe(
@@ -87,7 +87,7 @@ export async function swipe(
   durationMs = 300,
 ): Promise<void> {
   await dev.shell(
-    `input swipe ${Math.round(x1)} ${Math.round(y1)} ${Math.round(x2)} ${Math.round(y2)} ${durationMs}`,
+    `input swipe ${Math.round(x1)} ${Math.round(y1)} ${Math.round(x2)} ${Math.round(y2)} ${Math.round(durationMs) || 300}`,
   );
 }
 

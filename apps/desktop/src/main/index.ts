@@ -1,7 +1,7 @@
-import { app, BrowserWindow, clipboard, ipcMain, shell } from 'electron';
+import { app, BrowserWindow, clipboard, dialog, ipcMain, shell } from 'electron';
 import { execFile } from 'node:child_process';
 import { existsSync } from 'node:fs';
-import { copyFile, mkdir, readdir, readFile } from 'node:fs/promises';
+import { copyFile, mkdir, readdir, readFile, stat, writeFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { basename, join, resolve, sep } from 'node:path';
 import { promisify } from 'node:util';
@@ -198,15 +198,27 @@ handle('graphImage', async (pkg: string, file: string) => {
   const g = await dl.ScreenGraph.open(pkg);
   return `data:image/png;base64,${(await readFile(join(g.dir, basename(file)))).toString('base64')}`;
 });
-handle('graphRecordTap', async (s: string, pkg: string, x: number, y: number, label?: string) => {
+/** 기기를 오래 움직이는 화면 지도 작업 (자동 탐색·화면 이동). 한 번에 하나만 돌고, 그동안 직접 조작은 기록하지 않는다 */
+let flowJob: { kind: 'explore' | 'navigate'; abort?: AbortController } | null = null;
+const flowGuard = () => {
+  if (flowJob) throw new Error(flowJob.kind === 'explore' ? '탐색 중입니다. 끝나거나 중지한 뒤 다시 시도하세요' : '화면 이동 중입니다. 끝난 뒤 다시 시도하세요');
+};
+
+/**
+ * 화면 탭에서 직접 조작한 행동을 앞뒤 화면과 함께 지도에 기록.
+ * 에이전트가 없으면 화면 확인이 1~2초씩 걸려 조작이 굼떠지고, 다른 앱 화면은 이 앱 지도와 상관없으므로 기록 없이 조작만 한다
+ */
+handle('graphRecord', async (s: string, pkg: string, action: dl.GraphAction) => {
+  if (!['tap', 'longpress', 'swipe', 'key'].includes(action?.type)) throw new Error('기록할 수 없는 행동입니다');
+  const d = dev(s);
+  const before = flowJob || !(await dl.ensureAgent(d)) ? undefined : await dl.captureSnapshot(d, { screenshot: false });
+  if (!before || before.screen.packageName !== pkg) {
+    await dl.performAction(d, action, pkg);
+    return { recorded: false as const };
+  }
   const g = await dl.ScreenGraph.open(pkg);
-  const r = await dl.recordTransition(dev(s), g, { type: 'tap', x, y, label });
-  return { from: r.from.id, to: r.to.id, isNew: r.to.visits === 1 };
-});
-handle('graphRecordKey', async (s: string, pkg: string, key: string) => {
-  const g = await dl.ScreenGraph.open(pkg);
-  const r = await dl.recordTransition(dev(s), g, { type: 'key', key });
-  return { from: r.from.id, to: r.to.id, isNew: r.to.visits === 1 };
+  const r = await dl.recordTransition(d, g, action, before);
+  return { recorded: true as const, from: r.from.id, to: r.to.id, isNew: r.to.visits === 1 };
 });
 handle('graphRecordHere', async (s: string, pkg: string) => {
   const g = await dl.ScreenGraph.open(pkg);
@@ -214,29 +226,75 @@ handle('graphRecordHere', async (s: string, pkg: string) => {
   await g.save();
   return n.id;
 });
-let exploreAbort: AbortController | null = null;
-handle('explore', async (s: string, pkg: string, maxDepth: number, fromCurrent?: boolean) => {
-  exploreAbort?.abort();
-  const ctrl = new AbortController();
-  exploreAbort = ctrl;
+interface ExploreRequest {
+  maxDepth: number;
+  fromCurrent?: boolean;
+  startAt?: string;
+  only?: dl.Interaction[];
+  allowDanger?: boolean;
+}
+handle('explore', async (s: string, pkg: string, req: ExploreRequest) => {
+  flowGuard();
+  const job = { kind: 'explore' as const, abort: new AbortController() };
+  flowJob = job;
   try {
     const r = await dl.explore(dev(s), {
       packageName: pkg,
-      maxDepth,
-      relaunch: !fromCurrent,
-      signal: ctrl.signal,
+      maxDepth: req.maxDepth,
+      relaunch: !req.fromCurrent,
+      startAt: req.startAt,
+      only: req.only,
+      allowDanger: req.allowDanger,
+      signal: job.abort.signal,
       onProgress: (e) => send('progress', { kind: 'explore', ...e }),
     });
-    return { steps: r.steps, limited: r.limited, skipped: r.skipped, errors: r.errors };
+    return { steps: r.steps, limited: r.limited, skipped: r.skipped, errors: r.errors, touched: r.touched, startScreen: r.startScreen };
   } finally {
-    // 오류로 끝나도 '탐색 중' 상태가 남지 않게. 나중에 시작한 탐색의 것은 지우지 않는다
-    if (exploreAbort === ctrl) exploreAbort = null;
+    // 오류로 끝나도 '탐색 중' 상태가 남지 않게
+    if (flowJob === job) flowJob = null;
   }
 });
-handle('exploreStop', async () => exploreAbort?.abort());
+handle('exploreStop', async () => flowJob?.abort?.abort());
 handle('graphReset', async (pkg: string) => {
-  if (exploreAbort) throw new Error('탐색 중에는 그래프를 초기화할 수 없습니다');
+  if (flowJob) throw new Error('탐색 중에는 그래프를 초기화할 수 없습니다');
   await dl.ScreenGraph.reset(pkg);
+});
+/** 지도에 기록된 경로를 따라 기기를 그 화면으로 옮긴다 */
+handle('graphNavigate', async (s: string, pkg: string, target: string) => {
+  flowGuard();
+  const job = { kind: 'navigate' as const };
+  flowJob = job;
+  try {
+    const g = await dl.ScreenGraph.open(pkg);
+    const r = await dl.navigateTo(dev(s), g, target, (m) => send('progress', { kind: 'explore', message: m }));
+    return { moved: r.moved, steps: r.moved ? (r.path?.length ?? 0) : 0 };
+  } finally {
+    if (flowJob === job) flowJob = null;
+  }
+});
+handle('graphExport', async (pkg: string) => {
+  const g = await dl.ScreenGraph.open(pkg);
+  if (!g.nodes.size) throw new Error('내보낼 화면이 없습니다');
+  const r = await dialog.showSaveDialog(win!, {
+    defaultPath: join(app.getPath('downloads'), `${dl.safeName(pkg)}.droidlens-map.json`),
+    filters: [{ name: 'DroidLens map', extensions: ['json'] }],
+  });
+  if (r.canceled || !r.filePath) return undefined;
+  await writeFile(r.filePath, JSON.stringify(await g.exportBundle()));
+  return r.filePath;
+});
+handle('graphImport', async (pkg: string) => {
+  const r = await dialog.showOpenDialog(win!, { properties: ['openFile'], filters: [{ name: 'DroidLens map', extensions: ['json'] }] });
+  const file = r.filePaths[0];
+  if (r.canceled || !file) return undefined;
+  if ((await stat(file)).size > 50 * 1024 * 1024) throw new Error('파일이 너무 큽니다 (50MB 초과)');
+  let bundle: unknown;
+  try {
+    bundle = JSON.parse(await readFile(file, 'utf8'));
+  } catch {
+    throw new Error('DroidLens 화면 지도 파일이 아닙니다');
+  }
+  return (await dl.ScreenGraph.open(pkg)).importBundle(bundle);
 });
 
 // ---------- 앱 SDK ----------
