@@ -6,7 +6,7 @@ import { DeviceAdb, sleep } from './adb.js';
 import { ensureAgent } from './agent.js';
 import { clearAppData, currentScreen, openDeepLink, recentCrashes } from './app.js';
 import { KEYCODES, longPress, pressKey, replaceText, screenshot, swipeDirection, tap, typeText } from './device.js';
-import { launchAndSettle } from './graph.js';
+import { FlowCollector, launchAndSettle } from './graph.js';
 import { center, dumpHierarchy, findNodes, type Selector, type ViewNode } from './hierarchy.js';
 import { Scenario, type ScenarioData } from './scenario.js';
 import { sdkFor } from './sdk.js';
@@ -217,6 +217,8 @@ export interface ScriptRunOptions {
   signal?: AbortSignal;
   /** 리포트에 남길 원본 스크립트 경로 */
   sourcePath?: string;
+  /** 지나간 화면과 연결을 앱의 화면 지도에 모은다 (기본 true, 에이전트가 있을 때만) */
+  collectFlow?: boolean;
 }
 
 export interface RunResult {
@@ -376,6 +378,7 @@ export async function runScript(dev: DeviceAdb, script: Script, opts: ScriptRunO
     device: dev.serial,
   });
   await ensureAgent(dev);
+  const flow = opts.collectFlow === false ? undefined : await FlowCollector.open(dev, app).catch(() => undefined);
   let passed = 0;
   let failed = 0;
   let skipped = 0;
@@ -401,6 +404,7 @@ export async function runScript(dev: DeviceAdb, script: Script, opts: ScriptRunO
     }
     if (script.setup?.restart !== false) await launchAndSettle(dev, app, { restart: true });
     await record('준비: 앱 실행', 'info', script.setup ? JSON.stringify(script.setup) : undefined, shotAll);
+    await flow?.observe();
   } catch (e) {
     await record('준비 실패', 'fail', (e as Error).message, true);
     const report = await scenario.finish('blocked', `준비 단계 실패: ${(e as Error).message}`);
@@ -417,7 +421,8 @@ export async function runScript(dev: DeviceAdb, script: Script, opts: ScriptRunO
     }
     opts.onStep?.({ index: i, total, title, status: 'running' });
     try {
-      const detail = await runStep(dev, app, step, defaultTimeout, ctx);
+      const detail = await runStep(dev, app, step, defaultTimeout, ctx, flow);
+      await flow?.observe();
       if (detail === 'skip') {
         skipped++;
         await record(title, 'skip', '선택(optional) 요소가 없어 건너뜀', shotAll);
@@ -429,6 +434,8 @@ export async function runScript(dev: DeviceAdb, script: Script, opts: ScriptRunO
       await record(title, 'pass', detail, shotAll || isCheck);
       opts.onStep?.({ index: i, total, title, status: 'pass', detail });
     } catch (e) {
+      // 조작 도중 실패하면 화면 상태를 알 수 없으므로 다음 관찰부터 지도에 새로 이어 붙인다
+      flow?.forget();
       failed++;
       const msg = (e as Error).message;
       await record(title, 'fail', msg, true);
@@ -446,7 +453,14 @@ export async function runScript(dev: DeviceAdb, script: Script, opts: ScriptRunO
   return { verdict, passed, failed, skipped, durationMs: Date.now() - t0, report, scenario: scenario.data };
 }
 
-async function runStep(dev: DeviceAdb, app: string, step: ScriptStep, defaultTimeout: number, ctx: { since: number }): Promise<string> {
+async function runStep(
+  dev: DeviceAdb,
+  app: string,
+  step: ScriptStep,
+  defaultTimeout: number,
+  ctx: { since: number },
+  flow?: FlowCollector,
+): Promise<string> {
   if ('tap' in step || 'longPress' in step) {
     const t = 'tap' in step ? step.tap : step.longPress;
     const n = await findWithin(dev, t, t.timeout ?? defaultTimeout);
@@ -455,12 +469,14 @@ async function runStep(dev: DeviceAdb, app: string, step: ScriptStep, defaultTim
       throw new StepFailure(`요소를 찾지 못했습니다 (${t.timeout ?? defaultTimeout}ms): ${selText(t)}`);
     }
     const { x, y } = center(n);
+    flow?.note({ type: 'tap' in step ? 'tap' : 'longpress', x, y });
     if ('tap' in step) await tap(dev, x, y);
     else await longPress(dev, x, y);
     await settle(dev);
     return `${n.className.split('.').pop()} "${n.text || n.contentDesc}" @${Math.round(x)},${Math.round(y)}`;
   }
   if ('tapAt' in step) {
+    flow?.note({ type: 'tap', ...step.tapAt });
     await tap(dev, step.tapAt.x, step.tapAt.y);
     await settle(dev);
     return '';
@@ -470,6 +486,7 @@ async function runStep(dev: DeviceAdb, app: string, step: ScriptStep, defaultTim
       const n = await findWithin(dev, step.type.into, defaultTimeout);
       if (!n) throw new StepFailure(`입력창을 찾지 못했습니다: ${selText(step.type.into)}`);
       const { x, y } = center(n);
+      flow?.note({ type: 'tap', x, y });
       await tap(dev, x, y);
       await sleep(300);
     }
@@ -491,11 +508,13 @@ async function runStep(dev: DeviceAdb, app: string, step: ScriptStep, defaultTim
       }
       throw new StepFailure(`${max}번 스크롤해도 찾지 못했습니다: ${selText(s.until)}`);
     }
+    flow?.note({ type: 'swipe', direction: s.direction });
     await swipeDirection(dev, s.direction);
     await settle(dev);
     return '';
   }
   if ('key' in step) {
+    flow?.note({ type: 'key', key: step.key });
     await pressKey(dev, step.key);
     await settle(dev);
     return '';
@@ -527,6 +546,7 @@ async function runStep(dev: DeviceAdb, app: string, step: ScriptStep, defaultTim
     return s.screen.activity;
   }
   if ('deeplink' in step) {
+    flow?.note({ type: 'deeplink', uri: step.deeplink });
     await openDeepLink(dev, step.deeplink, app);
     await settle(dev);
     return '';

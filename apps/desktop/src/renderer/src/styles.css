@@ -166,6 +166,25 @@ label.chk { display: inline-flex; gap: 6px; align-items: center; color: var(--fg
 .react-flow__edge-text { fill: var(--fg-dim) !important; font-size: 10px !important; }
 .flow-side { position: absolute; right: 12px; top: 12px; width: 300px; max-height: calc(100% - 200px); overflow: auto; background: var(--panel); border: 1px solid var(--line-2); border-radius: 10px; padding: 10px; z-index: 5; }
 .flow-side img { width: 100%; border-radius: 8px; }
+.screen-node.dim { opacity: .3; }
+.screen-node .cov { color: var(--warn); }
+.screen-node .cov.full { color: var(--accent); }
+.flow-focus { position: absolute; left: 12px; top: 12px; z-index: 5; display: flex; gap: 8px; align-items: center; background: var(--panel); border: 1px solid var(--accent); border-radius: 8px; padding: 4px 6px 4px 10px; font-size: 12px; }
+.btn-row { display: flex; align-items: center; }
+.shot-pick { position: relative; }
+.shot-pick img { display: block; }
+.shot-pick .box { position: absolute; padding: 0; background: transparent; border: 1px dashed rgba(255,255,255,.35); border-radius: 3px; cursor: pointer; }
+.shot-pick .box:hover { background: rgba(125,211,168,.15); border-style: solid; }
+.shot-pick .box.done { border: 1px solid rgba(125,211,168,.5); }
+.shot-pick .box.danger { border-color: var(--err); }
+.shot-pick .box.on { background: rgba(125,211,168,.3); border: 2px solid var(--accent); }
+.seg { display: inline-flex; border: 1px solid var(--line-2); border-radius: 6px; overflow: hidden; }
+.seg button { background: transparent; border: 0; color: var(--fg-dim); padding: 2px 8px; font-size: 11px; cursor: pointer; }
+.seg button.on { background: var(--panel-2); color: var(--accent); }
+.picks { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; }
+.picks .pill button { background: none; border: 0; color: inherit; margin-left: 4px; padding: 0; cursor: pointer; }
+.target-list { display: flex; flex-direction: column; gap: 2px; font-size: 11px; }
+.warn-text { color: var(--warn); }
 
 /* 로그 */
 .logs { height: calc(100% - 45px); overflow: auto; font-family: var(--mono); font-size: 11.5px; padding: 4px 0; }

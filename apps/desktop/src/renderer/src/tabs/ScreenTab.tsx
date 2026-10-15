@@ -1,8 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
-import { api, type DeviceInfo } from '../api';
+import { api, type DeviceInfo, type GraphAction } from '../api';
 import { useApp } from '../App';
 import { MirrorCanvas } from '../MirrorCanvas';
 import { useT } from '../i18n';
+
+const GRAPH_MODE_KEY = 'droidlens.graphMode';
 
 export function ScreenTab() {
   const { serial, pkg, screen, toast, run } = useApp();
@@ -16,7 +18,22 @@ export function ScreenTab() {
   const [info, setInfo] = useState<DeviceInfo | null>(null);
   const [recAt, setRecAt] = useState<number | null>(null);
   const [now, setNow] = useState(Date.now());
-  const [graphMode, setGraphMode] = useState(false);
+  // 직접 조작한 화면 흐름은 기본으로 앱 지도에 모은다. 끄면 그 선택을 기억한다
+  const [graphMode, setGraphModeState] = useState(() => {
+    try {
+      return localStorage.getItem(GRAPH_MODE_KEY) !== 'off';
+    } catch {
+      return true;
+    }
+  });
+  const setGraphMode = (on: boolean) => {
+    setGraphModeState(on);
+    try {
+      localStorage.setItem(GRAPH_MODE_KEY, on ? 'on' : 'off');
+    } catch {
+      /* 이번 실행 동안만 적용 */
+    }
+  };
   const [busy, setBusy] = useState(false);
   const [text, setText] = useState('');
   const [history, setHistory] = useState<string[]>([]);
@@ -80,17 +97,24 @@ export function ScreenTab() {
     const end = toDevice(e.clientX, e.clientY);
     const dist = Math.hypot(end.x - start.x, end.y - start.y);
     const held = Date.now() - start.t;
-    if (dist > 30) {
+    const action: GraphAction =
+      dist > 30
+        ? { type: 'swipe', x1: start.x, y1: start.y, x2: end.x, y2: end.y, durationMs: Math.min(Math.max(held, 150), 1000) }
+        : held > 600
+          ? { type: 'longpress', x: start.x, y: start.y }
+          : { type: 'tap', x: start.x, y: start.y };
+    if (graphMode && pkg) {
+      setBusy(true);
+      const r = await run(api.graphRecord(serial, pkg, action));
+      setBusy(false);
+      if (r?.recorded) log(`${action.type} → ${r.to}${r.isNew ? ` ${t('(새 화면)')}` : ''}`);
+      else if (r) log(action.type);
+    } else if (dist > 30) {
       await run(api.swipe(serial, start.x, start.y, end.x, end.y, Math.min(Math.max(held, 150), 1000)));
       log(`swipe ${Math.round(start.x)},${Math.round(start.y)} → ${Math.round(end.x)},${Math.round(end.y)}`);
     } else if (held > 600) {
       await run(api.longPress(serial, start.x, start.y));
       log(`long press ${Math.round(start.x)},${Math.round(start.y)}`);
-    } else if (graphMode && pkg) {
-      setBusy(true);
-      const r = await run(api.graphRecordTap(serial, pkg, start.x, start.y));
-      setBusy(false);
-      if (r) log(`tap → ${r.to}${r.isNew ? ` ${t('(새 화면)')}` : ''}`);
     } else {
       await run(api.tap(serial, start.x, start.y));
       log(`tap ${Math.round(start.x)},${Math.round(start.y)}`);
@@ -101,9 +125,9 @@ export function ScreenTab() {
     if (!serial) return;
     if (graphMode && pkg && k === 'back') {
       setBusy(true);
-      const r = await run(api.graphRecordKey(serial, pkg, 'back'));
+      const r = await run(api.graphRecord(serial, pkg, { type: 'key', key: 'back' }));
       setBusy(false);
-      if (r) log(`back → ${r.to}`);
+      if (r) log(r.recorded ? `back → ${r.to}` : 'key back');
     } else {
       await run(api.key(serial, k));
       log(`key ${k}`);
@@ -223,8 +247,9 @@ export function ScreenTab() {
           <h4>{t('화면 흐름 기록')}</h4>
           <label className="chk">
             <input type="checkbox" checked={graphMode} disabled={!pkg} onChange={(e) => setGraphMode(e.target.checked)} />
-            {t('탭/뒤로 동작을 화면 그래프에 기록')}
+            {t('탭·길게 누르기·스와이프·뒤로를 앱 화면 지도에 기록')}
           </label>
+          <div className="faint" style={{ fontSize: 11 }}>{t('에이전트가 켜져 있고 선택한 앱 화면일 때만 기록합니다')}</div>
           {!pkg && <div className="faint" style={{ fontSize: 11 }}>{t('앱을 선택하면 사용할 수 있습니다')}</div>}
         </div>
         <div>
