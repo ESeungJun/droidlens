@@ -104,7 +104,7 @@ export type ScriptProgress =
   | { kind: 'step'; file: string; index: number; total: number; title: string; status: 'running' | 'pass' | 'fail' | 'skip'; detail?: string };
 
 export interface Progress {
-  kind: 'libs' | 'explore';
+  kind: 'libs' | 'explore' | 'avd';
   message: string;
   step?: number;
   screen?: string;
@@ -112,6 +112,9 @@ export interface Progress {
 
 export const api = {
   devices: () => call<DeviceSummary[]>('devices'),
+  avds: () => call<{ available: boolean; avds: { name: string; serial?: string }[] }>('avds'),
+  avdStart: (name: string) => call<string>('avdStart', name),
+  avdStop: (s: string) => call<void>('avdStop', s),
   deviceInfo: (s: string) => call<DeviceInfo>('deviceInfo', s),
   screenshot: (s: string) => call<string>('screenshot', s),
   saveScreenshot: (s: string, label?: string) => call<string>('saveScreenshot', s, label),
