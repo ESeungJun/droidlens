@@ -63,7 +63,7 @@ macOS    brew install --cask android-platform-tools
 Windows  winget install Google.PlatformTools
 Linux    sudo apt install adb
 ```
-Then enable **Developer options → USB debugging** on your device and connect it, or start an emulator. You can also set the adb path manually in the app's **Settings & Integrations** tab.
+Then enable **Developer options → USB debugging** on your device and connect it, or start an emulator. Virtual devices (AVDs) on this computer appear in the device list at the top; pick one and DroidLens starts it and selects it once it has booted (there is a stop button too). If you have none, the **device setup helper** walks you through installing one. You can also set the adb path manually in the app's **Settings & Integrations** tab.
 
 ## Features
 
