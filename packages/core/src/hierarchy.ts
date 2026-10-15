@@ -263,7 +263,18 @@ export function screenSignature(root: ViewNode, maxDepth = 6): string {
     const kids = collapse ? '' : [...new Set(n.children.map((c) => skel(c, isPager(n))))].join(',');
     return `${n.className.split('.').pop()}#${n.resourceId.split(':id/')[1] ?? ''}${n.selected ? '*' : ''}(${kids})`;
   };
-  return createHash('sha1').update(skel(root)).digest('hex').slice(0, 12);
+  // 뼈대는 maxDepth 에서 잘리는데, 하단 탭(BottomNavigationView 등)의 선택 상태는 보통 그보다 깊다.
+  // 잘린 곳의 선택 항목만 따로 붙여서 탭 화면들이 하나로 합쳐지지 않게 한다 (얕은 곳만으로 구분되던 화면의 값은 그대로).
+  // 세로 목록 안의 선택 항목은 화면을 쪼개지 않도록 넣지 않는다
+  const deepSelected = new Set<string>();
+  const walkSelected = (n: ViewNode, inList: boolean) => {
+    if (n.depth > maxDepth && n.selected && !inList && (n.resourceId || n.text)) deepSelected.add(n.resourceId.split(':id/')[1] || `"${n.text}"`);
+    const list = inList || (n.scrollable && !isPager(n) && !/HorizontalScrollView|TabLayout/.test(n.className));
+    for (const c of n.children) walkSelected(c, list);
+  };
+  walkSelected(root, false);
+  const extra = deepSelected.size ? `|${[...deepSelected].sort().join(',')}` : '';
+  return createHash('sha1').update(skel(root) + extra).digest('hex').slice(0, 12);
 }
 
 /** 깊이별 노드 수 등 뷰 계층 통계 (오버드로/과도한 중첩 진단용) */
