@@ -160,4 +160,15 @@ export const common: Record<string, string> = {
   '{version} 설치하고 다시 시작': 'Install {version} and restart',
   '새 버전 확인': 'Check for updates',
   '데이터 폴더 열기': 'Open data folder',
+  // 가상 기기
+  '{name} 실행 중…': 'Starting {name}…',
+  '가상 기기를 켰습니다: {name}': 'Virtual device started: {name}',
+  '가상 기기를 껐습니다': 'Virtual device stopped',
+  '가상 기기 (고르면 실행)': 'Virtual devices (pick to start)',
+  '이 가상 기기(에뮬레이터)를 끕니다': 'Shut down this virtual device (emulator)',
+  '■ 가상 기기 끄기': '■ Stop virtual device',
+  '이 컴퓨터의 가상 기기': 'Virtual devices on this computer',
+  '폰이나 태블릿 없이 에뮬레이터로 바로 시작할 수 있습니다. 처음 켤 때는 1~2분 걸립니다.': 'Start right away on an emulator, no phone or tablet needed. The first boot takes 1–2 minutes.',
+  'Android 에뮬레이터를 찾지 못했습니다. 기기 연결 도우미로 먼저 설치하세요': 'Android emulator not found. Install it first with the device setup helper',
+  '에뮬레이터가 아닙니다': 'Not an emulator',
 };
