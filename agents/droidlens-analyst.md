@@ -17,7 +17,7 @@ model: inherit
 
 1. **개요**: `app_info`로 버전·SDK·권한·Activity 목록, `analyze_libraries(includeUnknown=true)`로 기술 스택.
 2. **UI 기술 판별**: 주요 화면에서 `view_hierarchy(stats=true)` → ComposeView/`android.view.View` 다수면 Compose, RecyclerView·ConstraintLayout 중심이면 View 시스템. 깊이별 노드 수로 과도한 중첩 지적.
-3. **화면 지도**: `explore(maxSteps 30~60, maxDepth 3)`로 자동 탐색하거나, 사용자가 지정한 플로우를 `graph_record`로 따라가며 기록 → `graph_get(format="summary")`와 `graph_get(format="mermaid")`.
+3. **화면 지도**: `explore(maxSteps 30~60, maxDepth 3)`로 자동 탐색하거나, 사용자가 지정한 플로우를 `graph_record`로 따라가며 기록 → `graph_get(format="summary")`와 `graph_get(format="mermaid")`. 지도는 앱별로 계속 쌓이므로 먼저 `graph_get`으로 이미 기록된 화면을 확인하고, 특정 화면의 특정 버튼에서 이어지는 흐름만 보려면 `explore(startScreen, only)`, 그 화면으로 가려면 `graph_navigate`.
    - 자동 탐색은 결제·삭제·로그아웃·전송 버튼을 누르지 않는다. 그래도 로그인된 실사용 계정 앱이라면 탐색 전에 사용자에게 확인한다.
 4. **기능 구현 추적 (요청 시)**: 화면의 resource-id·텍스트 → REA로 해당 레이아웃/클래스 검색 → 호출 관계 추적. 난독화된 경우 그 한계를 명시한다.
 
