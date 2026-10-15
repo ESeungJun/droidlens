@@ -73,8 +73,8 @@ export type Interaction =
 export const DANGEROUS_LABELS =
   /(log ?out|sign ?out|delete|remove|uninstall|purchase|buy|pay|checkout|order|send|submit|report|block|unsubscribe|deactivate|reset|로그아웃|삭제|탈퇴|결제|구매|주문|송금|전송|보내기|신고|차단|초기화|해지|구독|등록하기|완료)/i;
 
-/** 경로를 다시 따라갈 때 눌러도 되는 키 (home·recents·power 처럼 앱 밖으로 나가는 키는 뺀다) */
-const REPLAY_KEYS = new Set(['back', 'enter', 'tab', 'escape']);
+/** 경로를 다시 따라갈 때 눌러도 되는 키. enter 는 입력창에서 전송이 될 수 있고 home·recents·power 는 앱 밖으로 나가므로 뺀다 */
+const REPLAY_KEYS = new Set(['back']);
 
 export function actionLabel(a: GraphAction): string {
   switch (a.type) {
@@ -102,16 +102,19 @@ export function actionKey(a: GraphAction): string | undefined {
 }
 
 /**
- * 화면 이동·탐색 복귀에서 다시 실행해도 되는 연결인가.
- * 위험 라벨(결제·주문 등)을 다시 누르거나, 앱 밖으로 나가는 키·다시 실행할 수 없는 딥링크/수동 연결을 쓰지 않는다
+ * 화면 이동·탐색 복귀에서 다시 실행해도 되는 연결인가. 연결은 다른 사람이 준 지도 파일에서 왔을 수 있으므로
+ * 기록된 좌표를 그대로 누르는 행동은 쓰지 않는다:
+ * - 탭·길게 누르기는 라벨이 있어 기기 화면에서 같은 요소를 다시 찾을 수 있고 위험 라벨이 아닐 때만
+ * - 스와이프는 방향이 있을 때만 (재생할 때 화면 크기로 좌표를 다시 계산한다. 좌표가 한 점인 스와이프는 사실상 탭이다)
+ * - 키는 back 만. 딥링크·수동 연결은 다시 실행할 수 없다
  */
 export function isReplayable(a: GraphAction): boolean {
   switch (a.type) {
     case 'tap':
     case 'longpress':
-      return !DANGEROUS_LABELS.test(a.label ?? '');
+      return !!a.label && !DANGEROUS_LABELS.test(a.label);
     case 'swipe':
-      return true;
+      return !!a.direction;
     case 'key':
       return REPLAY_KEYS.has(a.key);
     default:
