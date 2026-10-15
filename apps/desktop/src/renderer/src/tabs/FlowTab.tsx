@@ -15,7 +15,8 @@ import {
   type ReactFlowInstance,
 } from '@xyflow/react';
 import { Graph, layout as dagreLayout } from '@dagrejs/dagre';
-import { api, type GraphData, type ScreenNode } from '../api';
+import { actionKey, shortestPath, startScreenOf as startOf, triedKeys } from '@droidlens/core/graph-model';
+import { api, type GraphAction, type GraphData, type Interaction, type ScreenNode } from '../api';
 import { NeedPkg, useApp } from '../App';
 import { useT } from '../i18n';
 
@@ -40,20 +41,28 @@ function useShot(pkg: string, file?: string) {
   return imgCache.get(key) ?? (loaded?.key === key ? loaded.src : undefined);
 }
 
-type SNodeData = { screen: ScreenNode; pkg: string; selected: boolean; start: boolean };
+type SNodeData = { screen: ScreenNode; pkg: string; selected: boolean; start: boolean; dim: boolean; done: number };
 
 const ScreenCard = memo(({ data }: NodeProps<Node<SNodeData>>) => {
   const src = useShot(data.pkg, data.screen.screenshot);
   const t = useT();
   return (
-    <div className={`screen-node ${data.selected ? 'sel' : ''}`}>
+    <div className={`screen-node ${data.selected ? 'sel' : ''} ${data.dim ? 'dim' : ''}`}>
       <Handle type="target" position={Position.Left} />
       {src ? <img src={src} alt="" /> : <img alt="" />}
       <div className="t" title={data.screen.label}>
         {data.start && <span className="pill accent" style={{ marginRight: 4, padding: '0 6px', fontSize: 10 }}>{t('시작')}</span>}
         {data.screen.label}
       </div>
-      <div className="s">{data.screen.signature} · {t('{n}회', { n: data.screen.visits })}</div>
+      <div className="s">
+        {t('{n}회', { n: data.screen.visits })}
+        {data.screen.targets?.length ? (
+          <span className={data.done >= data.screen.targets.length ? 'cov full' : 'cov'} title={t('눌러 본 요소 / 누를 수 있는 요소')}>
+            {' · '}
+            {t('버튼 {d}/{n}', { d: data.done, n: data.screen.targets.length })}
+          </span>
+        ) : null}
+      </div>
       <Handle type="source" position={Position.Right} />
       {/* 되돌아가는 연결은 카드 아래로 나가고 들어와 앞으로 가는 연결과 겹치지 않는다 */}
       <Handle type="source" id="back-out" position={Position.Bottom} />
@@ -69,8 +78,24 @@ type Pos = { x: number; y: number };
 const CARD_W = 162;
 const CARD_H = 380;
 
-/** 탐색을 시작한 화면 (가장 먼저 기록된 화면) */
-const startOf = (g: GraphData) => [...g.nodes].sort((a, b) => a.firstSeen - b.firstSeen)[0]?.id;
+/** 연결선·목록에 쓰는 행동 이름 */
+function actionName(a: GraphAction): string {
+  switch (a.type) {
+    case 'tap':
+      return a.label ?? 'tap';
+    case 'longpress':
+      return `⏱ ${a.label ?? 'long press'}`;
+    case 'swipe':
+      return `swipe ${a.direction ?? ''}`.trim();
+    case 'key':
+      return a.key;
+    default:
+      return a.type;
+  }
+}
+
+/** 강조해서 보여 줄 부분 (지정 탐색 결과·경로). 나머지 화면과 연결은 흐리게 */
+type Focus = { title: string; nodes: Set<string>; edges: Set<string> };
 
 /**
  * 시작 화면 기준으로 왼쪽 → 오른쪽 배치. 시작 화면에서 연결선을 따라 몇 단계인지(BFS)로 열을 정하고,
@@ -96,6 +121,8 @@ function levels(g: GraphData): Map<string, number> {
       }
     }
   };
+  const start = startOf(g);
+  if (start) bfs(start);
   for (const n of [...g.nodes].sort((a, b) => a.firstSeen - b.firstSeen)) if (!level.has(n.id)) bfs(n.id);
   return level;
 }
@@ -133,6 +160,8 @@ export function FlowTab() {
   const [progress, setProgress] = useState<string[]>([]);
   const [confirmReset, setConfirmReset] = useState(false);
   const [fromCurrent, setFromCurrent] = useState(false);
+  const [focus, setFocus] = useState<Focus | null>(null);
+  const [navigating, setNavigating] = useState(false);
   // 카드: 처음엔 자동 배치, 드래그하면 그 위치를 유지하고 '정리'로 다시 자동 배치.
   // React Flow 가 잰 카드 크기(measured)를 잃지 않도록 변경분만 applyNodeChanges 로 반영한다 (새로 만들면 매번 다시 재며 깜빡인다)
   const [rfNodes, setRfNodes] = useState<Node<SNodeData>[]>([]);
@@ -161,11 +190,28 @@ export function FlowTab() {
           id: s.id,
           type: 'screen',
           position: moved.current && o ? o.position : auto.get(s.id) ?? { x: 0, y: 0 },
-          data: { screen: s, pkg, selected: o?.data.selected ?? false, start: s.id === start },
+          data: {
+            screen: s,
+            pkg,
+            selected: o?.data.selected ?? false,
+            start: s.id === start,
+            dim: o?.data.dim ?? false,
+            done: triedKeys(g.edges, s).size,
+          },
         };
       });
     });
   }, [g, pkg]);
+
+  // 강조가 바뀐 카드만 data 를 바꾼다
+  useEffect(() => {
+    setRfNodes((cur) =>
+      cur.map((n) => {
+        const dim = !!focus && !focus.nodes.has(n.id);
+        return n.data.dim === dim ? n : { ...n, data: { ...n.data, dim } };
+      }),
+    );
+  }, [focus, g]);
 
   // 선택이 바뀐 카드만 data 를 바꾼다
   useEffect(() => {
@@ -185,6 +231,7 @@ export function FlowTab() {
 
   useEffect(() => {
     setSel(null);
+    setFocus(null);
     moved.current = false; // 다른 앱으로 바뀌면 직접 옮긴 배치는 의미가 없다
     reload();
   }, [reload]);
@@ -193,7 +240,7 @@ export function FlowTab() {
     () =>
       api.onProgress((p) => {
         if (p.kind !== 'explore') return;
-        setProgress((l) => [`#${p.step} ${p.message}`, ...l].slice(0, 200));
+        setProgress((l) => [`${p.step !== undefined ? `#${p.step} ` : ''}${p.message}`, ...l].slice(0, 200));
         if (p.step !== undefined) setTapCount(p.step);
         if (p.screen) reload();
       }),
@@ -206,10 +253,11 @@ export function FlowTab() {
     return g.edges
       .filter((e) => e.from !== e.to)
       .map((e) => {
-        const name = e.action.type === 'tap' ? (e.action.label ?? 'tap') : e.action.type === 'key' ? e.action.key : e.action.type;
+        const name = actionName(e.action);
         // 시작 화면 쪽으로 되돌아가는 연결은 앞으로 가는 연결과 겹치지 않게 아래로 돌아가는 점선으로
         const back = (level.get(e.to) ?? Infinity) <= (level.get(e.from) ?? Infinity);
-        const on = sel && (e.from === sel || e.to === sel);
+        const focused = focus?.edges.has(e.id);
+        const on = focused || (!focus && sel && (e.from === sel || e.to === sel));
         return {
           id: e.id,
           source: e.from,
@@ -220,11 +268,16 @@ export function FlowTab() {
           pathOptions: back ? { offset: 36, borderRadius: 16 } : undefined,
           label: back ? `↩ ${name}` : name,
           markerEnd: { type: MarkerType.ArrowClosed },
-          style: { stroke: on ? '#7dd3a8' : back ? '#6b7280' : '#4a505c', strokeDasharray: back ? '5 4' : undefined },
-          animated: !!sel && e.from === sel,
+          style: {
+            stroke: on ? '#7dd3a8' : back ? '#6b7280' : '#4a505c',
+            strokeDasharray: back ? '5 4' : undefined,
+            opacity: focus && !focused ? 0.15 : 1,
+          },
+          labelStyle: focus && !focused ? { opacity: 0.2 } : undefined,
+          animated: focus ? !!focused : !!sel && e.from === sel,
         };
       });
-  }, [g, sel]);
+  }, [g, sel, focus]);
 
   if (!pkg) return <NeedPkg />;
   const selNode = g?.nodes.find((n) => n.id === sel);
@@ -234,7 +287,8 @@ export function FlowTab() {
     setExploring(true);
     setProgress([]);
     setTapCount(0);
-    const r = await run(api.explore(serial, pkg, depth, fromCurrent));
+    setFocus(null);
+    const r = await run(api.explore(serial, pkg, { maxDepth: depth, fromCurrent }));
     setExploring(false);
     await reload();
     if (r) {
@@ -250,10 +304,67 @@ export function FlowTab() {
     }
   };
 
+  /** 고른 화면에서 지정한 인터랙션만 먼저 실행하고, 열린 화면부터는 최대 깊이까지 탐색. 끝나면 지나간 흐름만 강조 */
+  const exploreFrom = async (screen: ScreenNode, only: Interaction[], allowDanger: boolean) => {
+    if (!serial || !only.length) return;
+    setExploring(true);
+    setProgress([]);
+    setTapCount(0);
+    setFocus(null);
+    const r = await run(api.explore(serial, pkg, { maxDepth: depth, startAt: screen.id, only, allowDanger }));
+    setExploring(false);
+    await reload();
+    if (!r) return;
+    setFocus({ title: t('{s}에서 지정한 동작의 흐름', { s: screen.label }), nodes: new Set(r.touched.nodes), edges: new Set(r.touched.edges) });
+    // 시작 화면에서 건너뛴 것 = 지정했지만 실행하지 못한 동작 (화면에서 못 찾았거나 위험 버튼을 허용하지 않음)
+    const missed = r.skipped.filter((x) => x.screen === r.startScreen);
+    toast(
+      t('지정한 동작 {n}개로 화면 {s}개, 연결 {e}개를 따라갔습니다', { n: only.length, s: r.touched.nodes.length - 1, e: r.touched.edges.length }) +
+        (missed.length ? t(' — 실행하지 못한 동작 {n}개: {list}', { n: missed.length, list: missed.map((x) => `${x.label} (${t(x.reason)})`).join(', ') }) : '') +
+        (r.errors.length ? t(' (오류 {n}개, 탐색 로그 참고)', { n: r.errors.length }) : ''),
+      r.errors.length > 0 || missed.length > 0,
+    );
+  };
+
+  /** 지도에 기록된 경로로 기기를 그 화면까지 옮긴다 */
+  const navigate = async (screen: ScreenNode) => {
+    if (!serial) return;
+    setNavigating(true);
+    setProgress([]);
+    const r = await run(api.graphNavigate(serial, pkg, screen.id));
+    setNavigating(false);
+    await reload();
+    if (r) toast(r.moved ? t('{n}단계로 이동했습니다: {s}', { n: r.steps, s: screen.label }) : t('이미 이 화면입니다'));
+  };
+
+  const showPath = (screen: ScreenNode) => {
+    if (!g) return;
+    const from = startOf(g);
+    const p = from ? shortestPath(g.edges, from, screen.id) : undefined;
+    if (!from || !p) return toast(t('첫 화면에서 이 화면까지 기록된 경로가 없습니다'), true);
+    setFocus({ title: t('첫 화면 → {s} 경로', { s: screen.label }), nodes: new Set([from, ...p.map((e) => e.to)]), edges: new Set(p.map((e) => e.id)) });
+  };
+
+  const exportMap = async () => {
+    const p = await run(api.graphExport(pkg));
+    if (p) toast(t('지도를 내보냈습니다: {path} — 화면 스크린샷이 그대로 들어 있으니 공유 전에 확인하세요', { path: p }));
+  };
+
+  const importMap = async () => {
+    const r = await run(api.graphImport(pkg));
+    if (!r) return;
+    await reload();
+    toast(
+      t('지도를 합쳤습니다: 새 화면 {n}개, 새 연결 {e}개', { n: r.nodes, e: r.edges }) +
+        (r.dropped ? t(' (형식이 맞지 않아 버린 항목 {n}개)', { n: r.dropped }) : ''),
+    );
+  };
+
   const reset = async () => {
     setConfirmReset(false);
     if ((await run(api.graphReset(pkg))) !== undefined) {
       setSel(null);
+      setFocus(null);
       moved.current = false;
       // 초기화 뒤 같은 이름으로 다시 기록되는 화면에 예전 스크린샷이 보이지 않게
       for (const k of [...imgCache.keys()]) if (k.startsWith(pkg)) imgCache.delete(k);
@@ -266,7 +377,7 @@ export function FlowTab() {
   return (
     <>
       <div className="toolbar">
-        <button className="btn primary" onClick={start} disabled={exploring}>
+        <button className="btn primary" onClick={start} disabled={exploring || navigating}>
           {exploring ? t('탐색 중…') : t('▶ 자동 탐색')}
         </button>
         {exploring && <button className="btn danger" onClick={() => api.exploreStop()}>{t('중지')}</button>}
@@ -281,6 +392,8 @@ export function FlowTab() {
         <button className="btn" onClick={async () => serial && (await run(api.graphRecordHere(serial, pkg))) && reload()}>{t('＋ 현재 화면 추가')}</button>
         <button className="btn" onClick={reload}>↻</button>
         <button className="btn" disabled={!g?.nodes.length} onClick={arrange} title={t('화면 카드를 자동으로 다시 배치하고 전체가 보이게 맞춥니다')}>{t('⊞ 정리')}</button>
+        <button className="btn" disabled={!g?.nodes.length} onClick={exportMap} title={t('스크린샷을 포함한 지도 파일로 저장합니다. 다른 사람이 가져오면 그 사람 지도에 합쳐집니다. 화면 스크린샷(계정·메시지 등)이 그대로 들어갑니다')}>{t('내보내기')}</button>
+        <button className="btn" disabled={exploring} onClick={importMap} title={t('내보낸 지도 파일을 지금 지도에 합칩니다 (같은 화면은 하나로 합침)')}>{t('가져오기')}</button>
         {confirmReset ? (
           <>
             <span className="muted">{t('이 앱의 화면과 연결을 모두 지울까요?')}</span>
@@ -300,6 +413,12 @@ export function FlowTab() {
         </span>
       </div>
       <div className="flow" style={{ position: 'relative' }}>
+        {focus && (
+          <div className="flow-focus">
+            {focus.title} · {t('화면 {n} · 전이 {e}', { n: focus.nodes.size, e: focus.edges.size })}
+            <button className="btn sm" onClick={() => setFocus(null)}>{t('전체 보기')}</button>
+          </div>
+        )}
         {g && g.nodes.length ? (
           <ReactFlow
             nodes={rfNodes}
@@ -326,7 +445,19 @@ export function FlowTab() {
         )}
         {(selNode || progress.length > 0) && (
           <div className="flow-side">
-            {selNode ? <ScreenDetail g={g!} n={selNode} pkg={pkg} /> : null}
+            {selNode ? (
+              <ScreenDetail
+                key={selNode.id}
+                g={g!}
+                n={selNode}
+                pkg={pkg}
+                busy={exploring || navigating}
+                depth={depth}
+                onExplore={(only, allowDanger) => exploreFrom(selNode, only, allowDanger)}
+                onNavigate={() => navigate(selNode)}
+                onPath={() => showPath(selNode)}
+              />
+            ) : null}
             {progress.length > 0 && (
               <>
                 <h4 className="faint" style={{ margin: '10px 0 4px', fontSize: 11 }}>{t('탐색 로그')}</h4>
@@ -340,17 +471,147 @@ export function FlowTab() {
   );
 }
 
-function ScreenDetail({ g, n, pkg }: { g: GraphData; n: ScreenNode; pkg: string }) {
+const SWIPES = [
+  { direction: 'up', icon: '↑' },
+  { direction: 'down', icon: '↓' },
+  { direction: 'left', icon: '←' },
+  { direction: 'right', icon: '→' },
+] as const;
+
+const sameMove = (a: Interaction, b: Interaction) =>
+  a.kind === b.kind && (a.kind === 'swipe' ? a.direction === (b as typeof a).direction : a.key === (b as typeof a).key);
+
+function ScreenDetail({
+  g,
+  n,
+  pkg,
+  busy,
+  depth,
+  onExplore,
+  onNavigate,
+  onPath,
+}: {
+  g: GraphData;
+  n: ScreenNode;
+  pkg: string;
+  busy: boolean;
+  depth: number;
+  onExplore(only: Interaction[], allowDanger: boolean): void;
+  onNavigate(): void;
+  onPath(): void;
+}) {
   const t = useT();
   const src = useShot(pkg, n.screenshot);
+  const [size, setSize] = useState<{ w: number; h: number } | null>(null);
+  const [picks, setPicks] = useState<Interaction[]>([]);
+  const [press, setPress] = useState<'tap' | 'longpress'>('tap');
+  const [allowDanger, setAllowDanger] = useState(false);
   const outs = g.edges.filter((e) => e.from === n.id && e.to !== n.id);
   const ins = g.edges.filter((e) => e.to === n.id && e.from !== n.id);
   const name = (id: string) => g.nodes.find((x) => x.id === id)?.label ?? id;
+  const done = triedKeys(g.edges, n);
+  const targets = n.targets ?? [];
+  const labelOfKey = (key: string) => targets.find((x) => x.key === key)?.label ?? key;
+  // 요소를 눌러 열린 화면 (같은 요소 key 로 나간 연결)
+  const leadsTo = (key: string) => outs.find((e) => actionKey(e.action) === key);
+
+  const toggle = (m: Interaction) => setPicks((cur) => (cur.some((x) => sameMove(x, m)) ? cur.filter((x) => !sameMove(x, m)) : [...cur, m]));
+  /** 요소 선택 켜고 끄기: 이미 골라 둔 요소면 (탭이든 길게 누르기든) 빼고, 아니면 지금 고른 방식으로 넣는다 */
+  const toggleKey = (key: string) =>
+    setPicks((cur) => (cur.some((x) => x.kind !== 'swipe' && x.key === key) ? cur.filter((x) => x.kind === 'swipe' || x.key !== key) : [...cur, { kind: press, key }]));
+  const dangerPicked = picks.some((m) => m.kind !== 'swipe' && targets.find((x) => x.key === m.key)?.danger);
+  const picked = (m: Interaction) => picks.some((x) => sameMove(x, m));
+  const pickedKey = (key: string) => picks.some((x) => x.kind !== 'swipe' && x.key === key);
+
   return (
     <div>
-      {src && <img src={src} alt="" />}
+      <div className="shot-pick">
+        {src && <img src={src} alt="" onLoad={(e) => setSize({ w: e.currentTarget.naturalWidth, h: e.currentTarget.naturalHeight })} />}
+        {src &&
+          size &&
+          targets.map((tg) => {
+            const [l, tp, r, b] = tg.bounds;
+            const cls = ['box', pickedKey(tg.key) && 'on', done.has(tg.key) && 'done', tg.danger && 'danger'].filter(Boolean).join(' ');
+            return (
+              <button
+                key={tg.key}
+                className={cls}
+                title={`${tg.label}${tg.danger ? ' ⚠' : ''}`}
+                style={{ left: `${(l / size.w) * 100}%`, top: `${(tp / size.h) * 100}%`, width: `${((r - l) / size.w) * 100}%`, height: `${((b - tp) / size.h) * 100}%` }}
+                onClick={() => toggleKey(tg.key)}
+              />
+            );
+          })}
+      </div>
       <div style={{ fontWeight: 600, marginTop: 8 }}>{n.label}</div>
-      <div className="kv" style={{ marginTop: 6 }}>
+      <div className="btn-row" style={{ gap: 6, marginTop: 6, flexWrap: 'wrap' }}>
+        <button className="btn sm" disabled={busy} onClick={onNavigate} title={t('지도에 기록된 경로를 따라 기기를 이 화면으로 옮깁니다')}>{t('이 화면으로 이동')}</button>
+        <button className="btn sm" onClick={onPath} title={t('앱 첫 화면에서 이 화면까지 가는 경로만 강조합니다')}>{t('첫 화면에서 경로')}</button>
+      </div>
+
+      <h4 className="faint" style={{ margin: '12px 0 4px', fontSize: 11 }}>{t('동작 지정해서 흐름 그리기')}</h4>
+      {targets.length ? (
+        <div className="faint" style={{ fontSize: 11, marginBottom: 6 }}>{t('스크린샷의 상자나 아래 목록에서 누를 요소를 고르세요. 고른 것만 먼저 실행하고, 열린 화면부터는 최대 깊이만큼 이어서 탐색합니다.')}</div>
+      ) : (
+        <div className="faint" style={{ fontSize: 11, marginBottom: 6 }}>{t('이 화면은 요소 위치가 없는 예전 기록입니다. 한 번 다시 방문하면 스크린샷 위에서 고를 수 있습니다.')}</div>
+      )}
+      <div className="btn-row" style={{ gap: 4, flexWrap: 'wrap', alignItems: 'center' }}>
+        <div className="seg">
+          <button className={press === 'tap' ? 'on' : ''} onClick={() => setPress('tap')}>{t('탭')}</button>
+          <button className={press === 'longpress' ? 'on' : ''} onClick={() => setPress('longpress')}>{t('길게 누르기')}</button>
+        </div>
+        <span className="faint" style={{ fontSize: 11, marginLeft: 4 }}>{t('스와이프')}</span>
+        {SWIPES.map((sw) => (
+          <button key={sw.direction} className={`btn sm ${picked({ kind: 'swipe', direction: sw.direction }) ? 'primary' : ''}`} onClick={() => toggle({ kind: 'swipe', direction: sw.direction })}>
+            {sw.icon}
+          </button>
+        ))}
+      </div>
+      {picks.length > 0 && (
+        <div className="picks">
+          {picks.map((m, i) => (
+            <span key={i} className="pill accent">
+              {m.kind === 'swipe' ? `swipe ${m.direction}` : `${m.kind === 'longpress' ? '⏱ ' : ''}${labelOfKey(m.key)}`}
+              <button onClick={() => toggle(m)} aria-label={t('빼기')}>×</button>
+            </span>
+          ))}
+        </div>
+      )}
+      <div className="btn-row" style={{ gap: 6, marginTop: 6 }}>
+        <button className="btn primary sm" disabled={busy || !picks.length} onClick={() => onExplore(picks, dangerPicked && allowDanger)}>
+          {t('▶ 지정한 {n}개로 탐색 (깊이 {d})', { n: picks.length, d: depth })}
+        </button>
+        {picks.length > 0 && <button className="btn sm" onClick={() => setPicks([])}>{t('선택 해제')}</button>}
+      </div>
+      {dangerPicked && (
+        <label className="chk warn-text" style={{ fontSize: 11, marginTop: 4 }}>
+          <input type="checkbox" checked={allowDanger} onChange={(e) => setAllowDanger(e.target.checked)} />
+          {t('⚠ 결제·삭제·전송 같은 위험 버튼이 포함돼 있습니다. 체크하면 실제로 누르고, 체크하지 않으면 건너뜁니다.')}
+        </label>
+      )}
+
+      <h4 className="faint" style={{ margin: '12px 0 4px', fontSize: 11 }}>
+        {t('누를 수 있는 요소 ({d}/{n} 눌러 봄)', { d: targets.filter((x) => done.has(x.key)).length, n: targets.length || n.actions.length })}
+      </h4>
+      {targets.length ? (
+        <div className="target-list">
+          {targets.map((tg) => {
+            const e = leadsTo(tg.key);
+            return (
+              <label key={tg.key} className="chk">
+                <input type="checkbox" checked={pickedKey(tg.key)} onChange={() => toggleKey(tg.key)} />
+                <span className={done.has(tg.key) ? '' : 'faint'}>{tg.label || '-'}</span>
+                {tg.danger && <span className="warn-text">⚠</span>}
+                {e ? <span className="faint mono" style={{ fontSize: 10 }}>→ {name(e.to)}</span> : done.has(tg.key) ? <span className="faint">✓</span> : null}
+              </label>
+            );
+          })}
+        </div>
+      ) : (
+        <div className="mono" style={{ fontSize: 11, color: 'var(--fg-dim)' }}>{n.actions.join(' · ')}</div>
+      )}
+
+      <div className="kv" style={{ marginTop: 10 }}>
         <span>Activity</span><span>{n.activity}</span>
         <span>{t('시그니처')}</span><span>{n.signature}</span>
         <span>{t('노드/깊이')}</span><span>{n.nodeCount} / {n.maxDepth}</span>
@@ -359,17 +620,15 @@ function ScreenDetail({ g, n, pkg }: { g: GraphData; n: ScreenNode; pkg: string 
       {ins.length > 0 && (
         <>
           <h4 className="faint" style={{ margin: '10px 0 4px', fontSize: 11 }}>{t('들어오는 경로')}</h4>
-          {ins.map((e) => <div key={e.id} className="mono" style={{ fontSize: 11 }}>{name(e.from)} → {e.action.type === 'tap' ? e.action.label : e.action.type}</div>)}
+          {ins.map((e) => <div key={e.id} className="mono" style={{ fontSize: 11 }}>{name(e.from)} → {actionName(e.action)}</div>)}
         </>
       )}
       {outs.length > 0 && (
         <>
           <h4 className="faint" style={{ margin: '10px 0 4px', fontSize: 11 }}>{t('나가는 경로')}</h4>
-          {outs.map((e) => <div key={e.id} className="mono" style={{ fontSize: 11 }}>{e.action.type === 'tap' ? e.action.label : e.action.type} → {name(e.to)}</div>)}
+          {outs.map((e) => <div key={e.id} className="mono" style={{ fontSize: 11 }}>{actionName(e.action)} → {name(e.to)}</div>)}
         </>
       )}
-      <h4 className="faint" style={{ margin: '10px 0 4px', fontSize: 11 }}>{t('탭 가능한 요소 ({n})', { n: n.actions.length })}</h4>
-      <div className="mono" style={{ fontSize: 11, color: 'var(--fg-dim)' }}>{n.actions.join(' · ')}</div>
     </div>
   );
 }
