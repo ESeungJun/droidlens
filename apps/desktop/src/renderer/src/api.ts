@@ -4,8 +4,10 @@ import type {
   CurrentScreen,
   DeviceInfo,
   DeviceSummary,
+  GraphAction,
   GraphData,
   Hierarchy,
+  Interaction,
   LogLine,
   PackageSummary,
   ScenarioData,
@@ -134,12 +136,21 @@ export const api = {
   logcatStop: () => call<void>('logcatStop'),
   graphGet: (pkg: string) => call<GraphData>('graphGet', pkg),
   graphImage: (pkg: string, file: string) => call<string>('graphImage', pkg, file),
-  graphRecordTap: (s: string, pkg: string, x: number, y: number, label?: string) =>
-    call<{ from: string; to: string; isNew: boolean }>('graphRecordTap', s, pkg, x, y, label),
-  graphRecordKey: (s: string, pkg: string, key: string) => call<{ from: string; to: string; isNew: boolean }>('graphRecordKey', s, pkg, key),
+  graphRecord: (s: string, pkg: string, action: GraphAction) =>
+    call<{ recorded: false } | { recorded: true; from: string; to: string; isNew: boolean }>('graphRecord', s, pkg, action),
   graphRecordHere: (s: string, pkg: string) => call<string>('graphRecordHere', s, pkg),
-  explore: (s: string, pkg: string, maxDepth: number, fromCurrent: boolean) =>
-    call<{ steps: number; limited: boolean; skipped: { label: string; reason: string }[]; errors: string[] }>('explore', s, pkg, maxDepth, fromCurrent),
+  explore: (s: string, pkg: string, req: { maxDepth: number; fromCurrent?: boolean; startAt?: string; only?: Interaction[]; allowDanger?: boolean }) =>
+    call<{
+      steps: number;
+      limited: boolean;
+      skipped: { screen: string; label: string; reason: string }[];
+      errors: string[];
+      touched: { nodes: string[]; edges: string[] };
+      startScreen: string;
+    }>('explore', s, pkg, req),
+  graphNavigate: (s: string, pkg: string, target: string) => call<{ moved: boolean; steps: number }>('graphNavigate', s, pkg, target),
+  graphExport: (pkg: string) => call<string | undefined>('graphExport', pkg),
+  graphImport: (pkg: string) => call<{ nodes: number; edges: number; dropped: number } | undefined>('graphImport', pkg),
   exploreStop: () => call<void>('exploreStop'),
   graphReset: (pkg: string) => call<void>('graphReset', pkg),
   reveal: (p: string) => call<void>('reveal', p),
@@ -186,5 +197,5 @@ export const api = {
   onProgress: (fn: (p: Progress) => void) => window.dl.on('progress', (p) => fn(p as Progress)),
 };
 
-export type { ApkAnalysis, AppInfo, CurrentScreen, DeviceInfo, DeviceSummary, GraphData, Hierarchy, LogLine, PackageSummary, ScenarioData };
+export type { ApkAnalysis, AppInfo, CurrentScreen, DeviceInfo, DeviceSummary, GraphAction, GraphData, Hierarchy, Interaction, LogLine, PackageSummary, ScenarioData };
 export type { ViewNode, ScreenNode, NetworkEntry, NetworkDetail, PrefsFile, DbInfo, QueryResult, SdkEvent, SdkInfo } from '@droidlens/core';

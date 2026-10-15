@@ -71,7 +71,7 @@ Then enable **Developer options → USB debugging** on your device and connect i
 | --- | --- |
 | **Screen** | High-frame-rate mirroring (scrcpy stream + WebCodecs, up to 60fps) or snapshot mode; click = tap · drag = swipe · hold = long press; hardware keys, text input, screenshots, recording (up to 180s) |
 | **View hierarchy** | Two-way selection between screenshot and tree, attributes and selectors, node count by depth, Compose detection, **3D exploded view** |
-| **Screen flow** | Screen graph (thumbnails + action labels), **auto-exploration** (never taps payment, delete, logout, or send buttons), entry and exit paths per screen |
+| **Screen flow** | A per-app **screen map** — screens and transitions from auto-exploration, manual use, and scenario runs keep adding up in one map (thumbnails + action labels). **Auto-exploration** (never taps payment, delete, logout, or send buttons), **pick buttons, long presses, or swipes on a screenshot and explore only the flows they open**, tapped-button coverage per screen, path from the first screen, **auto-navigate to a screen** along the recorded path, map export/import (merge) |
 | **Logs** | Live logcat (app PID filter, level, search), recent crashes |
 | **Network** ¹ | OkHttp requests and responses (headers, pretty-printed JSON bodies, image preview, timing), failure filter, copy as cURL |
 | **App data** ¹ | View and edit SharedPreferences, SQLite/Room DB browser with SQL execution, custom events |
@@ -118,7 +118,7 @@ DroidLens.event("purchase_clicked", JSONObject().put("itemId", 42))
 
 Just press two buttons in the app's **Settings & Integrations** tab.
 
-1. **Register MCP** — registers the app's built-in MCP server (43 tools) with `claude mcp add --scope user`. No separate Node install needed.
+1. **Register MCP** — registers the app's built-in MCP server (44 tools) with `claude mcp add --scope user`. No separate Node install needed.
 2. **Install agents** — copies the bundled agents to `~/.claude/agents/`.
 
 | Agent | What it does |
@@ -177,7 +177,7 @@ Everything is saved under `~/.droidlens/` (override with `DROIDLENS_HOME`).
 | Folder | Contents |
 | --- | --- |
 | `screenshots/`, `recordings/` | Screenshot PNGs, recorded mp4s |
-| `graphs/<package>/` | Screen graph `graph.json`, `graph.mmd` (mermaid), per-screen screenshots |
+| `graphs/<package>/` | App screen map `graph.json`, `graph.mmd` (mermaid), per-screen screenshots. 'Export' in the Screen flow tab saves a single `*.droidlens-map.json` with screenshots |
 | `scenarios/<id>/` | Scenario verification `report.html`, `scenario.json`, recorded `script.yaml`, per-step screenshots |
 | `scripts/` | Regression test scripts (YAML) |
 | `apks/<package>/` | APKs pulled for analysis |
