@@ -12,6 +12,8 @@ import { checkForUpdate, cleanupOldUpdates, currentVersion, installUpdate, type 
 let adb = new dl.Adb();
 const run = promisify(execFile);
 let win: BrowserWindow | null = null;
+/** 화면이 뜨기 전 창 배경. styles.css 의 --bg 와 같은 색 */
+const windowBackground = () => (nativeTheme.shouldUseDarkColors ? '#0e0f12' : '#f4f5f7');
 
 function createWindow(): void {
   win = new BrowserWindow({
@@ -20,8 +22,8 @@ function createWindow(): void {
     minWidth: 1100,
     minHeight: 700,
     title: 'DroidLens',
-    // 화면이 뜨기 전 창 배경. styles.css 의 --bg 와 같은 색 (테마를 직접 고른 경우는 첫 화면부터 그 테마로 그린다)
-    backgroundColor: nativeTheme.shouldUseDarkColors ? '#0e0f12' : '#f4f5f7',
+    // 저장된 테마는 창을 만들기 전에 nativeTheme 에 적용해 둔다 (시작할 때 다른 테마가 비치지 않게)
+    backgroundColor: windowBackground(),
     titleBarStyle: 'hiddenInset',
     webPreferences: {
       preload: join(__dirname, '../preload/index.cjs'),
@@ -469,14 +471,27 @@ handle('updateInstall', async (info: UpdateInfo) => {
   await installUpdate(fresh, (p, message) => send('update:progress', { p, message }));
 });
 handle('adbStatus', async () => ({ ...(await adb.version()), candidates: dl.adbCandidates() }));
-handle('setAdbPath', async (p: string) => {
-  const cfgPath = join(dl.droidlensHome(), 'config.json');
-  const cfg = (await dl.readJson<Record<string, unknown>>(cfgPath)) ?? {};
-  cfg.adbPath = p || undefined;
+const configPath = () => join(dl.droidlensHome(), 'config.json');
+const readConfig = async () => (await dl.readJson<Record<string, unknown>>(configPath())) ?? {};
+async function updateConfig(patch: Record<string, unknown>): Promise<void> {
+  const cfg = { ...(await readConfig()), ...patch };
   await dl.ensureDir();
-  await dl.writeJson(cfgPath, cfg);
+  await dl.writeJson(configPath(), cfg);
+}
+handle('setAdbPath', async (p: string) => {
+  await updateConfig({ adbPath: p || undefined });
   adb = new dl.Adb();
   return adb.version();
+});
+
+/** 테마. themeSource 가 렌더러의 prefers-color-scheme 이 되어 화면 색과 OS 화면(파일 대화상자·창 배경)이 함께 바뀐다 */
+const isThemeSource = (v: unknown): v is typeof nativeTheme.themeSource => v === 'system' || v === 'light' || v === 'dark';
+handle('setTheme', async (t: unknown) => {
+  if (!isThemeSource(t)) throw new Error('잘못된 테마');
+  if (nativeTheme.themeSource === t) return;
+  nativeTheme.themeSource = t;
+  win?.setBackgroundColor(windowBackground());
+  await updateConfig({ theme: t });
 });
 handle('integration', async () => {
   const src = agentsSrc();
@@ -533,7 +548,9 @@ handle('agentStop', async (s: string) => {
   return dl.agentStatus(dev(s));
 });
 
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
+  const { theme } = await readConfig().catch(() => ({}) as Record<string, unknown>);
+  if (isThemeSource(theme)) nativeTheme.themeSource = theme;
   installAgentApk().catch(() => undefined);
   cleanupOldUpdates().catch(() => undefined);
   // 개발용 자가 테스트: DROIDLENS_FAKE_VERSION=0.0.1 DROIDLENS_UPDATE_SELFTEST=1 로 실행하면 확인 창 없이 최신 릴리스로 교체

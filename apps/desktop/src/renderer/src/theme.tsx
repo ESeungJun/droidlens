@@ -1,8 +1,11 @@
-import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useState, type ReactNode } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { api } from './api';
 
 /**
- * 화면 테마 (라이트·다크). 색은 styles.css 의 변수로만 정하고, 여기서는 <html data-theme> 만 바꾼다.
- * 'system' 이면 OS 설정을 따라가고 OS 설정이 바뀌면 바로 반영한다.
+ * 화면 테마 (라이트·다크). 고른 값을 main 에 알리면 main 이 nativeTheme.themeSource 를 바꾸고,
+ * 그 값이 렌더러의 prefers-color-scheme 으로 들어와 styles.css 의 색이 바뀐다.
+ * 그래서 파일 대화상자 같은 OS 화면도 같은 테마가 되고, 다음 실행은 JS 가 돌기 전 첫 화면부터 맞는 색으로 뜬다.
+ * 'system' 이면 OS 설정을 따라간다.
  */
 export type Theme = 'light' | 'dark';
 export type ThemeSetting = Theme | 'system';
@@ -21,6 +24,7 @@ function readSetting(): ThemeSetting {
 }
 
 interface ThemeState {
+  /** 지금 화면에 적용된 테마 (CSS 와 같은 값) */
   theme: Theme;
   setting: ThemeSetting;
   setSetting(s: ThemeSetting): void;
@@ -30,14 +34,18 @@ const ThemeCtx = createContext<ThemeState>({ theme: 'dark', setting: 'system', s
 
 export function ThemeProvider({ children }: { children: ReactNode }) {
   const [setting, setSettingState] = useState<ThemeSetting>(readSetting);
-  const [systemDark, setSystemDark] = useState(media.matches);
-  const theme: Theme = setting === 'system' ? (systemDark ? 'dark' : 'light') : setting;
+  const [dark, setDark] = useState(media.matches);
 
   useEffect(() => {
-    const on = (e: MediaQueryListEvent) => setSystemDark(e.matches);
+    const on = (e: MediaQueryListEvent) => setDark(e.matches);
     media.addEventListener('change', on);
     return () => media.removeEventListener('change', on);
   }, []);
+
+  // 시작할 때도 보내서 main 에 저장된 값과 맞춘다 (같으면 main 이 아무것도 하지 않음)
+  useEffect(() => {
+    api.setTheme(setting).catch(() => undefined);
+  }, [setting]);
 
   const setSetting = useCallback((s: ThemeSetting) => {
     setSettingState(s);
@@ -48,11 +56,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
-  // 그리기 전에 바꿔서 시작할 때 다른 테마가 잠깐 보이지 않게
-  useLayoutEffect(() => {
-    document.documentElement.dataset.theme = theme;
-  }, [theme]);
-
+  const theme: Theme = dark ? 'dark' : 'light';
   const value = useMemo(() => ({ theme, setting, setSetting }), [theme, setting, setSetting]);
   return <ThemeCtx.Provider value={value}>{children}</ThemeCtx.Provider>;
 }
