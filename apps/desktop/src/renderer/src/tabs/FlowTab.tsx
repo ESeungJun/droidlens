@@ -19,6 +19,7 @@ import { actionKey, shortestPath, startScreenOf as startOf, triedKeys } from '@d
 import { api, type GraphAction, type GraphData, type Interaction, type ScreenNode } from '../api';
 import { NeedPkg, useApp } from '../App';
 import { useT } from '../i18n';
+import { useTheme } from '../theme';
 
 const imgCache = new Map<string, string>();
 
@@ -152,6 +153,7 @@ function layout(g: GraphData): Map<string, Pos> {
 export function FlowTab() {
   const { serial, pkg, run, toast } = useApp();
   const t = useT();
+  const { theme } = useTheme();
   const [g, setG] = useState<GraphData | null>(null);
   const [sel, setSel] = useState<string | null>(null);
   const [exploring, setExploring] = useState(false);
@@ -269,7 +271,7 @@ export function FlowTab() {
           label: back ? `↩ ${name}` : name,
           markerEnd: { type: MarkerType.ArrowClosed },
           style: {
-            stroke: on ? '#7dd3a8' : back ? '#6b7280' : '#4a505c',
+            stroke: on ? 'var(--accent)' : back ? 'var(--edge-back)' : 'var(--edge)',
             strokeDasharray: back ? '5 4' : undefined,
             opacity: focus && !focused ? 0.15 : 1,
           },
@@ -429,12 +431,12 @@ export function FlowTab() {
             onInit={(i) => (rf.current = i)}
             onPaneClick={() => setSel(null)}
             fitView
-            colorMode="dark"
+            colorMode={theme}
             minZoom={0.1}
           >
-            <Background gap={24} color="#22262d" />
+            <Background gap={24} color="var(--line)" />
             <Controls />
-            <MiniMap pannable zoomable style={{ background: '#15171c' }} />
+            <MiniMap pannable zoomable style={{ background: 'var(--panel)' }} />
           </ReactFlow>
         ) : (
           <div className="empty">

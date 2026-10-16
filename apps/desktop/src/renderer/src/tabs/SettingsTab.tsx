@@ -3,6 +3,7 @@ import { api, type AdbStatus, type Integration } from '../api';
 import { useApp } from '../App';
 import type { useUpdater } from '../Updater';
 import { useI18n, type LangSetting } from '../i18n';
+import { useTheme, type ThemeSetting } from '../theme';
 import { DeviceSetup } from '../DeviceSetup';
 
 const REPO = 'https://github.com/ESeungJun/droidlens';
@@ -13,6 +14,7 @@ const cache: { adb?: AdbStatus; integ?: Integration; version?: string; home?: st
 export function SettingsTab({ onAdbChange, updater }: { onAdbChange?(s: AdbStatus): void; updater: ReturnType<typeof useUpdater> }) {
   const { run, toast } = useApp();
   const { t, setting, setSetting } = useI18n();
+  const theme = useTheme();
   const [adb, setAdb] = useState<AdbStatus | null>(cache.adb ?? null);
   const [adbPath, setAdbPath] = useState('');
   const [integ, setInteg] = useState<Integration | null>(cache.integ ?? null);
@@ -171,6 +173,12 @@ Linux   sudo apt install adb`}
             <option value="system">{t('시스템 기본')}</option>
             <option value="ko">한국어</option>
             <option value="en">English</option>
+          </select>
+          <h5 style={{ marginTop: 14 }}>{t('테마')}</h5>
+          <select className="input" value={theme.setting} onChange={(e) => theme.setSetting(e.target.value as ThemeSetting)}>
+            <option value="system">{t('시스템 기본')}</option>
+            <option value="light">{t('라이트')}</option>
+            <option value="dark">{t('다크')}</option>
           </select>
           <h5 style={{ marginTop: 14 }}>{t('업데이트')}</h5>
           <div style={{ fontSize: 12 }}>
