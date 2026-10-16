@@ -86,7 +86,8 @@ function usePanel(key: string): [boolean, (open: boolean) => void] {
 /** 선택한 뷰이거나 그 조상인지 (id 가 0.2.1 같은 경로라 접두어로 판단) */
 const onPath = (n: ViewNode, sel: ViewNode | null) => !!sel && (sel.id === n.id || sel.id.startsWith(n.id + '.'));
 /** 깊이별 색: 3D 층 테두리와 트리의 색 점이 같은 색을 써서 조각과 목록을 맞춰 볼 수 있다 */
-const depthColor = (d: number, a = 1) => `hsla(${150 + d * 18}, 60%, 65%, ${a})`;
+/** 깊이별 색. 글자·테두리는 테마에 맞는 밝기, 깊이 배지 바탕은 글자가 어두워 늘 밝은 색 */
+const depthColor = (d: number, a = 1, l = 'var(--depth-l)') => `hsla(${150 + d * 18}, 60%, ${l}, ${a})`;
 const label = (n: ViewNode) => `${short(n.className) || 'root'}${n.resourceId ? ' #' + rid(n.resourceId) : ''}`;
 
 export function InspectorTab() {
@@ -299,7 +300,7 @@ function TreeRow(p: {
         >
           {n.children.length ? (open ? '▾' : '▸') : ''}
         </span>
-        {p.depthDots && <span className="ddot" style={{ background: depthColor(n.depth) }} title={`depth ${n.depth}`}>{n.depth}</span>}
+        {p.depthDots && <span className="ddot" style={{ background: depthColor(n.depth, 1, '65%') }} title={`depth ${n.depth}`}>{n.depth}</span>}
         <span className="cls">{short(n.className) || 'root'}</span>
         {n.resourceId && <span className="rid">#{rid(n.resourceId)}</span>}
         {(n.text || n.contentDesc) && <span className="txt">"{n.text || n.contentDesc}"</span>}
