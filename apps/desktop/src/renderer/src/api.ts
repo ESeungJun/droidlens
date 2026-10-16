@@ -191,6 +191,7 @@ export const api = {
   appVersion: () => call<string>('appVersion'),
   adbStatus: () => call<AdbStatus>('adbStatus'),
   setAdbPath: (p: string) => call<AdbStatus>('setAdbPath', p),
+  setTheme: (t: 'system' | 'light' | 'dark') => call<void>('setTheme', t),
   integration: () => call<Integration>('integration'),
   registerMcp: () => call<string>('registerMcp'),
   installAgents: () => call<string[]>('installAgents'),

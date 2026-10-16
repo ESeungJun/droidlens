@@ -28,28 +28,31 @@
   color-scheme: dark;
 }
 
-:root[data-theme='light'] {
-  --bg: #f4f5f7;
-  --panel: #ffffff;
-  --panel-2: #eceef2;
-  --line: #e0e3e8;
-  --line-2: #cbd0d8;
-  --fg: #1a1d23;
-  --fg-dim: #474e5a;
-  --fg-faint: #6b7280;
-  --accent: #14895b;
-  --accent-dim: rgba(20, 137, 91, 0.11);
-  --warn: #b0650c;
-  --err: #cf3434;
-  --info: #2c6cc0;
-  --purple: #7b45c4;
-  --on-accent: #ffffff;
-  --stage: #e8ebef;
-  --edge: #b4bac4;
-  --edge-back: #8a919c;
-  --depth-l: 40%;
-  --shadow: rgba(20, 24, 32, 0.18);
-  color-scheme: light;
+/* 라이트 테마. 테마 선택은 main 이 nativeTheme 으로 정하고 그 값이 prefers-color-scheme 으로 들어온다 (JS 가 돌기 전 첫 화면부터 맞는 색) */
+@media (prefers-color-scheme: light) {
+  :root {
+    --bg: #f4f5f7;
+    --panel: #ffffff;
+    --panel-2: #eceef2;
+    --line: #e0e3e8;
+    --line-2: #cbd0d8;
+    --fg: #1a1d23;
+    --fg-dim: #474e5a;
+    --fg-faint: #6b7280;
+    --accent: #14895b;
+    --accent-dim: rgba(20, 137, 91, 0.11);
+    --warn: #b0650c;
+    --err: #cf3434;
+    --info: #2c6cc0;
+    --purple: #7b45c4;
+    --on-accent: #ffffff;
+    --stage: #e8ebef;
+    --edge: #b4bac4;
+    --edge-back: #8a919c;
+    --depth-l: 40%;
+    --shadow: rgba(20, 24, 32, 0.18);
+    color-scheme: light;
+  }
 }
 
 * { box-sizing: border-box; }
@@ -192,6 +195,8 @@ label.chk { display: inline-flex; gap: 6px; align-items: center; color: var(--fg
 
 /* 흐름 그래프 */
 .flow { height: calc(100% - 45px); }
+/* 그래프 바탕을 앱 바탕과 같게 (React Flow 기본 다크 바탕은 #141414) */
+.flow .react-flow { --xy-background-color: var(--bg); }
 .screen-node { background: var(--panel); border: 1px solid var(--line-2); border-radius: 10px; padding: 6px; width: 150px; font-size: 11px; }
 .screen-node.sel { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-dim); }
 .screen-node img { width: 100%; border-radius: 6px; display: block; background: #000; min-height: 60px; }
