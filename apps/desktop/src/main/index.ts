@@ -1,4 +1,4 @@
-import { app, BrowserWindow, clipboard, dialog, ipcMain, shell } from 'electron';
+import { app, BrowserWindow, clipboard, dialog, ipcMain, nativeTheme, shell } from 'electron';
 import { execFile } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { copyFile, mkdir, readdir, readFile, stat, writeFile } from 'node:fs/promises';
@@ -20,7 +20,8 @@ function createWindow(): void {
     minWidth: 1100,
     minHeight: 700,
     title: 'DroidLens',
-    backgroundColor: '#0e0f12',
+    // 화면이 뜨기 전 창 배경. styles.css 의 --bg 와 같은 색 (테마를 직접 고른 경우는 첫 화면부터 그 테마로 그린다)
+    backgroundColor: nativeTheme.shouldUseDarkColors ? '#0e0f12' : '#f4f5f7',
     titleBarStyle: 'hiddenInset',
     webPreferences: {
       preload: join(__dirname, '../preload/index.cjs'),
