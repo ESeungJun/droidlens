@@ -73,6 +73,7 @@ export const core: Record<string, string> = {
 
   // 화면
   '(새 화면)': '(new screen)',
+  '(기록 건너뜀)': '(not recorded)',
   '녹화 저장 중…': 'Saving recording…',
   '저장됨: {path}': 'Saved: {path}',
   '스냅샷 모드로 전환합니다': 'switching to snapshot mode',
