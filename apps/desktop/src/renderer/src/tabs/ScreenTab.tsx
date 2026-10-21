@@ -34,7 +34,6 @@ export function ScreenTab() {
       /* 이번 실행 동안만 적용 */
     }
   };
-  const [busy, setBusy] = useState(false);
   const [text, setText] = useState('');
   const [history, setHistory] = useState<string[]>([]);
   const imgRef = useRef<HTMLImageElement>(null);
@@ -91,7 +90,7 @@ export function ScreenTab() {
     drag.current = { ...toDevice(e.clientX, e.clientY), t: Date.now() };
   };
   const onUp = async (e: React.MouseEvent) => {
-    if (!serial || !drag.current || busy) return;
+    if (!serial || !drag.current) return;
     const start = drag.current;
     drag.current = null;
     const end = toDevice(e.clientX, e.clientY);
@@ -103,12 +102,11 @@ export function ScreenTab() {
         : held > 600
           ? { type: 'longpress', x: start.x, y: start.y }
           : { type: 'tap', x: start.x, y: start.y };
+    // 기록은 조작을 막지 않는다: 응답은 도착 화면이 안정된 뒤 오고, 그 사이에도 다음 조작을 보낼 수 있다
     if (graphMode && pkg) {
-      setBusy(true);
       const r = await run(api.graphRecord(serial, pkg, action));
-      setBusy(false);
       if (r?.recorded) log(`${action.type} → ${r.to}${r.isNew ? ` ${t('(새 화면)')}` : ''}`);
-      else if (r) log(action.type);
+      else if (r) log(r.skipped ? `${action.type} ${t('(기록 건너뜀)')}` : action.type);
     } else if (dist > 30) {
       await run(api.swipe(serial, start.x, start.y, end.x, end.y, Math.min(Math.max(held, 150), 1000)));
       log(`swipe ${Math.round(start.x)},${Math.round(start.y)} → ${Math.round(end.x)},${Math.round(end.y)}`);
@@ -124,10 +122,8 @@ export function ScreenTab() {
   const key = async (k: string) => {
     if (!serial) return;
     if (graphMode && pkg && k === 'back') {
-      setBusy(true);
       const r = await run(api.graphRecord(serial, pkg, { type: 'key', key: 'back' }));
-      setBusy(false);
-      if (r) log(r.recorded ? `back → ${r.to}` : 'key back');
+      if (r) log(r.recorded ? `back → ${r.to}` : r.skipped ? `key back ${t('(기록 건너뜀)')}` : 'key back');
     } else {
       await run(api.key(serial, k));
       log(`key ${k}`);
@@ -181,7 +177,6 @@ export function ScreenTab() {
               onMouseUp={onUp}
               onMouseLeave={() => (drag.current = null)}
               className="mirror-canvas"
-              style={{ opacity: busy ? 0.6 : 1 }}
             />
           </div>
         ) : img ? (
@@ -192,7 +187,6 @@ export function ScreenTab() {
               onMouseDown={onDown}
               onMouseUp={onUp}
               onMouseLeave={() => (drag.current = null)}
-              style={{ opacity: busy ? 0.6 : 1 }}
               alt="device"
             />
           </div>
