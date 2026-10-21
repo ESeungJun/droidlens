@@ -140,7 +140,7 @@ export const api = {
   graphGet: (pkg: string) => call<GraphData>('graphGet', pkg),
   graphImage: (pkg: string, file: string) => call<string>('graphImage', pkg, file),
   graphRecord: (s: string, pkg: string, action: GraphAction) =>
-    call<{ recorded: false } | { recorded: true; from: string; to: string; isNew: boolean }>('graphRecord', s, pkg, action),
+    call<{ recorded: false; skipped?: boolean } | { recorded: true; from: string; to: string; isNew: boolean }>('graphRecord', s, pkg, action),
   graphRecordHere: (s: string, pkg: string) => call<string>('graphRecordHere', s, pkg),
   explore: (s: string, pkg: string, req: { maxDepth: number; fromCurrent?: boolean; startAt?: string; only?: Interaction[]; allowDanger?: boolean }) =>
     call<{
