@@ -104,11 +104,18 @@ handle('snapshot', async (s: string) => {
 handle('currentScreen', (s: string, fragments?: boolean) => dl.currentScreen(dev(s), { fragments }));
 
 // ---------- 입력 ----------
-handle('tap', (s: string, x: number, y: number) => dl.tap(dev(s), x, y));
-handle('longPress', (s: string, x: number, y: number) => dl.longPress(dev(s), x, y));
-handle('swipe', (s: string, x1: number, y1: number, x2: number, y2: number, ms?: number) => dl.swipe(dev(s), x1, y1, x2, y2, ms));
-handle('key', (s: string, key: keyof typeof dl.KEYCODES) => dl.pressKey(dev(s), key));
-handle('typeText', (s: string, t: string) => dl.typeText(dev(s), t));
+// 화면 탭은 응답을 기다리지 않고 조작을 연달아 보내므로, 기기에는 들어온 순서대로 하나씩 보낸다
+let inputChain: Promise<unknown> = Promise.resolve();
+const inOrder = <T>(fn: () => Promise<T>): Promise<T> => {
+  const p = inputChain.then(fn);
+  inputChain = p.catch(() => undefined);
+  return p;
+};
+handle('tap', (s: string, x: number, y: number) => inOrder(() => dl.tap(dev(s), x, y)));
+handle('longPress', (s: string, x: number, y: number) => inOrder(() => dl.longPress(dev(s), x, y)));
+handle('swipe', (s: string, x1: number, y1: number, x2: number, y2: number, ms?: number) => inOrder(() => dl.swipe(dev(s), x1, y1, x2, y2, ms)));
+handle('key', (s: string, key: keyof typeof dl.KEYCODES) => inOrder(() => dl.pressKey(dev(s), key)));
+handle('typeText', (s: string, t: string) => inOrder(() => dl.typeText(dev(s), t)));
 
 // ---------- 고프레임 미러링 (scrcpy) ----------
 let mirror: { serial: string; m: dl.Mirror } | null = null;
@@ -213,19 +220,41 @@ const flowGuard = () => {
 
 /**
  * 화면 탭에서 직접 조작한 행동을 앞뒤 화면과 함께 지도에 기록.
- * 에이전트가 없으면 화면 확인이 1~2초씩 걸려 조작이 굼떠지고, 다른 앱 화면은 이 앱 지도와 상관없으므로 기록 없이 조작만 한다
+ * 에이전트가 없으면 화면 확인이 1~2초씩 걸려 조작이 굼떠지고, 다른 앱 화면은 이 앱 지도와 상관없으므로 기록 없이 조작만 한다.
+ * 조작은 바로 보내고 도착 화면 안정 대기·저장은 그 뒤에 한다. 기다리는 사이 다음 조작이 오면 그 기록은 버리고
+ * (도착 화면이 이 행동의 결과가 아니게 되므로) 새 조작은 기록 없이 보낸다. 연달아 조작하는 동안은 기록을 건너뛰고 멈추면 다시 기록한다.
+ * 기다리는 기록은 기기마다 따로 둔다 (다른 기기 조작이 이 기기의 기록을 버리지 않게)
  */
+const recording = new Map<string, AbortController>();
 handle('graphRecord', async (s: string, pkg: string, action: dl.GraphAction) => {
   if (!['tap', 'longpress', 'swipe', 'key'].includes(action?.type)) throw new Error('기록할 수 없는 행동입니다');
   const d = dev(s);
-  const before = flowJob || !(await dl.ensureAgent(d)) ? undefined : await dl.captureSnapshot(d, { screenshot: false });
-  if (!before || before.screen.packageName !== pkg) {
-    await dl.performAction(d, action, pkg);
-    return { recorded: false as const };
+  const pending = recording.get(s);
+  if (pending) {
+    pending.abort();
+    await inOrder(() => dl.performAction(d, action, pkg));
+    return { recorded: false as const, skipped: true };
   }
-  const g = await dl.ScreenGraph.open(pkg);
-  const r = await dl.recordTransition(d, g, action, before);
-  return { recorded: true as const, from: r.from.id, to: r.to.id, isNew: r.to.visits === 1 };
+  const job = new AbortController();
+  recording.set(s, job);
+  try {
+    const started = await inOrder(async () => {
+      const before = flowJob || !(await dl.ensureAgent(d)) ? undefined : await dl.captureSnapshot(d, { screenshot: false });
+      if (!before || before.screen.packageName !== pkg) {
+        await dl.performAction(d, action, pkg);
+        return undefined;
+      }
+      return dl.startTransition(d, await dl.ScreenGraph.open(pkg), action, before);
+    });
+    if (!started) return { recorded: false as const };
+    const r = await started.finish(job.signal);
+    return { recorded: true as const, from: r.from.id, to: r.to.id, isNew: r.to.visits === 1 };
+  } catch (e) {
+    if (job.signal.aborted) return { recorded: false as const, skipped: true };
+    throw e;
+  } finally {
+    if (recording.get(s) === job) recording.delete(s);
+  }
 });
 handle('graphRecordHere', async (s: string, pkg: string) => {
   const g = await dl.ScreenGraph.open(pkg);
