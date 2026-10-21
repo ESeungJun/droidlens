@@ -49,23 +49,35 @@ export async function captureSnapshot(dev: DeviceAdb, opts: { screenshot?: boole
   return { screen, hierarchy, signature: structureSignature(hierarchy.root), png };
 }
 
+/** 취소되면 p 를 기다리지 않고 바로 던진다 (p 자체는 끝까지 돈다) */
+function orAbort<T>(p: Promise<T>, signal?: AbortSignal): Promise<T> {
+  if (!signal) return p;
+  signal.throwIfAborted();
+  return Promise.race([p, new Promise<never>((_, reject) => signal.addEventListener('abort', () => reject(signal.reason), { once: true }))]);
+}
+
 /**
  * 화면이 안정될 때까지 대기. uiautomator dump(1.5~2.5초)보다 훨씬 빠른 screencap 해시를 연속 비교하고,
  * 안정되면 뷰 계층·Activity를 한 번만 가져온다. 커서 깜빡임 등으로 계속 변하면 timeout에서 멈춘다.
+ * signal 이 취소되면 기다리기를 그만두고 던진다 (더 이상 기기에 덤프·스크린샷을 요청하지 않게).
  */
-export async function waitForSettle(dev: DeviceAdb, opts: { timeoutMs?: number; intervalMs?: number } = {}): Promise<Snapshot> {
+export async function waitForSettle(
+  dev: DeviceAdb,
+  opts: { timeoutMs?: number; intervalMs?: number; signal?: AbortSignal } = {},
+): Promise<Snapshot> {
+  const { signal } = opts;
   // 에이전트가 있으면 접근성 이벤트가 잠잠해질 때까지 기다리는 쪽이 훨씬 빠르고 정확하다
   const agent = await ensureAgent(dev);
   if (agent) {
     const deadline = Date.now() + (opts.timeoutMs ?? 5000);
-    await sleep(150);
-    await agent.waitIdle(300, opts.timeoutMs ?? 4000).catch(() => undefined);
+    await orAbort(sleep(150), signal);
+    await orAbort(agent.waitIdle(300, opts.timeoutMs ?? 4000).catch(() => undefined), signal);
     // 프래그먼트 전환 애니메이션은 접근성 이벤트를 거의 내지 않아 idle이 일찍 끝날 수 있다:
     // 덤프(~50ms)를 반복해 구조 시그니처가 연속 두 번 같을 때까지 확인
     let hierarchy = await dumpHierarchy(dev);
     let sig = structureSignature(hierarchy.root);
     while (Date.now() < deadline) {
-      await sleep(250);
+      await orAbort(sleep(250), signal);
       const next = await dumpHierarchy(dev);
       const nextSig = structureSignature(next.root);
       hierarchy = next;
@@ -76,11 +88,11 @@ export async function waitForSettle(dev: DeviceAdb, opts: { timeoutMs?: number; 
     return fixPackage({ screen, hierarchy, signature: sig, png });
   }
   const deadline = Date.now() + (opts.timeoutMs ?? 5000);
-  await sleep(opts.intervalMs ?? 250);
+  await orAbort(sleep(opts.intervalMs ?? 250), signal);
   let png = await screenshot(dev);
   let hash = createHash('sha1').update(png).digest('hex');
   while (Date.now() < deadline) {
-    await sleep(opts.intervalMs ?? 250);
+    await orAbort(sleep(opts.intervalMs ?? 250), signal);
     const next = await screenshot(dev);
     const h = createHash('sha1').update(next).digest('hex');
     png = next;
@@ -538,22 +550,42 @@ export async function recordTransition(
   action: GraphAction,
   before?: Snapshot,
 ): Promise<{ from: ScreenNode; to: ScreenNode; edge: ScreenEdge; after: Snapshot }> {
+  return (await startTransition(dev, graph, action, before)).finish();
+}
+
+/**
+ * recordTransition 을 두 단계로 나눈 것: 행동 전 화면을 지도에 올리고 행동을 보낸 뒤 돌아온다.
+ * finish 가 도착 화면이 안정되길 기다려 연결을 저장한다. 그 사이 signal 이 취소되면 저장하지 않는다
+ * (기다리는 동안 다른 조작이 들어와 도착 화면이 이 행동의 결과가 아니게 된 경우).
+ */
+export async function startTransition(
+  dev: DeviceAdb,
+  graph: ScreenGraph,
+  action: GraphAction,
+  before?: Snapshot,
+): Promise<{ finish(signal?: AbortSignal): Promise<{ from: ScreenNode; to: ScreenNode; edge: ScreenEdge; after: Snapshot }> }> {
   const b = before ?? (await captureSnapshot(dev, { screenshot: false }));
   const from = await graph.addSnapshot(b, dev);
   let act = action;
+  let target: Candidate | undefined;
   if (action.type === 'tap' || action.type === 'longpress') {
-    const c = targetAt(b, graph.packageName, action.x, action.y);
-    if (c) {
-      act = { ...pressAction(action.type, c), x: action.x, y: action.y };
-      graph.markTried(from.id, c.key);
-    }
+    target = targetAt(b, graph.packageName, action.x, action.y);
+    if (target) act = { ...pressAction(action.type, target), x: action.x, y: action.y };
   }
   await performAction(dev, act, graph.packageName);
-  const after = await waitForSettle(dev);
-  const to = await graph.addSnapshot(after, dev);
-  const edge = graph.addEdge(from.id, to.id, act);
-  await graph.save();
-  return { from, to, edge, after };
+  return {
+    async finish(signal) {
+      // 안정된 화면을 받은 뒤에 취소되지 않았다면 그 화면은 다음 조작 전에 찍힌 것이라 이 행동의 결과다
+      const after = await waitForSettle(dev, { signal });
+      signal?.throwIfAborted();
+      // 눌러 봤다는 표시는 연결과 함께 남긴다 (연결 없이 표시만 남으면 탐색이 그 요소를 다시 누르지 않는다)
+      if (target) graph.markTried(from.id, target.key);
+      const to = await graph.addSnapshot(after, dev);
+      const edge = graph.addEdge(from.id, to.id, act);
+      await graph.save();
+      return { from, to, edge, after };
+    },
+  };
 }
 
 /** 경로의 한 단계: 이 행동을 하면 이 화면에 도착해야 한다 */
