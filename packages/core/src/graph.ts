@@ -5,7 +5,7 @@ import { DeviceAdb, sleep } from './adb.js';
 import { ensureAgent } from './agent.js';
 import { assertPackage, currentScreen, launchApp, topFragments, type CurrentScreen } from './app.js';
 import { z } from 'zod';
-import { getDeviceInfo, KEYCODES, longPress, pressKey, screenshot, swipe, swipeVector, tap, type SwipeDirection } from './device.js';
+import { getDeviceInfo, KEYCODES, longPress, PNG_MAGIC, pressKey, screenshot, swipe, swipeVector, tap, type SwipeDirection } from './device.js';
 import {
   actionKey,
   actionLabel,
@@ -437,7 +437,6 @@ export class ScreenGraph {
 }
 
 const MAP_FORMAT = 'droidlens-map';
-const PNG_MAGIC = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
 
 /** 가져온 문자열 정리: 제어문자를 없애고 길이를 자른다 (화면·MCP 출력에 그대로 실리므로) */
 const clean = (s: string, max: number) => s.replace(/[\u0000-\u001f\u007f\u2028\u2029]/g, ' ').slice(0, max);

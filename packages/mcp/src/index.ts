@@ -11,7 +11,7 @@ import * as scenario from './tools/scenario.js';
 import * as screen from './tools/screen.js';
 import * as sdk from './tools/sdk.js';
 
-export const VERSION = '0.8.1';
+export const VERSION = '0.8.2';
 
 export function createServer(): McpServer {
   const server = new McpServer({ name: 'droidlens', version: VERSION });
