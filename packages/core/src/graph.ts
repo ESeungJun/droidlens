@@ -24,6 +24,7 @@ import {
   dumpHierarchy,
   flatten,
   labelOf,
+  pageWebViews,
   screenSignature,
   structureSignature,
   type Hierarchy,
@@ -73,16 +74,20 @@ export async function waitForSettle(
     await orAbort(sleep(150), signal);
     await orAbort(agent.waitIdle(300, opts.timeoutMs ?? 4000).catch(() => undefined), signal);
     // 프래그먼트 전환 애니메이션은 접근성 이벤트를 거의 내지 않아 idle이 일찍 끝날 수 있다:
-    // 덤프(~50ms)를 반복해 구조 시그니처가 연속 두 번 같을 때까지 확인
+    // 덤프(~50ms)를 반복해 구조 시그니처가 연속 두 번 같을 때까지 확인한다.
+    // 단 웹 페이지 화면은 틀이 먼저 그려지고 데이터가 0.5~1초 뒤에 채워져서, 같은 구조가 1초 유지돼야 안정으로 본다
     let hierarchy = await dumpHierarchy(dev);
     let sig = structureSignature(hierarchy.root);
+    let since = Date.now();
     while (Date.now() < deadline) {
       await orAbort(sleep(250), signal);
       const next = await dumpHierarchy(dev);
       const nextSig = structureSignature(next.root);
       hierarchy = next;
-      if (nextSig === sig) break;
-      sig = nextSig;
+      if (nextSig !== sig) {
+        sig = nextSig;
+        since = Date.now();
+      } else if (Date.now() - since >= (pageWebViews(next.root).length ? 1000 : 0)) break;
     }
     const [screen, png] = await Promise.all([currentScreen(dev), screenshot(dev)]);
     return fixPackage({ screen, hierarchy, signature: sig, png });
@@ -905,6 +910,11 @@ export async function explore(dev: DeviceAdb, opts: ExploreOptions): Promise<Exp
         if (dialog) {
           errors.push(`${hereId} ${name}: ${dialog === 'anr' ? 'ANR (응답 없음)' : '크래시'} 대화상자`);
           log(`${name} → ${dialog === 'anr' ? 'ANR' : '크래시'} 감지, 기록 후 계속`);
+          after = await waitForSettle(dev);
+        }
+        // 웹 페이지는 누른 뒤 위치·네트워크 응답을 받고 나서야 넘어가기도 해서, 그대로면 한 번 더 기다려 본다
+        if (screenId(after) === hereId && pageWebViews(after.hierarchy.root).length) {
+          await sleep(1500);
           after = await waitForSettle(dev);
         }
         if (after.screen.packageName && after.screen.packageName !== pkg) {
