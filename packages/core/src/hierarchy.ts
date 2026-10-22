@@ -241,12 +241,38 @@ export function toCompactText(root: ViewNode, opts: { maxDepth?: number; interac
  * (클래스, resource-id) 골격만 depth 6까지 쓰고, 같은 부모 아래 반복 형제는 하나로 접는다.
  */
 export function structureSignature(root: ViewNode, maxDepth = 6): string {
-  const skel = (n: ViewNode): string => {
-    if (n.depth > maxDepth) return '';
-    const kids = [...new Set(n.children.map(skel))].join(',');
+  const skel = (n: ViewNode, base = 0): string => {
+    if (n.depth - base > maxDepth) return '';
+    const kids = [...new Set(n.children.map((c) => skel(c, base)))].join(',');
     return `${n.className.split('.').pop()}#${n.resourceId.split(':id/')[1] ?? ''}(${kids})`;
   };
-  return createHash('sha1').update(skel(root)).digest('hex').slice(0, 12);
+  return createHash('sha1').update(skel(root) + webPages(root, skel)).digest('hex').slice(0, 12);
+}
+
+/**
+ * WebView 안 웹 페이지의 뼈대. 앱 뼈대는 maxDepth 에서 잘리고 WebView 는 스크롤 영역이라 내용이 빠져서,
+ * 웹 페이지끼리 이동해도 시그니처가 그대로다. WebView 마다 그 아래를 WebView 깊이부터 다시 세어 붙인다.
+ * 페이지 WebView 가 없으면 빈 문자열이라 네이티브 화면의 시그니처는 바뀌지 않는다
+ */
+function webPages(root: ViewNode, skel: (n: ViewNode, base: number) => string): string {
+  const pages = pageWebViews(root).map((w) => [...new Set(w.children.map((c) => skel(c, w.depth)))].join(','));
+  return pages.length ? `|web:${pages.join('|')}` : '';
+}
+
+const isWebView = (n: ViewNode) => n.className.endsWith('WebView');
+const area = ({ bounds: [l, t, r, b] }: ViewNode) => Math.max(0, r - l) * Math.max(0, b - t);
+
+/**
+ * 화면 자체가 웹 페이지인 WebView: 화면의 절반 이상을 덮는 것만 (광고 배너·약관 칸 같은 작은 WebView 는 내용이 바뀌어도 다른 화면이 아니다).
+ * WebView 는 두 겹(WebView 아래 WebView)으로 잡히기도 해서 가장 바깥 것만 쓴다
+ */
+export function pageWebViews(root: ViewNode): ViewNode[] {
+  const screen = Math.max(0, ...root.children.map(area));
+  const out: ViewNode[] = [];
+  walk(root, (n, parent) => {
+    if (isWebView(n) && !(parent && isWebView(parent)) && area(n) * 2 >= screen) out.push(n);
+  });
+  return out;
 }
 
 /**
@@ -254,13 +280,16 @@ export function structureSignature(root: ViewNode, maxDepth = 6): string {
  * - 스크롤 영역의 내용은 빼서 피드·목록의 항목 종류가 바뀌어도(배너가 끼거나 로딩 중이거나) 같은 화면으로 보고
  * - 페이저(ViewPager·ViewPager2)의 페이지는 화면 자체가 바뀌는 것이라 스크롤 영역이어도 내용을 남기고
  * - 선택 상태(하단 탭·탭 레이아웃의 고른 항목)를 넣어, 틀이 같은 탭 화면들이 하나로 합쳐지지 않게 한다
+ * - WebView 안 웹 페이지의 뼈대를 붙여, 웹 페이지끼리 이동한 것을 다른 화면으로 본다
  */
 export function screenSignature(root: ViewNode, maxDepth = 6): string {
   const isPager = (n: ViewNode) => /Pager/.test(n.className);
-  const skel = (n: ViewNode, inPager = false): string => {
-    if (n.depth > maxDepth) return '';
-    const collapse = n.scrollable && !isPager(n) && !inPager;
-    const kids = collapse ? '' : [...new Set(n.children.map((c) => skel(c, isPager(n))))].join(',');
+  const pages = new Set(pageWebViews(root));
+  const skel = (n: ViewNode, base = 0, inPager = false): string => {
+    if (n.depth - base > maxDepth) return '';
+    // 페이지 WebView 는 페이지가 길어지면 스크롤 영역이 되는데, 그 내용이 곧 화면이라 접지 않는다
+    const collapse = n.scrollable && !isPager(n) && !inPager && !pages.has(n);
+    const kids = collapse ? '' : [...new Set(n.children.map((c) => skel(c, base, isPager(n))))].join(',');
     return `${n.className.split('.').pop()}#${n.resourceId.split(':id/')[1] ?? ''}${n.selected ? '*' : ''}(${kids})`;
   };
   // 뼈대는 maxDepth 에서 잘리는데, 하단 탭(BottomNavigationView 등)의 선택 상태는 보통 그보다 깊다.
@@ -274,7 +303,7 @@ export function screenSignature(root: ViewNode, maxDepth = 6): string {
   };
   walkSelected(root, false);
   const extra = deepSelected.size ? `|${[...deepSelected].sort().join(',')}` : '';
-  return createHash('sha1').update(skel(root) + extra).digest('hex').slice(0, 12);
+  return createHash('sha1').update(skel(root) + extra + webPages(root, skel)).digest('hex').slice(0, 12);
 }
 
 /** 깊이별 노드 수 등 뷰 계층 통계 (오버드로/과도한 중첩 진단용) */

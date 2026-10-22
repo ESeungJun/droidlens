@@ -76,7 +76,7 @@ export type Interaction =
 
 /** 탐색 중 절대 누르지 않을 위험 라벨 (결제·삭제·로그아웃·전송 등) */
 export const DANGEROUS_LABELS =
-  /(log ?out|sign ?out|delete|remove|uninstall|purchase|buy|pay|checkout|order|send|submit|report|block|unsubscribe|deactivate|reset|로그아웃|삭제|탈퇴|결제|구매|주문|송금|전송|보내기|신고|차단|초기화|해지|구독|등록하기|완료)/i;
+  /(log ?out|sign ?out|delete|remove|uninstall|purchase|buy|pay|checkout|order|send|submit|report|block|unsubscribe|deactivate|reset|로그아웃|삭제|탈퇴|결제|구매|주문|송금|전송|보내기|신고|차단|지우기|초기화|해지|구독|등록하기|완료)/i;
 
 /** 경로를 다시 따라갈 때 눌러도 되는 키. enter 는 입력창에서 전송이 될 수 있고 home·recents·power 는 앱 밖으로 나가므로 뺀다 */
 const REPLAY_KEYS = new Set(['back']);
