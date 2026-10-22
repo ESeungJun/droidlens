@@ -32,12 +32,10 @@ mac:
       arch: [arm64, x64]
     - target: zip
       arch: [arm64, x64]
-  # 유료 인증서 없이 임시(ad-hoc) 서명으로 앱 묶음 전체를 서명한다.
-  # 서명하지 않으면 실행 파일만 링커 서명돼 묶음 서명이 깨지고 macOS 가 '손상됨'으로 막는다.
-  # 임시 서명이면 '확인할 수 없는 개발자'로 바뀌어 시스템 설정 → 개인정보 보호 및 보안 → '그래도 열기'로 실행할 수 있다
-  identity: '-'
-  hardenedRuntime: false
-  gatekeeperAssess: false
+  # 릴리스 빌드는 Developer ID 인증서(CSC_LINK)로 서명하고 Apple 공증을 받는다 (release.yml).
+  # 공증에는 hardened runtime 이 필요하고, 권한은 electron-builder 기본 entitlements 를 쓴다.
+  # 인증서가 없는 로컬 빌드는 electron-builder 가 임시(ad-hoc) 서명으로 대신한다
+  hardenedRuntime: true
 dmg:
   title: ${productName} ${version}
 win:
