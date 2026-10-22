@@ -11,7 +11,7 @@ import { promisify } from 'node:util';
 
 /**
  * GitHub Releases 기반 자체 업데이트.
- * macOS 앱이 Apple 인증서 없이 임시(ad-hoc) 서명만 되어 있어 Squirrel(electron-updater)을 쓸 수 없으므로 플랫폼별로 직접 교체한다.
+ * 처음에 macOS 앱이 임시(ad-hoc) 서명만 되어 있어 Squirrel(electron-updater)을 쓸 수 없었으므로 플랫폼별로 직접 교체한다.
  * 받은 파일은 릴리스의 SHA256SUMS 와 대조해 다르면 설치하지 않는다.
  *  - macOS: zip을 받아 풀고, 앱이 종료되면 번들을 교체한 뒤 다시 연다 (분리된 셸 스크립트)
  *  - Windows: NSIS 설치 파일을 조용히(/S) 실행하고 설치 후 자동 실행(--force-run)

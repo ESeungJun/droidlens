@@ -48,10 +48,7 @@ Or download **just one installer** for your OS from [Releases](https://github.co
 | Windows (ARM) | `DroidLens-x.y.z-win-arm64.exe` |
 | Linux | `DroidLens-x.y.z-linux-x86_64.AppImage` |
 
-**First launch on macOS (downloaded .dmg)**: the app is ad-hoc signed but not notarized by Apple, so macOS says it can't verify the developer. Open **System Settings → Privacy & Security** and click **Open Anyway** next to DroidLens (once). On versions before 0.5.0 the message was "damaged"; run this once instead:
-```bash
-xattr -dr com.apple.quarantine /Applications/DroidLens.app
-```
+**First launch on macOS (downloaded .dmg)**: the app is signed and notarized by Apple, so just move it to Applications and open it. (0.8.3 and older weren't notarized and need **Open Anyway** in **System Settings → Privacy & Security** or `xattr -dr com.apple.quarantine /Applications/DroidLens.app`.)
 **First launch on Windows**: if SmartScreen warns you, click "More info → Run anyway".
 
 **Updates**: when a new version is out, an **⬆ Update** button appears in the top bar. Click it to download, replace, and restart (you can also check from the Settings & Integrations tab; the macOS log is at `~/.droidlens/update.log`).
