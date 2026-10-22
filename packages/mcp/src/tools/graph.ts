@@ -143,7 +143,7 @@ export function register(server: McpServer): void {
         [
           `화면 ${r.graph.nodes.length}개, 전이 ${r.graph.edges.length}개, ${r.steps}스텝`,
           ...log.slice(-40),
-          r.skipped.length ? `\n건너뜀(위험): ${r.skipped.map((s) => s.label).join(', ')}` : '',
+          r.skipped.length ? `\n건너뜀:\n${r.skipped.map((s) => `${s.label} (${s.reason})`).join('\n')}` : '',
           r.errors.length ? `\n오류:\n${r.errors.join('\n')}` : '',
         ].join('\n'),
       );
