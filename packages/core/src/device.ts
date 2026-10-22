@@ -61,9 +61,31 @@ export async function getDeviceInfo(dev: DeviceAdb): Promise<DeviceInfo> {
   };
 }
 
-/** PNG 스크린샷 */
+export const PNG_MAGIC = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+
+/** screencap 이 다중 디스플레이 경고를 낸 기기 serial */
+const multiDisplaySerials = new Set<string>();
+
+/**
+ * 논리 디스플레이 0(탭·입력·뷰 계층이 쓰는 화면)에 지금 연결된 물리 디스플레이를 골라 찍는다.
+ * 폴더블은 접고 펼 때 연결이 바뀌므로 매번 조회하고, 못 찾으면 -d 없이 찍는다
+ */
+const SCREENCAP_ACTIVE_DISPLAY =
+  `id=$(dumpsys display | grep -o "displayId=0, uniqueId='local:[0-9]*" | head -1 | grep -o '[0-9]*$'); ` +
+  'if [ -n "$id" ]; then screencap -p -d "$id"; else screencap -p; fi';
+
+/**
+ * PNG 스크린샷. 디스플레이가 여럿인 기기(갤럭시 Z 플립·폴드의 커버 화면 등)는 screencap 이
+ * "[Warning] Multiple displays were found..." 문구를 PNG 앞에 stdout 으로 내보낸다.
+ * 시그니처 앞을 잘라내고, 그 기기는 다음부터 디스플레이를 지정해 찍는다
+ */
 export async function screenshot(dev: DeviceAdb): Promise<Buffer> {
-  return dev.execOut('screencap -p', { timeoutMs: 30_000 });
+  const command = multiDisplaySerials.has(dev.serial) ? SCREENCAP_ACTIVE_DISPLAY : 'screencap -p';
+  const out = await dev.execOut(command, { timeoutMs: 30_000 });
+  const start = out.indexOf(PNG_MAGIC);
+  if (start <= 0) return out;
+  multiDisplaySerials.add(dev.serial);
+  return out.subarray(start);
 }
 
 // ---------- 입력 ----------
