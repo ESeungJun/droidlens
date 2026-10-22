@@ -31,7 +31,8 @@ jobs:
         with:
           distribution: temurin
           java-version: 17
-      - run: pnpm install --frozen-lockfile
+      # 서명 Secrets 를 쓰는 작업이라 의존성 설치 스크립트는 돌리지 않는다 (Electron 은 electron-builder 가 직접 받는다)
+      - run: pnpm install --frozen-lockfile --ignore-scripts
       - run: pnpm build
       - name: Build on-device agent APK
         working-directory: android
@@ -40,8 +41,49 @@ jobs:
       - name: Fetch scrcpy server (SHA256 검증)
         run: node scripts/fetch-scrcpy.mjs
       - name: Package
+        if: runner.os != 'macOS'
         working-directory: apps/desktop
         run: pnpm exec electron-vite build && pnpm exec electron-builder ${{ matrix.target }} --publish never
+      # 서명 인증서·공증 키는 이 단계에만 넘긴다
+      - name: Package (macOS, 서명 + 공증)
+        if: runner.os == 'macOS'
+        working-directory: apps/desktop
+        env:
+          MAC_CERT_P12: ${{ secrets.MAC_CERT_P12 }}
+          MAC_CERT_PASSWORD: ${{ secrets.MAC_CERT_PASSWORD }}
+          APPLE_API_KEY_P8: ${{ secrets.APPLE_API_KEY_P8 }}
+          APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+        run: |
+          if [ -z "$MAC_CERT_P12" ] || [ -z "$APPLE_API_KEY_P8" ]; then
+            echo "::error::macOS 서명용 Secrets 가 없습니다"; exit 1
+          fi
+          # 인증서는 직접 만든 임시 키체인에 넣는다 (electron-builder 가 CSC_LINK 로 만드는
+          # 키체인은 macOS 26 러너에서 잠금 해제가 안 된다)
+          keychain="$RUNNER_TEMP/signing.keychain-db"
+          kc_pass=$(openssl rand -hex 24)
+          export APPLE_API_KEY="$RUNNER_TEMP/AuthKey.p8" # electron-builder 는 공증 키를 파일 경로로 받는다
+          trap 'security delete-keychain "$keychain" 2>/dev/null; rm -f "$RUNNER_TEMP/cert.p12" "$APPLE_API_KEY"' EXIT
+          printf '%s' "$MAC_CERT_P12" | base64 --decode > "$RUNNER_TEMP/cert.p12"
+          printf '%s\n' "$APPLE_API_KEY_P8" > "$APPLE_API_KEY"
+          security create-keychain -p "$kc_pass" "$keychain"
+          security set-keychain-settings -lut 3600 "$keychain"
+          security unlock-keychain -p "$kc_pass" "$keychain"
+          security import "$RUNNER_TEMP/cert.p12" -k "$keychain" -P "$MAC_CERT_PASSWORD" -f pkcs12 -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple: -s -k "$kc_pass" "$keychain" >/dev/null
+          security list-keychains -d user -s "$keychain" $(security list-keychains -d user | tr -d '"')
+          rm -f "$RUNNER_TEMP/cert.p12"
+          # forceCodeSigning: 서명에 실패하면 임시 서명으로 넘어가지 않고 실패시킨다
+          pnpm exec electron-vite build && pnpm exec electron-builder ${{ matrix.target }} --publish never -c.mac.forceCodeSigning=true
+      - name: 서명·공증 확인 (macOS)
+        if: runner.os == 'macOS'
+        working-directory: apps/desktop
+        run: |
+          for app in release/mac*/*.app; do
+            codesign --verify --deep --strict "$app"
+            xcrun stapler validate "$app"
+            spctl --assess --type execute -vv "$app"
+          done
       # 앱 업데이터(updater.ts)는 GitHub API로 OS·칩별 파일을 직접 받으므로
       # electron-updater용 blockmap·latest*.yml 과 x64+arm64 합본 설치 파일은 올리지 않는다
       - uses: actions/upload-artifact@v4

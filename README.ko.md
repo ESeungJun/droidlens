@@ -48,10 +48,7 @@ curl -fsSL https://raw.githubusercontent.com/ESeungJun/droidlens/master/scripts/
 | Windows (ARM) | `DroidLens-x.y.z-win-arm64.exe` |
 | Linux | `DroidLens-x.y.z-linux-x86_64.AppImage` |
 
-**macOS 첫 실행 (.dmg 로 받은 경우)**: 임시 서명만 되어 있고 Apple 공증은 받지 않아 "개발자를 확인할 수 없습니다"가 뜹니다. **시스템 설정 → 개인정보 보호 및 보안**에서 DroidLens 옆의 **그래도 열기**를 한 번 누르세요. 0.5.0 이전 버전은 "손상되었기 때문에 열 수 없습니다"가 뜨므로 대신 터미널에서 한 번 실행하세요.
-```bash
-xattr -dr com.apple.quarantine /Applications/DroidLens.app
-```
+**macOS 첫 실행 (.dmg 로 받은 경우)**: Apple 서명·공증을 받은 앱이라 응용 프로그램 폴더로 옮긴 뒤 바로 열면 됩니다. (0.8.3 이하는 공증 전 버전이라 **시스템 설정 → 개인정보 보호 및 보안**의 **그래도 열기**나 `xattr -dr com.apple.quarantine /Applications/DroidLens.app` 이 필요합니다.)
 **Windows 첫 실행**: SmartScreen 경고가 뜨면 "추가 정보 → 실행"을 누르세요.
 
 **업데이트**: 새 버전이 나오면 상단 바에 **⬆ 업데이트** 버튼이 뜹니다. 누르면 내려받아 교체하고 다시 시작합니다 (설정·연동 탭에서도 확인 가능, macOS 로그는 `~/.droidlens/update.log`).
