@@ -70,6 +70,7 @@ export const core: Record<string, string> = {
   '로그로': 'Back to logs',
   '최근 크래시가 없습니다.': 'No recent crashes.',
   '실시간 로그를 시작하세요': 'Start live logs',
+  '로그 수집이 끊겼습니다': 'Live logs stopped unexpectedly',
 
   // 화면
   '(새 화면)': '(new screen)',
