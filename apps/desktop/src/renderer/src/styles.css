@@ -230,6 +230,9 @@ label.chk { display: inline-flex; gap: 6px; align-items: center; color: var(--fg
 .logs { height: calc(100% - 45px); overflow: auto; font-family: var(--mono); font-size: 11.5px; padding: 4px 0; }
 .ll { display: grid; grid-template-columns: 120px 18px 180px 1fr; gap: 8px; padding: 0 12px; white-space: pre-wrap; word-break: break-all; }
 .ll:hover { background: var(--panel-2); }
+/* 로그 탭: 보이는 줄만 그리려고 한 줄 높이를 고정한다 (LogTab 의 ROW_H 와 같게). 긴 메시지는 잘라 보여 주고 툴팁으로 전체를 본다 */
+.ll.fixed { height: 18px; line-height: 18px; white-space: nowrap; word-break: normal; }
+.ll.fixed > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .ll .tm { color: var(--fg-faint); }
 .ll .tg { color: var(--info); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .lv-V, .lv-D { color: var(--fg-dim); }
