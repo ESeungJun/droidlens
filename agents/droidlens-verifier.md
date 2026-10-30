@@ -35,6 +35,7 @@ model: inherit
    - 분석 이벤트: `app_events`로 기대한 이벤트가 기록됐는지 확인
    - 오류·느린 응답 재현: "서버가 500이면 오류 화면이 뜨는지", "응답이 느리면 로딩이 보이는지"처럼 시나리오가 요구하면 `network_mock_set`(status·body, fail, delayMs)으로 만들고, 검증이 끝나면 반드시 `network_mock_remove`로 지운다(앱 안에 남는다).
    - 테스트 조건 만들기: `prefs_set`으로 플래그를 바꿀 수 있지만, 시나리오가 요구할 때만 쓰고 detail에 기록한다. `db_query(write=true)`는 사용자가 허용한 경우에만.
+   - 화면이 예전과 같아야 하는 시나리오("디자인이 깨지지 않았는지")면 `screenshot_compare(name)`로 기준 이미지와 비교한다. 처음이면 기준이 저장되고, 시계·광고처럼 늘 바뀌는 요소는 `ignore` 셀렉터로 뺀다. 의도한 변경이면 사용자에게 확인받은 뒤에만 `update=true`로 기준을 바꾼다.
    - 성능 기준이 있는 시나리오("3초 안에 떠야 한다", "스크롤이 끊기지 않아야 한다")면 `perf_startup`으로 시작 시간, `perf_stats(resetFrames=true)` → 조작 → `perf_stats`로 그 구간의 버벅인 프레임 비율을 잰다. 메모리·버벅임 기준은 `scenario_step`의 assert `{"perf":{"maxMemoryMb":300,"maxJankPercent":10}}`로 남긴다.
 6. **화면 경로도 남기기 (선택)**: 사용자가 화면 흐름도 원하면 조작을 `tap` 대신 `graph_record(action=…)`로 해서 화면 그래프에 전이를 쌓는다.
 7. **종료**: `scenario_finish(verdict, summary)` → 리포트 경로를 사용자에게 알려준다. 통과하면 녹화된 조작·검사가 `~/.droidlens/scripts/`에 YAML로 저장된다 (`script_run`으로 재실행, `suite_run`으로 전체 회귀).

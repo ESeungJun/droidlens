@@ -173,6 +173,8 @@ export const api = {
   home: () => call<string>('home'),
   scenarios: () => call<ScenarioData[]>('scenarios'),
   scenarioImage: (dir: string, file: string) => call<string>('scenarioImage', dir, file),
+  /** 스크린샷 비교 단계의 지금 화면(file)을 앱·이름의 기준 이미지로 저장하고 그 경로를 돌려준다 */
+  baselineAccept: (dir: string, file: string, app: string, name: string) => call<string>('baselineAccept', dir, file, app, name),
   scenarioDelete: (ids: string[]) => call<void>('scenarioDelete', ids),
   agentStatus: (s: string) => call<AgentStatus>('agentStatus', s),
   agentStart: (s: string) => call<AgentStatus>('agentStart', s),

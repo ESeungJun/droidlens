@@ -75,7 +75,7 @@ Then enable **Developer options → USB debugging** on your device and connect i
 | **App data** ¹ | View and edit SharedPreferences, SQLite/Room DB browser with SQL execution, custom events |
 | **Libraries** | Detects 100+ libraries and frameworks from the APK's DEX and native libs, estimates obfuscation |
 | **App info** | Version, SDK, permissions, activities; launch / restart / kill; deep links |
-| **Scenarios** | Verification reports (per-step screenshots and verdicts), write and run **YAML scripts**, run the full regression suite |
+| **Scenarios** | Verification reports (per-step screenshots and verdicts), write and run **YAML scripts**, run the full regression suite, accept the current screen as the new baseline when a screenshot comparison fails |
 | **Settings & Integrations** | adb path, one-click Claude Code MCP registration, install bundled agents |
 | **💬 Agent chat** | Chat panel opened from the top bar. Ask the verifier or analyst agent while watching the mirror (uses this computer's Claude Code login — no API key needed) |
 
@@ -118,7 +118,7 @@ DroidLens.event("purchase_clicked", JSONObject().put("itemId", 42))
 
 Just press two buttons in the app's **Settings & Integrations** tab.
 
-1. **Register MCP** — registers the app's built-in MCP server (49 tools) with `claude mcp add --scope user`. No separate Node install needed.
+1. **Register MCP** — registers the app's built-in MCP server (50 tools) with `claude mcp add --scope user`. No separate Node install needed.
 2. **Install agents** — copies the bundled agents to `~/.claude/agents/`.
 
 | Agent | What it does |
@@ -151,6 +151,7 @@ steps:
   - assert: { activity: ProductDetailActivity }
   - assert: { network: { url: /api/products, method: GET, status: 200 } }   # SDK
   - assert: { event: product_viewed }                                        # SDK
+  - matchScreenshot: { name: product-detail, ignore: [ { id: ad_banner } ] }  # compare with a baseline image
   - assert: { perf: { maxMemoryMb: 300, maxJankPercent: 10 } }           # memory / janky-frame limits
   - assert: { noCrash: true }
 ```
@@ -162,6 +163,7 @@ steps:
 | `swipe` | `up/down/left/right`; with `until`, scrolls until the element appears |
 | `wait` | Until an element appears (with `gone: true`, until it disappears) |
 | `startup` | Measures app startup time (`cold`, `runs`); fails if the median exceeds `maxMs` |
+| `matchScreenshot` | Pixel-compares the screen with a baseline image (`name`, `maxDiffPercent` default 0.5, `ignore` selectors). The first run saves the current screen as the baseline; the status bar is never compared. On failure the report shows the differences highlighted and a **Use as baseline** button |
 | `assert` | `visible` · `notVisible` · `text` · `activity` · `package` · `network` · `pref` · `db` · `event` · `perf` · `noCrash` |
 | Other | `key`, `tapAt`, `sleep`, `launch`, `deeplink`, `screenshot` |
 

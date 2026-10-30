@@ -492,6 +492,10 @@ handle('scenarioDelete', async (ids: string[]) => {
     await fs.rm(join(dir, id), { recursive: true, force: true });
   }
 });
+/** 스크린샷 비교에 실패한 단계의 지금 화면을 새 기준 이미지로 받아들인다 */
+handle('baselineAccept', async (dir: string, file: string, app: string, name: string) =>
+  dl.saveBaseline(app, name, await readFile(insideHome(join(dir, basename(file))))),
+);
 handle('scenarioImage', async (dir: string, file: string) =>
   `data:image/png;base64,${(await readFile(insideHome(join(dir, basename(file))))).toString('base64')}`,
 );

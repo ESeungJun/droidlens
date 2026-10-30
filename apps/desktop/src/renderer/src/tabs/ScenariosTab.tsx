@@ -12,6 +12,33 @@ function StepShot({ dir, file }: { dir: string; file: string }) {
   return src ? <img src={src} alt="" /> : null;
 }
 
+/** 스크린샷 비교에 실패한 단계: 화면이 의도대로 바뀐 것이면 지금 화면을 새 기준으로 받아들인다 */
+function AcceptBaseline({ dir, baseline }: { dir: string; baseline: NonNullable<ScenarioData['steps'][number]['baseline']> }) {
+  const { run, toast } = useApp();
+  const t = useT();
+  const [done, setDone] = useState(false);
+  return (
+    <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 8 }}>
+      <span className="faint" style={{ fontSize: 11.5 }}>{t('빨간 곳이 기준 이미지와 달라진 부분입니다')}</span>
+      <div className="spacer" />
+      <button className="btn sm" onClick={() => api.openPath(`${dir}/${baseline.actual}`)}>{t('지금 화면 보기')}</button>
+      <button
+        className="btn sm primary"
+        disabled={done}
+        title={t('화면이 의도대로 바뀐 것이면 다음 실행부터 이 화면과 비교합니다')}
+        onClick={async () => {
+          if ((await run(api.baselineAccept(dir, baseline.actual, baseline.app, baseline.name))) !== undefined) {
+            setDone(true);
+            toast(t('"{name}" 기준 이미지를 바꿨습니다', { name: baseline.name }));
+          }
+        }}
+      >
+        {done ? t('기준으로 저장됨') : t('지금 화면을 기준으로')}
+      </button>
+    </div>
+  );
+}
+
 type GroupBy = 'none' | 'app' | 'date' | 'name';
 const GROUP_KEY = 'droidlens.scenarios.groupBy';
 
@@ -212,6 +239,7 @@ function ReportsView() {
                   <StepShot dir={sel.dir} file={st.screenshot} />
                 </div>
               )}
+              {st.baseline && <AcceptBaseline dir={sel.dir} baseline={st.baseline} />}
             </div>
           ))}
         </div>

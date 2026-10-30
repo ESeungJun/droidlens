@@ -5,7 +5,7 @@ import { contextBridge, ipcRenderer } from 'electron';
  * 메인에 handle 을 추가하고 화면에서 쓰려면 여기에도 넣어야 한다 (빠뜨리면 '허용되지 않은 채널' 에러)
  */
 const INVOKE = new Set([
-  'adbStatus', 'agentStart', 'agentStatus', 'agentStop', 'analyzeLibraries', 'appInfo', 'appVersion', 'avds', 'avdStart', 'avdStop',
+  'adbStatus', 'agentStart', 'agentStatus', 'agentStop', 'analyzeLibraries', 'appInfo', 'appVersion', 'avds', 'avdStart', 'avdStop', 'baselineAccept',
   'bringToFront', 'chatSend', 'chatStatus', 'chatStop', 'copy', 'crashes', 'currentScreen', 'deeplink', 'deviceInfo', 'devices',
   'explore', 'exploreStop', 'graphExport', 'graphGet', 'graphImage', 'graphImport', 'graphNavigate', 'graphRecord', 'graphRecordHere',
   'graphReset', 'home', 'installAgents', 'integration', 'key', 'launch', 'logcatStart', 'logcatStop', 'longPress', 'mirrorStart',

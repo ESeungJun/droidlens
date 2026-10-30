@@ -75,7 +75,7 @@ Linux    sudo apt install adb
 | **앱 데이터** ¹ | SharedPreferences 조회·편집, SQLite/Room DB 브라우저와 SQL 실행, 커스텀 이벤트 |
 | **라이브러리** | APK의 DEX·네이티브 lib로 100여 개 라이브러리·프레임워크 탐지, 난독화 추정 |
 | **앱 정보** | 버전·SDK·권한·Activity, 실행/재시작/종료, 딥링크 |
-| **시나리오** | 검증 리포트(단계별 스크린샷·판정), **YAML 스크립트** 작성·실행·전체 회귀 실행 |
+| **시나리오** | 검증 리포트(단계별 스크린샷·판정), **YAML 스크립트** 작성·실행·전체 회귀 실행, 스크린샷 비교 실패 시 지금 화면을 새 기준으로 받아들이기 |
 | **설정·연동** | adb 경로, Claude Code MCP 원클릭 등록, 전용 에이전트 설치 |
 | **💬 에이전트 대화** | 상단 버튼으로 여는 대화창. 미러링을 보면서 검증·분석 에이전트에게 바로 요청 (이 컴퓨터의 Claude Code 로그인 사용, API 키 불필요) |
 
@@ -118,7 +118,7 @@ DroidLens.event("purchase_clicked", JSONObject().put("itemId", 42))
 
 앱의 **설정·연동** 탭에서 버튼 두 개만 누르면 됩니다.
 
-1. **MCP 자동 등록** — 앱에 내장된 MCP 서버(도구 49개)를 `claude mcp add --scope user`로 등록합니다. Node를 따로 설치할 필요가 없습니다.
+1. **MCP 자동 등록** — 앱에 내장된 MCP 서버(도구 50개)를 `claude mcp add --scope user`로 등록합니다. Node를 따로 설치할 필요가 없습니다.
 2. **에이전트 설치** — 전용 에이전트를 `~/.claude/agents/`에 복사합니다.
 
 | 에이전트 | 하는 일 |
@@ -151,6 +151,7 @@ steps:
   - assert: { activity: ProductDetailActivity }
   - assert: { network: { url: /api/products, method: GET, status: 200 } }   # SDK
   - assert: { event: product_viewed }                                        # SDK
+  - matchScreenshot: { name: 상품 상세, ignore: [ { id: ad_banner } ] }  # 기준 이미지와 비교
   - assert: { perf: { maxMemoryMb: 300, maxJankPercent: 10 } }           # 메모리·버벅인 프레임 상한
   - assert: { noCrash: true }
 ```
@@ -162,6 +163,7 @@ steps:
 | `swipe` | `up/down/left/right`, `until`이면 요소가 보일 때까지 스크롤 |
 | `wait` | 요소가 나타날 때까지 (`gone: true`면 사라질 때까지) |
 | `startup` | 앱 시작 시간 측정 (`cold`, `runs`), 중앙값이 `maxMs`를 넘으면 실패 |
+| `matchScreenshot` | 화면을 기준 이미지와 픽셀 비교 (`name`, `maxDiffPercent` 기본 0.5, `ignore` 셀렉터). 처음 실행하면 지금 화면이 기준이 되고, 상태바는 비교하지 않습니다. 실패하면 리포트에 달라진 곳을 칠한 이미지와 **지금 화면을 기준으로** 버튼이 붙습니다 |
 | `assert` | `visible` · `notVisible` · `text` · `activity` · `package` · `network` · `pref` · `db` · `event` · `perf` · `noCrash` |
 | 기타 | `key`, `tapAt`, `sleep`, `launch`, `deeplink`, `screenshot` |
 
