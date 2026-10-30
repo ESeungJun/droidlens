@@ -1,8 +1,8 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
-import { readFile, realpath, stat, writeFile } from 'node:fs/promises';
+import { lstat, readFile, realpath, stat, writeFile } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { homedir } from 'node:os';
-import { basename, dirname, extname, isAbsolute, join, relative, resolve } from 'node:path';
+import { basename, dirname, extname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { z } from 'zod';
 import * as dl from '@droidlens/core';
 import { device, text, serialArg, acts, readOnly, recorder } from '../common.js';
@@ -15,13 +15,23 @@ const within = (root: string, p: string) => {
   return r === '' || (!r.startsWith('..') && !isAbsolute(r));
 };
 
-/** 허용하는 폴더: scripts 폴더 + 실행이면 MCP 서버를 띄운 프로젝트 폴더(cwd). cwd 가 홈·루트 자체면 사실상 전부라 넣지 않는다 */
+/**
+ * cwd 가 프로젝트 폴더로 보이는지: git 저장소 루트이거나 홈 아래 두 단계 이상(~/Desktop/app).
+ * 홈·루트와 얕은 폴더(~/Desktop, /Users, /tmp)는 다른 파일이 너무 많이 들어 있어 허용 범위로 쓰지 않는다
+ */
+function isProjectDir(cwd: string, home: string): boolean {
+  if (within(cwd, home)) return false; // 홈 자체이거나 홈을 품은 폴더(/Users, /)
+  const underHome = within(home, cwd) ? relative(home, cwd).split(sep).length : 0;
+  return underHome >= 2 || existsSync(join(cwd, '.git'));
+}
+
+/** 허용하는 폴더: scripts 폴더 + 실행이면 MCP 서버를 띄운 프로젝트 폴더(cwd) */
 async function allowedRoots(run: boolean): Promise<string[]> {
   const dir = await realpath(await dl.scriptsDir());
   if (!run) return [dir];
   const cwd = await realpath(process.cwd()).catch(() => undefined);
   const home = await realpath(homedir()).catch(() => homedir());
-  return cwd && cwd !== resolve('/') && cwd !== home ? [dir, cwd] : [dir];
+  return cwd && isProjectDir(cwd, home) ? [dir, cwd] : [dir];
 }
 
 /**
@@ -32,7 +42,11 @@ async function allowedRoots(run: boolean): Promise<string[]> {
 async function guardPath(input: string, run: boolean): Promise<string> {
   const roots = await allowedRoots(run);
   const p = run && existsSync(resolve(input)) ? resolve(input) : resolve(roots[0], input);
-  // 아직 없는 파일(새로 쓰는 스크립트)은 부모 폴더만 따라간다
+  // 아직 없는 파일(새로 쓰는 스크립트)은 부모 폴더만 따라간다. 다만 깨진 심볼릭 링크도 "없는 파일"로 보이는데
+  // 그대로 쓰면 링크가 가리키는 폴더 밖에 쓰게 되므로 거부한다
+  if (!existsSync(p) && (await lstat(p).then((st) => st.isSymbolicLink(), () => false))) {
+    throw new Error(`대상이 없는 심볼릭 링크라 쓸 수 없습니다: ${input}`);
+  }
   const real = existsSync(p) ? await realpath(p) : join(await realpath(dirname(p)).catch(() => dirname(p)), basename(p));
   if (!roots.some((r) => within(r, real))) throw new Error(`스크립트 폴더(${roots.join(', ')}) 밖의 경로는 쓸 수 없습니다: ${input}`);
   return real;
