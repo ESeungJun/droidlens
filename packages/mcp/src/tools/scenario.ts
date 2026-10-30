@@ -94,7 +94,8 @@ export function register(server: McpServer): void {
         packageName,
         device: info ? `${info.manufacturer} ${info.model} (Android ${info.androidVersion})` : dev.serial,
       });
-      since = Date.now() - 2000;
+      // 검사가 비교하는 시각(네트워크·이벤트·크래시)은 기기 시계 기준이다
+      since = (await dl.deviceTime(dev).catch(() => Date.now())) - 2000;
       recorder.active = true;
       recorder.app = packageName;
       recorder.steps = [];

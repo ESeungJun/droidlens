@@ -313,11 +313,30 @@ export function streamLogcat(
   return { proc, stop: () => proc.kill() };
 }
 
-/** 최근 크래시(FATAL EXCEPTION / ANR) 로그 */
-export async function recentCrashes(dev: DeviceAdb, pkg?: string): Promise<string[]> {
-  const out = await dev.text(['logcat', '-d', '-b', 'crash', '-v', 'threadtime'], { timeoutMs: 20_000 });
-  const blocks = out.split(/(?=^.*FATAL EXCEPTION)/m).filter((b) => b.includes('FATAL EXCEPTION'));
+/**
+ * 최근 크래시(FATAL EXCEPTION / ANR) 로그.
+ * opts.since(기기 시계 기준 epoch ms, deviceTime 참고)를 주면 그 뒤의 것만. 이때는 시각을 epoch 로 받아 비교한다
+ * (threadtime 시각은 기기 시간대·연도 없는 값이라 호스트 시계와 비교할 수 없다)
+ */
+export async function recentCrashes(dev: DeviceAdb, pkg?: string, opts: { since?: number } = {}): Promise<string[]> {
+  const format = opts.since === undefined ? 'threadtime' : 'epoch';
+  const out = await dev.text(['logcat', '-d', '-b', 'crash', '-v', format], { timeoutMs: 20_000 });
+  let blocks = out.split(/(?=^.*FATAL EXCEPTION)/m).filter((b) => b.includes('FATAL EXCEPTION'));
+  if (opts.since !== undefined) {
+    const since = opts.since;
+    blocks = blocks.filter((b) => {
+      const m = /^\s*(\d+)\.(\d+)/m.exec(b);
+      return !m || Number(m[1]) * 1000 + Number(m[2].slice(0, 3).padEnd(3, '0')) >= since;
+    });
+  }
   return pkg ? blocks.filter((b) => b.includes(pkg)) : blocks;
+}
+
+/** 기기 시계 (epoch ms). 기기가 남긴 시각(SDK 네트워크·이벤트, logcat)과 비교할 기준은 호스트가 아니라 이 값으로 잡는다 */
+export async function deviceTime(dev: DeviceAdb): Promise<number> {
+  const sec = Number((await dev.shell('date +%s')).trim());
+  if (!Number.isFinite(sec) || sec <= 0) throw new Error('기기 시각을 읽지 못했습니다');
+  return sec * 1000;
 }
 
 export { pidOf };
