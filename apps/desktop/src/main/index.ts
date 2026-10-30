@@ -1,6 +1,6 @@
 import { app, BrowserWindow, clipboard, dialog, ipcMain, nativeTheme, shell } from 'electron';
 import { execFile } from 'node:child_process';
-import { existsSync } from 'node:fs';
+import { existsSync, realpathSync } from 'node:fs';
 import { copyFile, mkdir, readdir, readFile, stat, writeFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { basename, isAbsolute, join, resolve, sep } from 'node:path';
@@ -454,9 +454,18 @@ handle('chatStop', async () => stopChat());
 
 // ---------- 기타 ----------
 /** 렌더러가 넘긴 경로는 DroidLens 데이터 폴더 안쪽만 허용 (openPath는 실행 파일도 열 수 있으므로) */
+/** 심볼릭 링크를 풀어 실제 위치로 비교한다 (데이터 폴더 안의 링크로 밖을 가리키지 못하게). 없는 경로는 그대로 */
+const realPath = (p: string) => {
+  try {
+    return realpathSync(p);
+  } catch {
+    return resolve(p);
+  }
+};
+
 function insideHome(p: string): string {
-  const full = resolve(p);
-  const home = resolve(dl.droidlensHome());
+  const full = realPath(resolve(p));
+  const home = realPath(resolve(dl.droidlensHome()));
   if (full !== home && !full.startsWith(home + sep)) throw new Error('DroidLens 데이터 폴더 밖의 경로는 열 수 없습니다');
   return full;
 }
@@ -500,9 +509,13 @@ handle('baselineAccept', async (dir: string, file: string, app: string, name: st
   if (!png.subarray(0, dl.PNG_MAGIC.length).equals(dl.PNG_MAGIC)) throw new Error('PNG 이미지가 아닙니다');
   return dl.saveBaseline(app, name, png);
 });
-handle('scenarioImage', async (dir: string, file: string) =>
-  `data:image/png;base64,${(await readFile(insideHome(join(dir, basename(file))))).toString('base64')}`,
-);
+handle('scenarioImage', async (dir: string, file: string) => {
+  // 리포트가 남긴 단계 스크린샷만 읽는다
+  if (!/^step-\d+(-actual)?\.png$/.test(basename(file))) throw new Error('리포트 이미지가 아닙니다');
+  const png = await readFile(insideHome(join(dir, basename(file))));
+  if (!png.subarray(0, dl.PNG_MAGIC.length).equals(dl.PNG_MAGIC)) throw new Error('PNG 이미지가 아닙니다');
+  return `data:image/png;base64,${png.toString('base64')}`;
+});
 
 // ---------- 설정 / Claude Code 연동 ----------
 const resourcePath = (...p: string[]) =>

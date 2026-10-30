@@ -21,6 +21,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
@@ -175,10 +176,21 @@ public final class MockStore {
         if (on > 0) Log.w(TAG, "네트워크 목 규칙 " + on + "개가 켜져 있습니다. 일치하는 요청은 실제 서버 대신 목으로 처리됩니다");
     }
 
-    /** 요청에 적용할 규칙. 없으면 null */
-    public Rule match(String method, String url) {
+    private final AtomicBoolean warnedNetworkInterceptor = new AtomicBoolean();
+
+    /**
+     * 요청에 적용할 규칙. 없으면 null.
+     * canRespond 가 false 면(네트워크 인터셉터) 응답을 만드는 규칙은 건너뛴다. 적용 횟수·로그에도 남기지 않는다
+     */
+    public Rule match(String method, String url, boolean canRespond) {
         for (Rule r : rules) {
             if (r.matches(method, url)) {
+                if (!canRespond && r.status != 0) {
+                    if (warnedNetworkInterceptor.compareAndSet(false, true)) {
+                        Log.w(TAG, "DroidLensInterceptor 가 addNetworkInterceptor 로 달려 있어 응답 목(status)을 적용하지 않습니다. addInterceptor 로 다세요");
+                    }
+                    continue;
+                }
                 r.hits.incrementAndGet();
                 // 쿼리의 토큰 같은 값이 logcat 에 남지 않게 가린 URL 로 적는다
                 Log.w(TAG, "네트워크 목 적용: " + method + " " + Redactor.get().url(url) + " → " + describe(r));

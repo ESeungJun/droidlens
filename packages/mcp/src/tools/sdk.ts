@@ -156,7 +156,10 @@ export function register(server: McpServer): void {
         '네트워크 목 규칙 추가·수정. 요청 URL 에 url 이 들어 있고 method 가 맞는 요청을 서버에 보내지 않고 status·body 응답으로 끝내거나(status), ' +
         '연결 실패로 끝내거나(fail), 늦춰 보낸다(delayMs). 오류·빈 목록·느린 응답 화면 재현에 쓴다. ' +
         '규칙은 앱 안에 저장돼 앱을 다시 시작해도 남으므로 검증이 끝나면 network_mock_remove 로 지운다. ' +
-        'id 로 고치면 준 항목만 바뀐다. 시나리오 녹화 중 켠 규칙은 저장하는 스크립트의 setup.mocks 에 들어간다',
+        'id 로 고치면 준 항목만 바뀐다 (method·body·headers 를 없애려면 지우고 새로 추가). ' +
+        '시나리오 녹화 중 켠 규칙은 저장하는 스크립트의 setup.mocks 에 들어가 재실행 때 처음부터 켜진다 ' +
+        '(목을 켜기 전 정상 화면 단계까지 녹화했다면 재실행에서 실패하니, 목이 필요한 구간만 따로 녹화한다). ' +
+        '본문·헤더는 스크립트 파일에 그대로 저장되므로 실제 토큰·쿠키 대신 가짜 값을 쓴다',
       inputSchema: {
         ...serialArg,
         ...pkgArg,

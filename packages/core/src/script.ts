@@ -173,19 +173,24 @@ export const scriptSchema = z
                 url: z.string().min(1),
                 method: z.string().optional(),
                 status: z.number().int().min(200).max(599).optional(),
-                body: z.string().optional(),
-                contentType: z.string().optional(),
-                headers: z.record(z.string()).optional(),
+                // 아래 상한·형식은 SDK(MockStore)와 같다
+                body: z.string().max(256 * 1024, '본문은 262144자까지입니다').optional(),
+                contentType: z
+                  .string()
+                  .regex(/^[\w.+-]+\/[\w.+-]+\s*(;[\t\x20-\x7e]*)?$/, '형식이 아닙니다 (예: application/json; charset=utf-8)')
+                  .optional(),
+                headers: z
+                  .record(z.string().regex(/^[\t\x20-\x7e]*$/, 'ASCII 로만 쓸 수 있습니다 (한글·줄바꿈 불가)'))
+                  .refine((h) => Object.keys(h).length <= 50, '헤더는 50개까지입니다')
+                  .refine((h) => Object.keys(h).every((k) => /^[\x21-\x7e]+$/.test(k)), '헤더 이름은 공백 없는 ASCII 로만 씁니다')
+                  .optional(),
                 delayMs: z.number().int().min(0).max(60_000).optional(),
                 fail: z.boolean().optional(),
               })
               .strict()
               // SDK 가 저장할 때 거절하는 조합을 스크립트를 읽을 때 미리 알린다
               .refine((m) => m.status !== undefined || m.fail || m.delayMs, { message: 'status, fail, delayMs 중 하나는 필요합니다' })
-              .refine((m) => !(m.fail && m.status !== undefined), { message: 'fail 과 status 는 함께 쓸 수 없습니다' })
-              .refine((m) => [m.contentType ?? '', ...Object.entries(m.headers ?? {}).flat()].every((s) => /^[\t\x20-\x7e]*$/.test(s)), {
-                message: 'contentType·headers 는 ASCII 로만 쓸 수 있습니다 (한글·줄바꿈 불가)',
-              }),
+              .refine((m) => !(m.fail && m.status !== undefined), { message: 'fail 과 status 는 함께 쓸 수 없습니다' }),
           )
           .optional(),
       })
