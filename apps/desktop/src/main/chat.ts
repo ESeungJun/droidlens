@@ -78,6 +78,8 @@ export type ChatEvent =
   | { kind: 'stderr'; text: string };
 
 export interface ChatRequest {
+  /** 렌더러가 정한 실행 번호. 이 실행의 모든 이벤트에 실어 보내 이전 실행의 늦은 이벤트와 구분하게 한다 */
+  runId: number;
   message: string;
   agent: string;
   sessionId?: string;
@@ -91,15 +93,28 @@ let generation = 0;
 
 export function stopChat(): void {
   generation++;
-  current?.kill('SIGINT');
+  if (current) killTree(current);
   current = null;
+}
+
+/**
+ * Windows 에서는 claude.cmd 를 셸(cmd.exe)로 띄우므로 kill() 은 cmd.exe 만 죽이고 실제 claude 는 남는다.
+ * 그래서 프로세스 트리째 끝낸다. 그 밖에서는 SIGINT 로 정상 종료를 요청한다
+ */
+function killTree(child: ChildProcess): void {
+  if (process.platform === 'win32' && child.pid) execFile('taskkill', ['/T', '/F', '/PID', String(child.pid)], () => undefined);
+  else child.kill('SIGINT');
 }
 
 export async function sendChat(
   req: ChatRequest,
   ctx: { execPath: string; mcpScript: string; agentsDir: string },
-  emit: (e: ChatEvent) => void,
+  emitRaw: (e: ChatEvent & { run: number }) => void,
 ): Promise<void> {
+  const emit = (e: ChatEvent) => emitRaw({ ...e, run: req.runId });
+  // 세션 id 는 렌더러에서 받아 claude 인자로 넘긴다. Windows 는 셸(cmd.exe)로 실행하므로 UUID 모양만 허용한다
+  if (req.sessionId !== undefined && !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(req.sessionId))
+    throw new Error('잘못된 대화 세션 id 입니다');
   stopChat();
   const mine = ++generation;
   const claude = await resolveClaude();

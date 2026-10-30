@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { api, type SnapshotDTO, type ViewNode } from '../api';
 import { useApp } from '../App';
 import { useT } from '../i18n';
@@ -90,6 +90,28 @@ const onPath = (n: ViewNode, sel: ViewNode | null) => !!sel && (sel.id === n.id 
 const depthColor = (d: number, a = 1, l = 'var(--depth-l)') => `hsla(${150 + d * 18}, 60%, ${l}, ${a})`;
 const label = (n: ViewNode) => `${short(n.className) || 'root'}${n.resourceId ? ' #' + rid(n.resourceId) : ''}`;
 
+/**
+ * 가리킨 뷰 id 를 들고 있는 작은 저장소. 트리 줄은 "내가 가리켜졌는지"만 구독해서,
+ * 마우스가 움직일 때 트리 전체가 아니라 상태가 바뀐 두 줄만 다시 그린다
+ */
+function createHoverStore() {
+  let cur: string | null = null;
+  const subs = new Set<() => void>();
+  return {
+    get: () => cur,
+    set(id: string | null) {
+      if (cur === id) return;
+      cur = id;
+      subs.forEach((f) => f());
+    },
+    subscribe(f: () => void) {
+      subs.add(f);
+      return () => void subs.delete(f);
+    },
+  };
+}
+type HoverStore = ReturnType<typeof createHoverStore>;
+
 export function InspectorTab() {
   const { serial, run } = useApp();
   const t = useT();
@@ -97,6 +119,23 @@ export function InspectorTab() {
   const [loading, setLoading] = useState(false);
   const [sel, setSel] = useState<ViewNode | null>(null);
   const [hover, setHover] = useState<ViewNode | null>(null);
+  const hoverStore = useMemo(createHoverStore, []);
+  const onHover = useCallback(
+    (n: ViewNode | null) => {
+      setHover(n);
+      hoverStore.set(n?.id ?? null);
+    },
+    [hoverStore],
+  );
+  const onToggle = useCallback(
+    (id: string) =>
+      setCollapsed((c) => {
+        const nx = new Set(c);
+        nx.has(id) ? nx.delete(id) : nx.add(id);
+        return nx;
+      }),
+    [],
+  );
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   const [query, setQuery] = useState('');
   const [mode, setMode] = useState<'2d' | '3d'>('2d');
@@ -111,10 +150,15 @@ export function InspectorTab() {
     propsOpen ? `5px ${propsW}px` : '28px',
   ].join(' ');
 
+  // 캡처하는 사이 기기가 바뀌면 이전 기기의 스냅샷이 새 기기 화면을 덮지 않게 지금 기기를 ref 로 들고 있는다
+  const serialRef = useRef(serial);
+  serialRef.current = serial;
   const load = async () => {
     if (!serial) return;
+    const target = serial;
     setLoading(true);
-    const s = await run(api.snapshot(serial));
+    const s = await run(api.snapshot(target));
+    if (serialRef.current !== target) return;
     setLoading(false);
     if (s) {
       setSnap(s);
@@ -124,6 +168,9 @@ export function InspectorTab() {
   };
 
   useEffect(() => {
+    setSnap(null);
+    setSel(null);
+    onHover(null);
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [serial]);
@@ -174,19 +221,13 @@ export function InspectorTab() {
                   <TreeRow
                     n={snap.hierarchy.root}
                     sel={sel}
-                    hover={hover}
+                    hoverStore={hoverStore}
                     depthDots={mode === '3d'}
                     collapsed={collapsed}
                     matchIds={matchIds}
-                    onToggle={(id) =>
-                      setCollapsed((c) => {
-                        const nx = new Set(c);
-                        nx.has(id) ? nx.delete(id) : nx.add(id);
-                        return nx;
-                      })
-                    }
+                    onToggle={onToggle}
                     onSel={setSel}
-                    onHover={setHover}
+                    onHover={onHover}
                   />
                 </div>
               </div>
@@ -194,9 +235,9 @@ export function InspectorTab() {
             </>
           )}
           {mode === '3d' ? (
-            <ThreeD snap={snap} sel={sel} setSel={setSel} hover={hover} onHover={setHover} />
+            <ThreeD snap={snap} sel={sel} setSel={setSel} hover={hover} onHover={onHover} />
           ) : (
-            <ShotPane snap={snap} sel={sel} hover={hover} onPick={setSel} onHover={setHover} />
+            <ShotPane snap={snap} sel={sel} hover={hover} onPick={setSel} onHover={onHover} />
           )}
           {propsOpen ? (
             <>
@@ -262,10 +303,11 @@ function ShotPane(p: {
   );
 }
 
-function TreeRow(p: {
+/** 트리 한 줄. props 가 같으면 다시 그리지 않으므로 넘기는 콜백·집합은 안정된 값이어야 한다 */
+const TreeRow = memo(function TreeRow(p: {
   n: ViewNode;
   sel: ViewNode | null;
-  hover?: ViewNode | null;
+  hoverStore: HoverStore;
   depthDots?: boolean;
   collapsed: Set<string>;
   matchIds: Set<string> | null;
@@ -276,6 +318,7 @@ function TreeRow(p: {
   const { n } = p;
   const open = !p.collapsed.has(n.id);
   const isSel = p.sel?.id === n.id;
+  const hovered = useSyncExternalStore(p.hoverStore.subscribe, () => p.hoverStore.get() === n.id);
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (isSel) ref.current?.scrollIntoView({ block: 'nearest' });
@@ -285,7 +328,7 @@ function TreeRow(p: {
     <>
       <div
         ref={ref}
-        className={`row ${isSel ? 'sel' : ''} ${p.hover?.id === n.id && !isSel ? 'hov' : ''} ${!isSel && onPath(n, p.sel) ? 'path' : ''}`}
+        className={`row ${isSel ? 'sel' : ''} ${hovered && !isSel ? 'hov' : ''} ${!isSel && onPath(n, p.sel) ? 'path' : ''}`}
         style={{ paddingLeft: 8 + n.depth * 14, opacity: dim ? 0.35 : 1 }}
         onClick={() => p.onSel(n)}
         onMouseEnter={() => p.onHover(n)}
@@ -309,7 +352,7 @@ function TreeRow(p: {
       {open && n.children.map((c) => <TreeRow key={c.id} {...p} n={c} />)}
     </>
   );
-}
+});
 
 function Props({ snap, n }: { snap: SnapshotDTO; n: ViewNode | null }) {
   const t = useT();
