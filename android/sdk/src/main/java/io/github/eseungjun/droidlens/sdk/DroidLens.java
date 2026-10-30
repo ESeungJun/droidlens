@@ -74,6 +74,11 @@ public final class DroidLens {
         return "pid " + Process.myPid() + (name != null && !name.isEmpty() ? ", " + name : "");
     }
 
+    /** SDK 버전. release 의 sdk-noop 은 "noop" 을 돌려주므로 BuildConfig 대신 이것을 쓰면 두 빌드 모두 컴파일된다 */
+    public static String version() {
+        return BuildConfig.SDK_VERSION;
+    }
+
     public static boolean isRunning() {
         SdkServer s = server;
         return s != null && s.isRunning();
