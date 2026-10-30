@@ -82,8 +82,8 @@ export class AgentClient {
 const CONNECTION_CODES = new Set(['ECONNREFUSED', 'ECONNRESET', 'EPIPE', 'ECONNABORTED', 'UND_ERR_SOCKET']);
 
 /**
- * 요청이 서버에 닿지 못한 실패 (fetch 가 TypeError 'fetch failed' 로 던진다).
- * 시간 초과(TimeoutError)·HTTP 오류와 달리 기기에서 실행되지 않았으므로 다시 보내도 된다.
+ * 연결이 안 되거나 끊긴 실패 (fetch 가 TypeError 'fetch failed' 로 던진다). 에이전트가 죽었다는 뜻이다.
+ * ECONNRESET 등은 응답을 읽다가도 나므로 기기에서 이미 실행됐을 수 있다 (다시 보내도 되는지는 요청마다 다르다).
  * 응답 처리 코드의 TypeError(버그)까지 연결 실패로 보지 않게 메시지·원인 코드로 가린다
  */
 export function isConnectionError(e: unknown): boolean {
@@ -119,6 +119,12 @@ export function agentFor(serial: string): AgentClient | undefined {
   return clients.get(serial);
 }
 
+/** 캐시된 에이전트를 재확인해 돌려준다 (새로 띄우지 않는다). 없거나 다른 프로세스로 바뀌었으면 undefined */
+export async function checkedAgent(dev: DeviceAdb): Promise<AgentClient | undefined> {
+  const c = clients.get(dev.serial);
+  return c && (await stillAgent(dev, c)) ? c : undefined;
+}
+
 /** 연결된 에이전트를 버린다 (요청 실패 시 다음에 다시 연결) */
 export function dropAgent(serial: string): void {
   clients.delete(serial);
@@ -147,15 +153,26 @@ async function verifyAgent(dev: DeviceAdb, client: AgentClient, pid: number): Pr
 /** 확인한 지 이만큼 지난 캐시는 쓰기 전에 다시 본다 (에이전트가 죽은 자리를 다른 앱이 차지했을 수 있다) */
 const RECHECK_MS = 5000;
 
-/** 캐시된 연결이 아직 확인한 에이전트인지. 요청마다 왕복을 늘리지 않게 RECHECK_MS 마다만 ping 의 pid 를 비교한다 */
-async function stillAgent(c: AgentClient): Promise<boolean> {
+/**
+ * 캐시된 연결이 아직 확인한 에이전트인지. 요청마다 왕복을 늘리지 않게 RECHECK_MS 마다만 ping 의 pid 를 비교한다.
+ * 에이전트는 연결을 순서대로 처리하므로 긴 요청(/idle·/hierarchy) 뒤에 줄 선 ping 은 시간 초과될 수 있다.
+ * 시간 초과는 그것만으로 믿지 않고(소켓을 차지한 다른 앱이 일부러 늦출 수 있다) 확인해 둔 pid 가 아직 에이전트 프로세스인지 본다.
+ * 연결 오류는 req 가 이미 캐시에서 뺐다
+ */
+async function stillAgent(dev: DeviceAdb, c: AgentClient): Promise<boolean> {
   if (Date.now() - c.checkedAt < RECHECK_MS) return true;
-  const r = await c.ping().catch(() => undefined);
-  if (r?.pid === c.pid) {
+  let pid: number;
+  try {
+    pid = (await c.ping()).pid;
+  } catch (e) {
+    // abstract 소켓 이름은 연 프로세스가 살아 있는 동안 다른 앱이 열 수 없으므로, 확인한 에이전트 프로세스가 살아 있으면 소켓도 그대로다
+    pid = isTimeoutError(e) && clients.get(c.serial) === c && (await isPackageProcess(dev, AGENT_PACKAGE, c.pid)) ? c.pid : -1;
+  }
+  if (pid === c.pid) {
     c.checkedAt = Date.now();
     return true;
   }
-  // pid 가 바뀌었으면(다른 DroidLens 프로세스가 다시 띄웠거나 소켓 주인이 바뀜) 처음부터 다시 확인한다
+  // pid 가 바뀌었거나 에이전트 프로세스가 사라졌거나 에이전트답지 않은 응답이면 처음부터 다시 확인한다
   if (clients.get(c.serial) === c) clients.delete(c.serial);
   return false;
 }
@@ -168,7 +185,7 @@ const IMPOSTOR = '에이전트 소켓을 에이전트가 아닌 프로세스가 
 export async function ensureAgent(dev: DeviceAdb, opts: { force?: boolean } = {}): Promise<AgentClient | undefined> {
   if (agentDisabled()) return undefined;
   const cached = clients.get(dev.serial);
-  if (cached && (await stillAgent(cached))) return cached;
+  if (cached && (await stillAgent(dev, cached))) return cached;
   const lastFail = failed.get(dev.serial);
   if (!opts.force && lastFail && Date.now() - lastFail < 60_000) return undefined;
   const inflight = starting.get(dev.serial);
@@ -233,16 +250,21 @@ export async function stopAgent(dev: DeviceAdb, failure?: string): Promise<void>
 
 /**
  * 에이전트로 요청한다. 캐시된 연결이 끊겼으면(에이전트가 죽음) 다시 준비해 한 번만 더 보낸다.
- * 에이전트를 쓸 수 없으면 undefined (호출부가 대체 경로를 쓴다)
+ * 연결이 응답 도중 끊기면 기기에서 이미 실행됐을 수 있으므로, 두 번 실행되면 결과가 달라지는 요청(텍스트 이어 붙이기 등)은
+ * retry=false 로 다시 보내지 않는다. 에이전트를 쓸 수 없으면 undefined (호출부가 대체 경로를 쓴다)
  */
-export async function withAgent<T>(dev: DeviceAdb, fn: (a: AgentClient) => Promise<T>): Promise<{ value: T } | undefined> {
+export async function withAgent<T>(
+  dev: DeviceAdb,
+  fn: (a: AgentClient) => Promise<T>,
+  opts: { retry?: boolean } = {},
+): Promise<{ value: T } | undefined> {
   for (let attempt = 0; ; attempt++) {
     const agent = await ensureAgent(dev);
     if (!agent) return undefined;
     try {
       return { value: await fn(agent) };
     } catch (e) {
-      if (attempt > 0 || !isConnectionError(e)) throw e;
+      if (attempt > 0 || opts.retry === false || !isConnectionError(e)) throw e;
     }
   }
 }
