@@ -49,6 +49,6 @@
 - [x] 에이전트 검증 중 조작·검사 자동 녹화 → 통과 시 스크립트 저장
 - [x] 회귀 실행: 폴더 일괄 실행 (MCP suite_run, 데스크톱, CLI `run` — CI용 종료 코드)
 - [ ] 결과 대시보드 (실행 이력·성공률 추이), 스크립트 매개변수(계정 등) 주입
-- [ ] 스크린샷 비교(시각적 회귀)
+- [x] 스크린샷 비교(시각적 회귀): 스크립트 `matchScreenshot`, MCP `screenshot_compare`, 리포트에서 지금 화면을 기준으로 받아들이기
 - [ ] 버전 간 비교: 라이브러리 diff, 화면 그래프 diff, REA `compare_application_versions` 연동
 - [x] 성능: 앱 시작 시간, 프레임(gfxinfo), 메모리(meminfo), CPU 수집 — 데스크톱 성능 탭, MCP `perf_startup`·`perf_stats`, 스크립트 `startup` 단계·`perf` assert

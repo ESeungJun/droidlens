@@ -105,4 +105,11 @@ export const data: Record<string, string> = {
   '켜기·끄기': 'On/off',
   '{n}회 적용': 'Applied {n}×',
   편집: 'Edit',
+  // 스크린샷 비교
+  '빨간 곳이 기준 이미지와 달라진 부분입니다': 'Red marks where the screen differs from the baseline',
+  '지금 화면 보기': 'View current screen',
+  '화면이 의도대로 바뀐 것이면 다음 실행부터 이 화면과 비교합니다': 'If the change is intended, later runs compare against this screen',
+  '"{name}" 기준 이미지를 바꿨습니다': 'Updated the "{name}" baseline',
+  '기준으로 저장됨': 'Saved as baseline',
+  '지금 화면을 기준으로': 'Use as baseline',
 };

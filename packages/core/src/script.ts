@@ -11,6 +11,7 @@ import { center, dumpHierarchy, findNodes, type Selector, type ViewNode } from '
 import { Scenario, type ScenarioData } from './scenario.js';
 import { sdkFor } from './sdk.js';
 import { kbToMb, measureStartup, MAX_STARTUP_RUNS, perfSample, resetFrameStats } from './perf.js';
+import { DEFAULT_MAX_DIFF_PERCENT, matchScreenshot } from './visual.js';
 import { ensureDir, safeName } from './workspace.js';
 
 /**
@@ -29,6 +30,8 @@ import { ensureDir, safeName } from './workspace.js';
  *   - assert: { perf: { maxMemoryMb: 300, maxJankPercent: 10 } }
  *   - startup: { cold: true, runs: 3, maxMs: 1500 }
  * ```
+ * matchScreenshot 단계는 화면을 기준 이미지와 비교한다 (처음 실행하면 지금 화면이 기준이 된다):
+ *   - matchScreenshot: { name: 상품 상세, maxDiffPercent: 0.5, ignore: [{ id: banner }] }
  * setup.mocks 로 실행하는 동안만 네트워크 목을 켤 수 있다 (예: 주문 API 를 500 으로 만들어 오류 화면 확인)
  */
 
@@ -118,6 +121,22 @@ const stepUnion = z.union([
   z.object({ launch: z.object({ restart: z.boolean().optional() }).strict().optional().nullable() }).strict(),
   z.object({ deeplink: z.string() }).strict(),
   z.object({ screenshot: z.string().optional().nullable() }).strict(),
+  /** 화면을 기준 이미지와 비교. 다른 픽셀 비율이 maxDiffPercent(기본 0.5)를 넘으면 실패 */
+  z
+    .object({
+      matchScreenshot: z.union([
+        z.string().min(1),
+        z
+          .object({
+            name: z.string().min(1),
+            maxDiffPercent: z.number().min(0).max(100).optional(),
+            ignore: z.array(selector).optional(),
+            tolerance: z.number().int().min(0).max(255).optional(),
+          })
+          .strict(),
+      ]),
+    })
+    .strict(),
   /** 앱 시작 시간을 재고 중앙값이 maxMs 를 넘으면 실패. 앱이 다시 시작된다 */
   z
     .object({
@@ -272,6 +291,11 @@ export interface RunResult {
 }
 
 class StepFailure extends Error {}
+
+interface StepOutput {
+  png?: Buffer;
+  baseline?: { app: string; name: string; actualPng: Buffer };
+}
 
 async function findWithin(dev: DeviceAdb, sel: Selector, timeoutMs: number): Promise<ViewNode | undefined> {
   const deadline = Date.now() + timeoutMs;
@@ -440,11 +464,15 @@ export async function runScript(dev: DeviceAdb, script: Script, opts: ScriptRunO
   // (읽지 못하면 호스트 시계). 초 단위라 여유를 둔다
   const ctx = { since: (await deviceTime(dev).catch(() => Date.now())) - 2000 };
 
+  /** 단계가 직접 만든 이미지 (스크린샷 비교의 차이 이미지). 있으면 새로 찍지 않고 이것을 남긴다 */
+  const out: StepOutput = {};
   /** seen: 흐름 수집이 방금 확인한 화면 (있으면 다시 조회하지 않는다) */
   const record = async (title: string, status: 'pass' | 'fail' | 'info' | 'skip', detail?: string, withShot = false, seen?: CurrentScreen) => {
-    const png = withShot ? await screenshot(dev).catch(() => undefined) : undefined;
+    const png = out.png ?? (withShot ? await screenshot(dev).catch(() => undefined) : undefined);
     const scr = seen ?? (await currentScreen(dev).catch(() => undefined));
-    await scenario.step(title, status, { detail, png, screen: scr ? `${scr.packageName} ${scr.activity}` : undefined });
+    await scenario.step(title, status, { detail, png, screen: scr ? `${scr.packageName} ${scr.activity}` : undefined, baseline: out.baseline });
+    out.png = undefined;
+    out.baseline = undefined;
   };
 
   // 이 실행이 켠 목 규칙. 끝나면(실패·중단 포함) 지워 다음 실행이나 수동 사용에 남지 않게 한다
@@ -491,7 +519,7 @@ export async function runScript(dev: DeviceAdb, script: Script, opts: ScriptRunO
     }
     opts.onStep?.({ index: i, total, title, status: 'running' });
     try {
-      const detail = await runStep(dev, app, step, defaultTimeout, ctx, flow, opts.signal);
+      const detail = await runStep(dev, app, step, defaultTimeout, ctx, flow, opts.signal, out);
       const seen = (await flow?.observe())?.screen;
       if (detail === 'skip') {
         skipped++;
@@ -533,6 +561,7 @@ async function runStep(
   ctx: { since: number },
   flow?: FlowCollector,
   signal?: AbortSignal,
+  out: StepOutput = {},
 ): Promise<string> {
   if ('tap' in step || 'longPress' in step) {
     const t = 'tap' in step ? step.tap : step.longPress;
@@ -635,6 +664,24 @@ async function runStep(
     return '';
   }
   if ('screenshot' in step) return step.screenshot ?? '';
+  if ('matchScreenshot' in step) {
+    const o = typeof step.matchScreenshot === 'string' ? { name: step.matchScreenshot } : step.matchScreenshot;
+    const r = await matchScreenshot(dev, app, o.name, { ignore: o.ignore, tolerance: o.tolerance });
+    if (r.saved) {
+      out.png = r.actual;
+      return `기준 이미지가 없어 지금 화면을 기준으로 저장했습니다 (${r.baseline})`;
+    }
+    const d = r.diff!;
+    const max = o.maxDiffPercent ?? DEFAULT_MAX_DIFF_PERCENT;
+    const detail = `다른 픽셀 ${d.diffPercent}% (${d.diffPixels}/${d.comparedPixels}, 허용 ${max}%)${d.diffBounds ? ` · 영역 [${d.diffBounds.join(',')}]` : ''}`;
+    out.png = d.diffPng;
+    if (d.diffPercent > max) {
+      // 바뀐 화면이 맞으면 리포트에서 지금 화면을 새 기준으로 받아들일 수 있게 남긴다
+      out.baseline = { app, name: o.name, actualPng: r.actual };
+      throw new StepFailure(`기준 이미지와 다릅니다: ${detail}`);
+    }
+    return detail;
+  }
   if ('startup' in step) {
     const o = step.startup ?? {};
     // 측정하며 앱을 여러 번 다시 시작하므로 흐름 수집은 다음 관찰부터 새로 잇는다
