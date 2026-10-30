@@ -163,7 +163,7 @@ steps:
 | `swipe` | `up/down/left/right`; with `until`, scrolls until the element appears |
 | `wait` | Until an element appears (with `gone: true`, until it disappears) |
 | `startup` | Measures app startup time (`cold`, `runs`); fails if the median exceeds `maxMs` |
-| `matchScreenshot` | Pixel-compares the screen with a baseline image (`name`, `maxDiffPercent` default 0.5, `ignore` selectors). The first run saves the current screen as the baseline; the status bar is never compared. On failure the report shows the differences highlighted and a **Use as baseline** button |
+| `matchScreenshot` | Pixel-compares the screen with a baseline image (`name`, `maxDiffPercent` default 0.5, `ignore` selectors, `tolerance` per-channel color tolerance, default 16). The first run saves the current screen as the baseline; the status bar is never compared. On failure the report shows the differences highlighted and a **Use as baseline** button |
 | `assert` | `visible` · `notVisible` · `text` · `activity` · `package` · `network` · `pref` · `db` · `event` · `perf` · `noCrash` |
 | Other | `key`, `tapAt`, `sleep`, `launch`, `deeplink`, `screenshot` |
 

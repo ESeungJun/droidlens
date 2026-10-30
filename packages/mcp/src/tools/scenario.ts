@@ -114,6 +114,7 @@ export function register(server: McpServer): void {
       recorder.active = true;
       recorder.app = packageName;
       recorder.steps = [];
+      recorder.mocks = new Map();
       return text(`시나리오 시작: ${scenario.data.id}\n폴더: ${scenario.data.dir}${packageName ? '\n조작 녹화 중' : ''}`);
     },
   );
@@ -192,11 +193,19 @@ export function register(server: McpServer): void {
       const firstAction = recorder.steps.findIndex((st) => !('launch' in st));
       const steps = firstAction < 0 ? [] : recorder.steps.slice(firstAction);
       const app = recorder.app;
+      // 녹화 중 켠 목은 재실행 때도 같은 조건이 되도록 setup 에서 켜고 끝나면 지우게 한다
+      const mocks = [...recorder.mocks.values()].map(({ id: _id, enabled: _enabled, hits: _hits, delayMs, fail, ...m }) => ({
+        ...m,
+        ...(delayMs ? { delayMs } : {}),
+        ...(fail ? { fail } : {}),
+      }));
       recorder.active = false;
       recorder.steps = [];
+      recorder.mocks = new Map();
       if (app && steps.length) {
         // 녹화는 이미 앱이 열린 상태에서 시작되므로, 재실행 시에는 앱을 새로 띄우고 시작한다
-        const script: dl.Script = { name: scriptName ?? d.name, app, setup: { restart: true }, steps: steps as dl.Script['steps'] };
+        const setup: dl.Script['setup'] = { restart: true, ...(mocks.length ? { mocks } : {}) };
+        const script: dl.Script = { name: scriptName ?? d.name, app, setup, steps: steps as dl.Script['steps'] };
         const yaml = dl.toYaml(script);
         await writeFile(join(d.dir, 'script.yaml'), yaml);
         if (verdict === 'pass' && saveScript !== false) {
@@ -247,7 +256,8 @@ export function register(server: McpServer): void {
     'script_write',
     {
       description:
-        '스크립트 YAML 작성·수정 (형식 검증 후 저장). 단계: tap/longPress/tapAt/type/swipe/key/wait/sleep/launch/deeplink/screenshot/assert. ' +
+        '스크립트 YAML 작성·수정 (형식 검증 후 저장). 단계: tap/longPress/tapAt/type/swipe/key/wait/sleep/launch/deeplink/screenshot/assert/startup/matchScreenshot. ' +
+        'setup 에는 restart/clearData/prefs/mocks(실행하는 동안만 켤 네트워크 목). ' +
         '기존 스크립트를 고칠 때는 script_read로 읽고 수정한 전체 YAML을 넘긴다.',
       inputSchema: { yaml: z.string(), name: z.string().optional().describe('파일 이름 (기본: 스크립트 name)') },
       annotations: acts,

@@ -1,7 +1,7 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import * as dl from '@droidlens/core';
-import { device, text, serialArg, readOnly, acts, recordStep } from '../common.js';
+import { device, text, serialArg, acts, recordStep } from '../common.js';
 
 const mb = (kb: number | undefined) => (kb === undefined ? '-' : `${dl.kbToMb(kb)}MB`);
 
@@ -54,7 +54,8 @@ export function register(server: McpServer): void {
       description:
         '실행 중인 앱의 CPU 사용률(1초 간격), 메모리(PSS, 영역별), 프레임 통계(버벅인 프레임 비율, 프레임 시간 백분위). 프레임은 앱 시작 또는 resetFrames 이후 누적. 특정 조작 구간만 보려면 resetFrames=true 로 초기화하고 조작한 뒤 다시 부른다',
       inputSchema: { ...serialArg, packageName: z.string(), resetFrames: z.boolean().optional().describe('읽은 뒤 프레임 통계를 0으로 초기화') },
-      annotations: readOnly,
+      // resetFrames 는 기기 상태(프레임 누적 통계)를 바꾼다
+      annotations: acts,
     },
     async ({ serial, packageName, resetFrames }) => {
       const dev = await device(serial);

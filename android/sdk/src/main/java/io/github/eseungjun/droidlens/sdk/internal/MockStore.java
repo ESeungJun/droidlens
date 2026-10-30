@@ -21,6 +21,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * 네트워크 목 규칙. URL 에 url 문자열이 들어 있고 method 가 맞는(비어 있으면 아무 메서드) 첫 규칙을 적용한다.
@@ -38,6 +39,11 @@ public final class MockStore {
     private static final String FILE = "droidlens_mocks.json";
     public static final int MAX_RULES = 50;
     public static final long MAX_DELAY_MS = 60_000;
+    /** 규칙 하나의 응답 본문 상한 (글자 수). 규칙은 앱이 뜰 때 메인 스레드에서 읽으므로 작게 둔다 */
+    public static final int MAX_BODY_CHARS = 256 * 1024;
+    /** 저장 파일 전체 상한. 넘는 파일은 읽지 않고 지운다 */
+    private static final long MAX_FILE_BYTES = 2L * 1024 * 1024;
+    private static final int MAX_HEADERS = 50;
 
     public static MockStore get() {
         return INSTANCE;
@@ -55,7 +61,7 @@ public final class MockStore {
         public final Map<String, String> headers;
         public final long delayMs;
         public final boolean fail;
-        volatile int hits;
+        final AtomicInteger hits = new AtomicInteger();
 
         Rule(JSONObject o, String id) throws JSONException {
             this.id = id;
@@ -72,16 +78,45 @@ public final class MockStore {
             if (delayMs > MAX_DELAY_MS) throw new IllegalArgumentException("delayMs 는 " + MAX_DELAY_MS + " 까지입니다");
             if (status == 0 && !fail && delayMs == 0) throw new IllegalArgumentException("status, fail, delayMs 중 하나는 필요합니다");
             this.contentType = o.isNull("contentType") ? null : o.optString("contentType", null);
+            // OkHttp 는 헤더에 ASCII 가 아닌 글자·줄바꿈이 있으면 예외를 던져 앱이 죽는다. 저장할 때 미리 거절한다
+            if (contentType != null && !(isHeaderValue(contentType) && contentType.matches("[\\w.+-]+/[\\w.+-]+\\s*(;.*)?"))) {
+                throw new IllegalArgumentException("contentType 형식이 아닙니다 (예: application/json; charset=utf-8)");
+            }
             this.body = o.isNull("body") ? null : o.optString("body", null);
+            if (body != null && body.length() > MAX_BODY_CHARS) throw new IllegalArgumentException("body 는 " + MAX_BODY_CHARS + "자까지입니다");
             Map<String, String> h = new LinkedHashMap<>();
             JSONObject hs = o.optJSONObject("headers");
             if (hs != null) {
+                if (hs.length() > MAX_HEADERS) throw new IllegalArgumentException("headers 는 " + MAX_HEADERS + "개까지입니다");
                 for (Iterator<String> it = hs.keys(); it.hasNext(); ) {
                     String k = it.next();
-                    h.put(k, hs.getString(k));
+                    String v = hs.getString(k);
+                    if (!isHeaderName(k) || !isHeaderValue(v)) {
+                        throw new IllegalArgumentException("헤더 " + k + ": 이름과 값은 ASCII 로만 쓸 수 있습니다 (한글·줄바꿈 불가)");
+                    }
+                    h.put(k, v);
                 }
             }
             this.headers = h;
+        }
+
+        /** OkHttp Headers 의 이름 규칙: 비어 있지 않고 0x21~0x7e 글자만 */
+        private static boolean isHeaderName(String s) {
+            if (s.isEmpty()) return false;
+            for (int i = 0; i < s.length(); i++) {
+                char c = s.charAt(i);
+                if (c <= ' ' || c >= 0x7f) return false;
+            }
+            return true;
+        }
+
+        /** OkHttp Headers 의 값 규칙: 탭과 0x20~0x7e 글자만 */
+        private static boolean isHeaderValue(String s) {
+            for (int i = 0; i < s.length(); i++) {
+                char c = s.charAt(i);
+                if (c != '\t' && (c < ' ' || c >= 0x7f)) return false;
+            }
+            return true;
         }
 
         boolean matches(String m, String u) {
@@ -95,7 +130,7 @@ public final class MockStore {
                     .put("url", url)
                     .put("delayMs", delayMs)
                     .put("fail", fail)
-                    .put("hits", hits);
+                    .put("hits", hits.get());
             if (method != null) o.put("method", method);
             if (status != 0) o.put("status", status);
             if (contentType != null) o.put("contentType", contentType);
@@ -113,6 +148,12 @@ public final class MockStore {
         file = new File(context.getNoBackupFilesDir(), FILE);
         rules.clear();
         if (!file.exists()) return;
+        if (file.length() > MAX_FILE_BYTES) {
+            Log.w(TAG, "저장된 네트워크 목 규칙 파일이 너무 커서(" + file.length() + "B) 읽지 않고 지웁니다");
+            //noinspection ResultOfMethodCallIgnored
+            file.delete();
+            return;
+        }
         try (InputStream in = new FileInputStream(file)) {
             ByteArrayOutputStream buf = new ByteArrayOutputStream();
             byte[] chunk = new byte[8192];
@@ -122,7 +163,7 @@ public final class MockStore {
             for (int i = 0; i < arr.length() && i < MAX_RULES; i++) {
                 JSONObject o = arr.getJSONObject(i);
                 Rule r = new Rule(o, o.getString("id"));
-                r.hits = o.optInt("hits", 0);
+                r.hits.set(o.optInt("hits", 0));
                 rules.add(r);
             }
         } catch (Exception e) {
@@ -138,7 +179,7 @@ public final class MockStore {
     public Rule match(String method, String url) {
         for (Rule r : rules) {
             if (r.matches(method, url)) {
-                r.hits++;
+                r.hits.incrementAndGet();
                 // 쿼리의 토큰 같은 값이 logcat 에 남지 않게 가린 URL 로 적는다
                 Log.w(TAG, "네트워크 목 적용: " + method + " " + Redactor.get().url(url) + " → " + describe(r));
                 return r;
@@ -171,14 +212,21 @@ public final class MockStore {
             id = UUID.randomUUID().toString().substring(0, 8);
         }
         Rule r = new Rule(o, id);
+        Rule old = at >= 0 ? rules.get(at) : null;
         if (at >= 0) {
             // 고친 규칙도 적용 횟수는 이어서 센다
-            r.hits = rules.get(at).hits;
+            r.hits.set(rules.get(at).hits.get());
             rules.set(at, r);
         } else {
             rules.add(r);
         }
-        save();
+        try {
+            save();
+        } catch (IOException | RuntimeException e) {
+            // 너무 커서 저장하지 못한 규칙은 메모리에서도 되돌린다
+            if (at >= 0) rules.set(at, old); else rules.remove(r);
+            throw e;
+        }
         return r.toJson();
     }
 
@@ -204,9 +252,11 @@ public final class MockStore {
             return;
         }
         // 쓰다 끊겨도 이전 파일이 남도록 임시 파일에 쓴 뒤 바꾼다
+        byte[] bytes = list().toString().getBytes(StandardCharsets.UTF_8);
+        if (bytes.length > MAX_FILE_BYTES) throw new IllegalArgumentException("목 규칙 전체가 " + MAX_FILE_BYTES / 1024 + "KB 를 넘습니다. 본문이 큰 규칙을 지우세요");
         File tmp = new File(file.getPath() + ".tmp");
         try (FileOutputStream out = new FileOutputStream(tmp)) {
-            out.write(list().toString().getBytes(StandardCharsets.UTF_8));
+            out.write(bytes);
         }
         if (!tmp.renameTo(file)) throw new IOException("목 규칙을 저장하지 못했습니다");
     }

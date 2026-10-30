@@ -50,7 +50,9 @@ export function PerfTab() {
         const at = Date.now();
         const same = s && prev && prev.pid === s.pid;
         const dt = same ? (s.at - prev!.at) / 1000 : 0;
-        const cpu = same && s.cpu && prev!.cpu ? cpuPercent(prev!.cpu, s.cpu) : undefined;
+        // 이전 표본의 덤프(meminfo·gfxinfo)가 깨운 CPU 는 빼고 잰다
+        const from = same ? (prev!.cpuAfter ?? prev!.cpu) : undefined;
+        const cpu = from && s?.cpu ? cpuPercent(from, s.cpu) : undefined;
         const framesNow = s?.frames?.totalFrames;
         const framesPrev = same ? prev!.frames?.totalFrames : undefined;
         // 초기화하면 누적값이 줄어들어 그 구간은 비운다

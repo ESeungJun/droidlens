@@ -493,9 +493,13 @@ handle('scenarioDelete', async (ids: string[]) => {
   }
 });
 /** 스크린샷 비교에 실패한 단계의 지금 화면을 새 기준 이미지로 받아들인다 */
-handle('baselineAccept', async (dir: string, file: string, app: string, name: string) =>
-  dl.saveBaseline(app, name, await readFile(insideHome(join(dir, basename(file))))),
-);
+handle('baselineAccept', async (dir: string, file: string, app: string, name: string) => {
+  // 리포트가 남긴 지금 화면(step-NNN-actual.png)만 기준으로 받는다
+  if (!/^step-\d+-actual\.png$/.test(basename(file))) throw new Error('기준으로 삼을 수 있는 파일이 아닙니다');
+  const png = await readFile(insideHome(join(dir, basename(file))));
+  if (!png.subarray(0, dl.PNG_MAGIC.length).equals(dl.PNG_MAGIC)) throw new Error('PNG 이미지가 아닙니다');
+  return dl.saveBaseline(app, name, png);
+});
 handle('scenarioImage', async (dir: string, file: string) =>
   `data:image/png;base64,${(await readFile(insideHome(join(dir, basename(file))))).toString('base64')}`,
 );

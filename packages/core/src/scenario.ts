@@ -97,7 +97,7 @@ export function renderReport(d: ScenarioData): string {
   ${s.detail ? `<pre>${esc(s.detail)}</pre>` : ''}
   ${s.screen ? `<div class="screen">${esc(s.screen)}</div>` : ''}
   ${s.screenshot ? `<img loading="lazy" src="${s.screenshot}" alt="step ${s.index}">` : ''}
-  ${s.baseline ? `<div class="screen">지금 화면: <a href="${s.baseline.actual}">${s.baseline.actual}</a></div>` : ''}
+  ${s.baseline ? `<div class="screen">지금 화면: <a href="${esc(s.baseline.actual)}">${esc(s.baseline.actual)}</a></div>` : ''}
 </article>`,
     )
     .join('\n');

@@ -17,9 +17,11 @@ export interface Draft {
   body: string;
   headers: string;
   delayMs: string;
+  /** 초안을 만들며 알릴 것 (저장하지 않는다) */
+  note?: string;
 }
 
-const METHODS = ['', 'GET', 'POST', 'PUT', 'PATCH', 'DELETE'];
+const METHODS = ['', 'GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD', 'OPTIONS'];
 
 const toDraft = (r: MockRule): Draft => ({
   id: r.id,
@@ -43,6 +45,8 @@ export function draftFromRequest(d: NetworkDetail): Draft {
   } catch {
     /* URL 로 읽히지 않으면 그대로 */
   }
+  // 잘린 본문·바이너리 본문을 그대로 쓰면 앱이 깨진 응답을 받으므로 비워 두고 알린다
+  const unusable = d.responseTruncated || d.responseBodyBase64 !== undefined;
   return {
     enabled: true,
     url,
@@ -50,9 +54,10 @@ export function draftFromRequest(d: NetworkDetail): Draft {
     action: 'respond',
     status: String(d.status || 200),
     contentType: d.responseContentType ?? '',
-    body: d.responseBody ?? '',
+    body: unusable ? '' : (d.responseBody ?? ''),
     headers: '',
     delayMs: '',
+    note: unusable ? '기록된 응답 본문이 잘렸거나 바이너리라 가져오지 않았습니다. 돌려줄 본문을 직접 적어 주세요.' : undefined,
   };
 }
 
@@ -155,6 +160,7 @@ export function MockPanel({
 
       {d && (
         <form className="card" style={{ display: 'grid', gap: 6, marginBottom: 12 }} onSubmit={(e) => { e.preventDefault(); save(); }}>
+          {d.note && <div style={{ fontSize: 11.5, color: 'var(--warn)' }}>{t(d.note)}</div>}
           <div style={{ display: 'flex', gap: 6 }}>
             <select className="input" value={d.method} onChange={(e) => setDraft({ ...d, method: e.target.value })}>
               {METHODS.map((m) => <option key={m} value={m}>{m || t('모든 메서드')}</option>)}
