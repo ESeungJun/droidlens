@@ -74,6 +74,9 @@ const assertion = z
   })
   .strict();
 
+/** sleep 단계의 상한. 잘못 적은 값(예: 600000)은 스크립트를 저장·검증할 때 바로 오류로 알린다 */
+const MAX_SLEEP_MS = 60_000;
+
 /** 한 단어 축약: - back / - home / - launch / - screenshot */
 const SHORTHAND: Record<string, unknown> = {
   launch: { launch: null },
@@ -101,7 +104,7 @@ const stepUnion = z.union([
     .strict(),
   z.object({ key: z.enum(Object.keys(KEYCODES) as [keyof typeof KEYCODES]) }).strict(),
   z.object({ wait: waitSel }).strict(),
-  z.object({ sleep: z.number().int() }).strict(),
+  z.object({ sleep: z.number().int().min(0).max(MAX_SLEEP_MS, `sleep 은 ${MAX_SLEEP_MS}ms(60초)까지입니다`) }).strict(),
   z.object({ launch: z.object({ restart: z.boolean().optional() }).strict().optional().nullable() }).strict(),
   z.object({ deeplink: z.string() }).strict(),
   z.object({ screenshot: z.string().optional().nullable() }).strict(),
@@ -452,9 +455,6 @@ export async function runScript(dev: DeviceAdb, script: Script, opts: ScriptRunO
   return { verdict, passed, failed, skipped, durationMs: Date.now() - t0, report, scenario: scenario.data };
 }
 
-/** sleep 단계의 상한 */
-const MAX_SLEEP_MS = 60_000;
-
 async function runStep(
   dev: DeviceAdb,
   app: string,
@@ -541,7 +541,7 @@ async function runStep(
     return `발견: ${n.text || n.contentDesc || n.resourceId}`;
   }
   if ('sleep' in step) {
-    // 잘못 적은 값(예: 600000)으로 오래 멈추지 않게 상한을 두고, 중단하면 바로 깬다
+    // 스키마가 상한을 막지만 검증을 거치지 않은 단계로 오래 멈추지 않게 한 번 더 자르고, 중단하면 바로 깬다
     const ms = Math.min(Math.max(step.sleep, 0), MAX_SLEEP_MS);
     await new Promise<void>((resolve) => {
       const done = () => {
