@@ -297,7 +297,8 @@ final class AgentServer {
     private String waitIdle(long quietMs, long timeoutMs) {
         long t0 = System.currentTimeMillis();
         try {
-            ui.waitForIdle(quietMs, timeoutMs);
+            // quietMs 가 timeoutMs 보다 크면 waitForIdle 이 timeoutMs 를 지키지 않고 계속 막혀 다른 요청까지 밀리므로 줄인다
+            ui.waitForIdle(Math.min(quietMs, timeoutMs), timeoutMs);
             return "{\"ok\":true,\"idle\":true,\"ms\":" + (System.currentTimeMillis() - t0) + "}";
         } catch (TimeoutException e) {
             return "{\"ok\":true,\"idle\":false,\"ms\":" + (System.currentTimeMillis() - t0) + "}";
