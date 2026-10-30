@@ -166,6 +166,11 @@ function layout(g: GraphData): Map<string, Pos> {
   return pos;
 }
 
+/** 되돌리기 기록 한 칸: 그때의 카드 위치와 '직접 옮김' 상태 */
+type Layout = { positions: Map<string, { x: number; y: number }>; moved: boolean };
+const HISTORY_MAX = 50;
+const samePos = (a: { x: number; y: number } | undefined, b: { x: number; y: number }) => !!a && a.x === b.x && a.y === b.y;
+
 export function FlowTab() {
   const { serial, pkg, run, toast } = useApp();
   const t = useT();
@@ -186,13 +191,58 @@ export function FlowTab() {
   const moved = useRef(false);
   const rf = useRef<ReactFlowInstance<Node<SNodeData>, Edge> | null>(null);
 
+  // 카드 배치 되돌리기 (Cmd/Ctrl+Z, 다시 실행은 Shift+Cmd/Ctrl+Z · Ctrl+Y). 드래그와 '정리' 직전의 위치를 쌓는다
+  const nodesRef = useRef(rfNodes);
+  nodesRef.current = rfNodes;
+  const history = useRef<{ undo: Layout[]; redo: Layout[] }>({ undo: [], redo: [] });
+  const snapshot = (): Layout => ({ positions: new Map(nodesRef.current.map((n) => [n.id, n.position])), moved: moved.current });
+  const remember = useCallback(() => {
+    const h = history.current;
+    h.undo = [...h.undo, snapshot()].slice(-HISTORY_MAX);
+    h.redo = [];
+  }, []);
+  /** 드래그를 놓았는데 실제로 움직이지 않았으면 방금 쌓은 기록을 버린다 */
+  const forgetIfUnchanged = useCallback(() => {
+    const last = history.current.undo.at(-1);
+    if (last && nodesRef.current.every((n) => samePos(last.positions.get(n.id), n.position))) history.current.undo.pop();
+  }, []);
+  const restore = useCallback((from: 'undo' | 'redo') => {
+    const h = history.current;
+    const target = h[from].at(-1);
+    if (!target) return;
+    h[from] = h[from].slice(0, -1);
+    h[from === 'undo' ? 'redo' : 'undo'].push(snapshot());
+    moved.current = target.moved;
+    setRfNodes((cur) => cur.map((n) => {
+      const p = target.positions.get(n.id);
+      return p && !samePos(p, n.position) ? { ...n, position: p } : n;
+    }));
+  }, []);
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (!(e.metaKey || e.ctrlKey) || e.altKey) return;
+      // 입력란에서는 글자 되돌리기를 그대로 둔다
+      const el = e.target as HTMLElement | null;
+      if (el && (el.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName))) return;
+      const key = e.key.toLowerCase();
+      const redo = (key === 'z' && e.shiftKey) || (key === 'y' && e.ctrlKey && !e.shiftKey);
+      if (key !== 'z' && !redo) return;
+      e.preventDefault();
+      restore(redo ? 'redo' : 'undo');
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [restore]);
+
   const arrange = useCallback(() => {
     if (!g) return;
+    remember();
     moved.current = false;
     const auto = layout(g);
     setRfNodes((cur) => cur.map((n) => ({ ...n, position: auto.get(n.id) ?? n.position })));
     requestAnimationFrame(() => rf.current?.fitView({ padding: 0.15, duration: 300 }));
-  }, [g]);
+  }, [g, remember]);
 
   // 그래프가 바뀌면: 직접 옮긴 적이 없으면 전체 다시 배치, 옮겼으면 새 화면만 자동 위치에 추가
   useEffect(() => {
@@ -251,6 +301,7 @@ export function FlowTab() {
     setSel(null);
     setFocus(null);
     moved.current = false; // 다른 앱으로 바뀌면 직접 옮긴 배치는 의미가 없다
+    history.current = { undo: [], redo: [] };
     reload();
   }, [reload]);
 
@@ -444,6 +495,10 @@ export function FlowTab() {
             nodeTypes={nodeTypes}
             onNodeClick={(_, n) => setSel(n.id)}
             onNodesChange={onNodesChange}
+            onNodeDragStart={remember}
+            onNodeDragStop={forgetIfUnchanged}
+            onSelectionDragStart={remember}
+            onSelectionDragStop={forgetIfUnchanged}
             onInit={(i) => (rf.current = i)}
             onPaneClick={() => setSel(null)}
             fitView
