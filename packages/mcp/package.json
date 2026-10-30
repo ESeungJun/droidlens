@@ -1,6 +1,6 @@
 {
   "name": "@droidlens/mcp",
-  "version": "0.10.1",
+  "version": "0.10.2",
   "type": "module",
   "bin": {
     "droidlens-mcp": "dist/index.js"
