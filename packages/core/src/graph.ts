@@ -1,4 +1,4 @@
-import { createHash, randomUUID } from 'node:crypto';
+import { createHash } from 'node:crypto';
 import { mkdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { basename, join } from 'node:path';
 import { DeviceAdb, sleep } from './adb.js';
@@ -181,13 +181,20 @@ export class ScreenGraph {
   /** 마지막으로 읽거나 쓴 graph.json 의 수정 시각 (다른 프로세스가 고쳤는지 확인). 0 이면 아직 파일과 맞춘 적 없음 */
   private mtime = 0;
   /**
-   * 그래프 세대. 초기화(reset)한 뒤 처음 저장하는 쪽이 새 세대를 쓴다. 디스크 세대가 내 것과 다르면
-   * 그사이 초기화된 것이라 합치지 않고 디스크 내용으로 바꾼다 (옛 내용을 쥔 다른 프로세스가 되살리지 않게)
+   * 초기화 표식. reset 은 폴더를 지운 뒤 빈 graph.json 에 그 시각(resetAt)을 적어 둔다.
+   * - resetAt: 마지막으로 본 디스크의 초기화 시각. 저장할 때 그대로 적는다 (0 = 초기화된 적 없음, 예전 파일 포함)
+   * - since: 메모리 내용이 가장 이르게는 언제부터 모인 것인지. 만들거나 비운 시각이고, 파일을 합치면 그 파일의 resetAt 까지 내려간다
+   * 규칙: 디스크 resetAt 이 since 보다 늦으면 내 메모리에 초기화 전 기록이 섞였을 수 있으므로 버린다.
+   * 그 밖에는(처음 만들기 경합으로 서로 덮어쓴 경우 등) 합집합으로 합친다
    */
-  private generation: string = randomUUID();
+  private resetAt = 0;
+  private since = Date.now();
+  /** 저장·초기화를 한 번에 하나씩 돌리는 체인 */
   private saving: Promise<unknown> = Promise.resolve();
   /** saveSoon 으로 미뤄 둔 저장 */
   private pending?: ReturnType<typeof setTimeout>;
+  /** 미뤄 둔 저장이 있거나 저장 중인 인스턴스. reset 으로 opened 에서 빠진 인스턴스도 flushAll 이 마저 쓰게 한다 */
+  private static unsaved = new Set<ScreenGraph>();
 
   /**
    * 한 프로세스 안에서는 앱마다 그래프 하나를 같이 쓴다. 기능마다 따로 열어 저장하면
@@ -205,17 +212,26 @@ export class ScreenGraph {
   static async reset(packageName: string): Promise<void> {
     assertPackage(packageName);
     const dir = ScreenGraph.dirOf(packageName);
+    const resetAt = Date.now();
     const p = ScreenGraph.opened.get(dir);
     ScreenGraph.opened.delete(dir);
-    // 이미 열린 인스턴스(스크립트 실행 중인 흐름 수집 등)도 비운다. 미뤄 둔 저장은 버리고 진행 중인 저장이 끝난 뒤 지운다
+    // 지운 뒤 빈 graph.json 에 초기화 시각을 남긴다. 옛 내용을 쥔 다른 인스턴스·프로세스는 이 표식을 보고 메모리를 버린다
+    const wipe = async () => {
+      await rm(dir, { recursive: true, force: true });
+      await mkdir(dir, { recursive: true });
+      const empty: GraphData = { packageName, resetAt, createdAt: resetAt, updatedAt: resetAt, nodes: [], edges: [] };
+      await writeJson(join(dir, 'graph.json'), empty);
+    };
+    // 이미 열린 인스턴스(스크립트 실행 중인 흐름 수집 등)는 저장 체인 안에서 비우고 지운다.
+    // 진행 중인 저장이 끝난 뒤에 돌고, 그 뒤에 들어온 저장은 지운 다음에 돈다 (지우는 사이에 옛 내용을 쓰지 않게)
     const g = await p?.catch(() => undefined);
-    if (g) {
-      if (g.pending) clearTimeout(g.pending);
-      g.pending = undefined;
-      await g.saving;
+    if (!g) return wipe();
+    if (g.pending) clearTimeout(g.pending);
+    g.pending = undefined;
+    await g.serial(async () => {
       g.clear();
-    }
-    await rm(dir, { recursive: true, force: true });
+      await wipe();
+    });
   }
 
   /**
@@ -223,7 +239,9 @@ export class ScreenGraph {
    * 프로세스를 끝내기 전에 불러 모아 둔 기록이 사라지지 않게 한다 (실패한 저장은 건너뛴다)
    */
   static async flushAll(): Promise<void> {
-    await Promise.all([...ScreenGraph.opened.values()].map((p) => p.then((g) => g.flush()).catch(() => undefined)));
+    const opened = [...ScreenGraph.opened.values()].map((p) => p.then((g) => g.flush()));
+    const unsaved = [...ScreenGraph.unsaved].map((g) => g.flush());
+    await Promise.all([...opened, ...unsaved].map((p) => p.catch(() => undefined)));
   }
 
   static async open(packageName: string): Promise<ScreenGraph> {
@@ -244,37 +262,39 @@ export class ScreenGraph {
 
   /**
    * 다른 프로세스(MCP 서버·데스크톱 앱)가 graph.json 을 고쳤으면 다시 읽어 지금 것과 합친다.
-   * 화면·연결은 초기화 말고는 지우는 일이 없으므로 같은 세대 안에서는 합집합으로 두면 어느 쪽 기록도 사라지지 않는다.
-   * 초기화됐으면(파일이 없어졌거나 세대가 바뀜) 메모리 내용을 버린다
+   * 화면·연결은 초기화 말고는 지우는 일이 없으므로 합집합으로 두면 어느 쪽 기록도 사라지지 않는다.
+   * 초기화됐으면(파일이 없어졌거나 내 내용보다 늦은 초기화 표식) 메모리 내용을 버린다
    */
   private async refresh(): Promise<void> {
     const file = join(this.dir, 'graph.json');
     const m = await stat(file).then((st) => st.mtimeMs).catch(() => 0);
     if (!m) {
-      // 맞춰 둔 파일이 없어졌으면 다른 프로세스가 초기화한 것이다 (그대로 저장하면 지운 내용이 되살아난다).
-      // 어느 것이 초기화 뒤에 생긴 기록인지 알 수 없어 메모리 내용을 모두 버린다
-      if (this.mtime) this.clear();
+      // 맞춰 둔 파일이 없어졌으면 누가 폴더를 지운 것이다 (예전 버전의 초기화, 또는 초기화가 빈 파일을 쓰기 전).
+      // 어느 것이 초기화 뒤에 생긴 기록인지 알 수 없어 메모리 내용을 모두 버리고, 지금을 초기화 시각으로 적는다
+      if (this.mtime) {
+        this.clear();
+        this.resetAt = this.since;
+      }
       return;
     }
     if (m === this.mtime) return;
     // 예전 버전이 쓰는 도중이라 깨진 파일이면 이번엔 합치지 않는다 (다음 저장 때 다시 본다)
     const data = await readJson<GraphData>(file).catch(() => undefined);
     if (!data) return;
-    // 세대가 없는 예전 파일은 만든 시각을 세대로 쓴다 (어느 프로세스가 읽어도 같은 값)
-    const generation = data.generation ?? String(data.createdAt);
-    if (this.mtime && generation !== this.generation) this.clear();
-    this.generation = generation;
+    const resetAt = data.resetAt ?? 0;
+    if (resetAt > this.since) this.clear();
+    this.resetAt = Math.max(this.resetAt, resetAt);
+    this.since = Math.min(this.since, resetAt);
     this.mtime = m;
     this.merge(data);
   }
 
-  /** 메모리 내용을 버리고 빈 그래프로 돌아간다 (다음에 읽는 파일의 세대를 따른다) */
+  /** 메모리 내용을 버리고 빈 그래프로 돌아간다 */
   private clear(): void {
     this.nodes.clear();
     this.edges.clear();
     this.launchScreen = undefined;
-    this.createdAt = this.updatedAt = Date.now();
-    this.generation = randomUUID();
+    this.createdAt = this.updatedAt = this.since = Date.now();
     this.mtime = 0;
   }
 
@@ -389,7 +409,7 @@ export class ScreenGraph {
   toJSON(): GraphData {
     return {
       packageName: this.packageName,
-      generation: this.generation,
+      resetAt: this.resetAt || undefined,
       createdAt: this.createdAt,
       updatedAt: this.updatedAt,
       launchScreen: this.launchScreen,
@@ -406,16 +426,26 @@ export class ScreenGraph {
     if (this.pending) clearTimeout(this.pending);
     this.pending = undefined;
     const p = join(this.dir, 'graph.json');
-    const write = async () => {
+    return this.serial(async () => {
       await this.refresh();
       await mkdir(this.dir, { recursive: true });
       await writeJson(p, this.toJSON());
       await writeFileAtomic(join(this.dir, 'graph.mmd'), this.toMermaid());
       this.mtime = await stat(p).then((st) => st.mtimeMs).catch(() => this.mtime);
       return p;
-    };
-    const next = this.saving.then(write, write);
-    this.saving = next.catch(() => undefined);
+    });
+  }
+
+  /** 저장·초기화를 앞의 작업이 끝난 뒤에 돌린다 (앞의 작업이 실패해도 돈다) */
+  private serial<T>(task: () => Promise<T>): Promise<T> {
+    ScreenGraph.unsaved.add(this);
+    const next = this.saving.then(task, task);
+    const tail = next.catch(() => undefined);
+    this.saving = tail;
+    // 마지막 작업이 끝났고 새로 미뤄 둔 저장이 없으면 목록에서 뺀다
+    void tail.then(() => {
+      if (this.saving === tail && !this.pending) ScreenGraph.unsaved.delete(this);
+    });
     return next;
   }
 
@@ -425,6 +455,7 @@ export class ScreenGraph {
    */
   saveSoon(delayMs = 1000): void {
     if (this.pending) return;
+    ScreenGraph.unsaved.add(this);
     this.pending = setTimeout(() => {
       this.pending = undefined;
       this.save().catch(() => undefined);
