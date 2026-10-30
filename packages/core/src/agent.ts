@@ -147,15 +147,26 @@ async function verifyAgent(dev: DeviceAdb, client: AgentClient, pid: number): Pr
 /** 확인한 지 이만큼 지난 캐시는 쓰기 전에 다시 본다 (에이전트가 죽은 자리를 다른 앱이 차지했을 수 있다) */
 const RECHECK_MS = 5000;
 
-/** 캐시된 연결이 아직 확인한 에이전트인지. 요청마다 왕복을 늘리지 않게 RECHECK_MS 마다만 ping 의 pid 를 비교한다 */
+/**
+ * 캐시된 연결이 아직 확인한 에이전트인지. 요청마다 왕복을 늘리지 않게 RECHECK_MS 마다만 ping 의 pid 를 비교한다.
+ * 에이전트는 연결을 순서대로 처리하므로 긴 요청(/idle·/hierarchy) 뒤에 줄 선 ping 은 시간 초과될 수 있다.
+ * 시간 초과는 캐시를 그대로 두고 확인 시각만 두어 다음에 다시 본다 (버리면 ensureAgent 가 에이전트를 재시작한다).
+ * 연결 오류는 req 가 이미 캐시에서 뺐다
+ */
 async function stillAgent(c: AgentClient): Promise<boolean> {
   if (Date.now() - c.checkedAt < RECHECK_MS) return true;
-  const r = await c.ping().catch(() => undefined);
-  if (r?.pid === c.pid) {
+  let pid: number;
+  try {
+    pid = (await c.ping()).pid;
+  } catch (e) {
+    if (isTimeoutError(e)) return clients.get(c.serial) === c;
+    pid = -1;
+  }
+  if (pid === c.pid) {
     c.checkedAt = Date.now();
     return true;
   }
-  // pid 가 바뀌었으면(다른 DroidLens 프로세스가 다시 띄웠거나 소켓 주인이 바뀜) 처음부터 다시 확인한다
+  // pid 가 바뀌었거나 에이전트답지 않은 응답이면(다른 DroidLens 프로세스가 다시 띄웠거나 소켓 주인이 바뀜) 처음부터 다시 확인한다
   if (clients.get(c.serial) === c) clients.delete(c.serial);
   return false;
 }
