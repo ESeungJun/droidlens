@@ -6,9 +6,11 @@ import { useT } from '../i18n';
 const LEVELS = ['V', 'D', 'I', 'W', 'E'] as const;
 const RANK: Record<string, number> = { V: 0, D: 1, I: 2, W: 3, E: 4, F: 5, S: 6 };
 const MAX = 5000;
+/** 로그 스트림 번호. 시작할 때마다 새로 받아 이전 스트림의 늦은 로그를 버린다 */
+let lastStreamId = 0;
 
 export function LogTab() {
-  const { serial, pkg, run } = useApp();
+  const { serial, pkg, run, toast } = useApp();
   const t = useT();
   const [lines, setLines] = useState<LogLine[]>([]);
   const [running, setRunning] = useState(false);
@@ -19,19 +21,50 @@ export function LogTab() {
   const [crashes, setCrashes] = useState<string[] | null>(null);
   const box = useRef<HTMLDivElement>(null);
 
-  useEffect(() => api.onLogcat((ls) => setLines((cur) => [...cur, ...ls].slice(-MAX))), []);
-  useEffect(() => () => void api.logcatStop(), []);
+  // 지금 받고 있는 스트림 번호 (없으면 null)
+  const streamId = useRef<number | null>(null);
+  const target = onlyPkg && pkg ? pkg : undefined;
+
+  useEffect(() => api.onLogcat((p) => p.id === streamId.current && setLines((cur) => [...cur, ...p.lines].slice(-MAX))), []);
+  useEffect(
+    () =>
+      api.onLogcatClosed((p) => {
+        if (p.id !== streamId.current) return;
+        streamId.current = null;
+        setRunning(false);
+        toast(t('로그 수집이 끊겼습니다'), true);
+      }),
+    [toast, t],
+  );
+  useEffect(
+    () => () => {
+      if (streamId.current !== null) void api.logcatStop(streamId.current);
+    },
+    [],
+  );
 
   const start = async () => {
     if (!serial) return;
+    const id = ++lastStreamId;
+    streamId.current = id;
     setLines([]);
-    const r = await run(api.logcatStart(serial, onlyPkg && pkg ? pkg : undefined));
-    if (r !== undefined) setRunning(true);
+    const r = await run(api.logcatStart(serial, target, id));
+    if (streamId.current !== id) return; // 그사이 중지했거나 다시 시작했다
+    if (r === undefined) streamId.current = null;
+    setRunning(r !== undefined);
   };
   const stop = async () => {
-    await api.logcatStop();
+    const id = streamId.current;
+    streamId.current = null;
     setRunning(false);
+    if (id !== null) await api.logcatStop(id);
   };
+
+  // 받는 중에 기기나 대상 앱이 바뀌면 다른 기기·앱 로그가 섞이지 않게 새 대상으로 다시 시작한다
+  useEffect(() => {
+    if (streamId.current !== null) start();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [serial, target]);
 
   const shown = useMemo(() => {
     const qq = q.toLowerCase();

@@ -139,8 +139,9 @@ export const api = {
   deeplink: (s: string, uri: string, pkg?: string) => call<string>('deeplink', s, uri, pkg),
   analyzeLibraries: (s: string, pkg: string) => call<ApkAnalysis>('analyzeLibraries', s, pkg),
   crashes: (s: string, pkg?: string) => call<string[]>('crashes', s, pkg),
-  logcatStart: (s: string, pkg?: string) => call<number | null>('logcatStart', s, pkg),
-  logcatStop: () => call<void>('logcatStop'),
+  /** id: 이 스트림을 가리키는 번호 (로그·종료 이벤트에 그대로 실려 와 이전 스트림 것과 구분한다) */
+  logcatStart: (s: string, pkg: string | undefined, id: number) => call<number | null>('logcatStart', s, pkg, id),
+  logcatStop: (id?: number) => call<void>('logcatStop', id),
   graphGet: (pkg: string) => call<GraphData>('graphGet', pkg),
   graphImage: (pkg: string, file: string) => call<string>('graphImage', pkg, file),
   graphRecord: (s: string, pkg: string, action: GraphAction) =>
@@ -202,7 +203,8 @@ export const api = {
   installAgents: () => call<string[]>('installAgents'),
   copy: (t: string) => call<void>('copy', t),
   openExternal: (url: string) => call<void>('openExternal', url),
-  onLogcat: (fn: (lines: LogLine[]) => void) => window.dl.on('logcat', (p) => fn(p as LogLine[])),
+  onLogcat: (fn: (p: { id: number; lines: LogLine[] }) => void) => window.dl.on('logcat', (p) => fn(p as never)),
+  onLogcatClosed: (fn: (p: { id: number }) => void) => window.dl.on('logcat:closed', (p) => fn(p as never)),
   onProgress: (fn: (p: Progress) => void) => window.dl.on('progress', (p) => fn(p as Progress)),
 };
 
