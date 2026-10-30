@@ -60,6 +60,7 @@ function orAbort<T>(p: Promise<T>, signal?: AbortSignal): Promise<T> {
 /**
  * 화면이 안정될 때까지 대기. uiautomator dump(1.5~2.5초)보다 훨씬 빠른 screencap 해시를 연속 비교하고,
  * 안정되면 뷰 계층·Activity를 한 번만 가져온다. 커서 깜빡임 등으로 계속 변하면 timeout에서 멈춘다.
+ * 에이전트가 있으면 덤프로 안정을 확인하고 스크린샷은 담지 않는다 (필요하면 addSnapshot 에 dev 를 주면 새 화면일 때만 찍는다).
  * signal 이 취소되면 기다리기를 그만두고 던진다 (더 이상 기기에 덤프·스크린샷을 요청하지 않게).
  */
 export async function waitForSettle(
@@ -89,8 +90,8 @@ export async function waitForSettle(
         since = Date.now();
       } else if (Date.now() - since >= (pageWebViews(next.root).length ? 1000 : 0)) break;
     }
-    const [screen, png] = await Promise.all([currentScreen(dev), screenshot(dev)]);
-    return fixPackage({ screen, hierarchy, signature: sig, png });
+    // 스크린샷은 찍지 않는다: 새 화면을 지도에 올릴 때만 addSnapshot 이 찍는다 (재방문·앱 밖 화면마다 PNG 를 받지 않게)
+    return fixPackage({ screen: await currentScreen(dev), hierarchy, signature: sig });
   }
   const deadline = Date.now() + (opts.timeoutMs ?? 5000);
   await orAbort(sleep(opts.intervalMs ?? 250), signal);
@@ -1058,14 +1059,15 @@ export class FlowCollector {
     this.last = undefined;
   }
 
-  async observe(): Promise<void> {
+  /** 지금 화면을 지도에 모은다. 확인한 스냅샷을 돌려줘 호출부가 같은 조회를 다시 하지 않게 한다 (실패하면 undefined) */
+  async observe(): Promise<Snapshot | undefined> {
     const noted = this.pending;
     this.pending = undefined;
     try {
       const s = await captureSnapshot(this.dev, { screenshot: false });
       if (s.screen.packageName !== this.graph.packageName) {
         this.last = undefined;
-        return;
+        return s;
       }
       const node = await this.graph.addSnapshot(s, this.dev);
       const prev = this.last && screenId(this.last);
@@ -1075,8 +1077,10 @@ export class FlowCollector {
       }
       this.last = s;
       this.graph.saveSoon();
+      return s;
     } catch {
       this.last = undefined;
+      return undefined;
     }
   }
 

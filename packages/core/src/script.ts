@@ -4,7 +4,7 @@ import YAML from 'yaml';
 import { z } from 'zod';
 import { DeviceAdb, sleep } from './adb.js';
 import { ensureAgent } from './agent.js';
-import { clearAppData, currentScreen, deviceTime, openDeepLink, recentCrashes } from './app.js';
+import { clearAppData, currentScreen, deviceTime, openDeepLink, recentCrashes, type CurrentScreen } from './app.js';
 import { KEYCODES, longPress, pressKey, replaceText, screenshot, swipeDirection, tap, typeText } from './device.js';
 import { FlowCollector, launchAndSettle } from './graph.js';
 import { center, dumpHierarchy, findNodes, type Selector, type ViewNode } from './hierarchy.js';
@@ -383,9 +383,10 @@ export async function runScript(dev: DeviceAdb, script: Script, opts: ScriptRunO
   // (읽지 못하면 호스트 시계). 초 단위라 여유를 둔다
   const ctx = { since: (await deviceTime(dev).catch(() => Date.now())) - 2000 };
 
-  const record = async (title: string, status: 'pass' | 'fail' | 'info' | 'skip', detail?: string, withShot = false) => {
+  /** seen: 흐름 수집이 방금 확인한 화면 (있으면 다시 조회하지 않는다) */
+  const record = async (title: string, status: 'pass' | 'fail' | 'info' | 'skip', detail?: string, withShot = false, seen?: CurrentScreen) => {
     const png = withShot ? await screenshot(dev).catch(() => undefined) : undefined;
-    const scr = await currentScreen(dev).catch(() => undefined);
+    const scr = seen ?? (await currentScreen(dev).catch(() => undefined));
     await scenario.step(title, status, { detail, png, screen: scr ? `${scr.packageName} ${scr.activity}` : undefined });
   };
 
@@ -399,8 +400,8 @@ export async function runScript(dev: DeviceAdb, script: Script, opts: ScriptRunO
       for (const p of script.setup.prefs) await c.setPref(p.file, p.key, p.type, p.value);
     }
     if (script.setup?.restart !== false) await launchAndSettle(dev, app, { restart: true });
-    await record('준비: 앱 실행', 'info', script.setup ? JSON.stringify(script.setup) : undefined, shotAll);
-    await flow?.observe();
+    const seen = await flow?.observe();
+    await record('준비: 앱 실행', 'info', script.setup ? JSON.stringify(script.setup) : undefined, shotAll, seen?.screen);
   } catch (e) {
     await record('준비 실패', 'fail', (e as Error).message, true);
     await flow?.flush().catch(() => undefined);
@@ -419,16 +420,16 @@ export async function runScript(dev: DeviceAdb, script: Script, opts: ScriptRunO
     opts.onStep?.({ index: i, total, title, status: 'running' });
     try {
       const detail = await runStep(dev, app, step, defaultTimeout, ctx, flow, opts.signal);
-      await flow?.observe();
+      const seen = (await flow?.observe())?.screen;
       if (detail === 'skip') {
         skipped++;
-        await record(title, 'skip', '선택(optional) 요소가 없어 건너뜀', shotAll);
+        await record(title, 'skip', '선택(optional) 요소가 없어 건너뜀', shotAll, seen);
         opts.onStep?.({ index: i, total, title, status: 'skip' });
         continue;
       }
       passed++;
       const isCheck = 'assert' in step || 'screenshot' in step;
-      await record(title, 'pass', detail, shotAll || isCheck);
+      await record(title, 'pass', detail, shotAll || isCheck, seen);
       opts.onStep?.({ index: i, total, title, status: 'pass', detail });
     } catch (e) {
       // 조작 도중 실패하면 화면 상태를 알 수 없으므로 다음 관찰부터 지도에 새로 이어 붙인다
