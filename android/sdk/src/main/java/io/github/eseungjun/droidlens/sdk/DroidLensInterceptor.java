@@ -72,14 +72,14 @@ public final class DroidLensInterceptor implements Interceptor {
                     if (isReplayable(body)) {
                         // 요청 객체는 그대로 넘긴다. 뒤 인터셉터가 FormBody·MultipartBody 로 형변환해도 깨지지 않는다
                         copyRequestBody(e, body, limit, redact);
-                    } else if (!(body instanceof MultipartBody)) {
+                    } else if (!(body instanceof MultipartBody) && !(body instanceof FormBody)) {
                         // 한 번만 쓸 수 있거나 크기를 모르는 본문은 전송 때 흐르는 바이트를 복사한다.
                         // 이때 뒤 인터셉터에는 TeeRequestBody 가 보이므로 원래 타입으로 instanceof·형변환할 수 없다
                         TeeRequestBody t = new TeeRequestBody(body, limit);
                         request = request.newBuilder().method(request.method(), t).build();
                         tee = t;
                     }
-                    // 파일·스트림 part 가 섞인 multipart 는 미리 쓰지도 감싸지도 않는다 (형변환하는 인터셉터가 흔하다).
+                    // 파일·스트림 part 가 섞인 multipart 와 {@link #PRECOPY_MAX} 를 넘는 폼은 미리 쓰지도 감싸지도 않는다 (형변환하는 인터셉터가 흔하다).
                     // 형식·크기만 기록하고 본문은 비워 둔다
                 }
             }
@@ -136,7 +136,7 @@ public final class DroidLensInterceptor implements Interceptor {
     /**
      * 요청을 보내기 전에 Buffer 에 한 번 더 써도 되는 본문인지.
      * <ul>
-     * <li>FormBody: 필드가 이미 메모리에 있다</li>
+     * <li>FormBody: 필드가 이미 메모리에 있다 (그래도 크기 상한은 지킨다)</li>
      * <li>OkHttp 의 RequestBody.create(String·byte[]·ByteString·File) 로 만든 본문: 몇 번을 써도 같은 바이트가 나온다.
      *     클래스가 okhttp3.RequestBody 안에 있는 것으로 구분한다. 앱이 만든 본문은 크기를 알아도 진행률 콜백·스트림일 수 있어 제외</li>
      * <li>MultipartBody: 모든 part 가 위 조건을 만족할 때만</li>
@@ -145,9 +145,10 @@ public final class DroidLensInterceptor implements Interceptor {
      * 앱이 OkHttp 를 난독화해 클래스 이름이 바뀌었으면 안전한 쪽(감싸기)으로 떨어진다.
      */
     private static boolean isReplayable(RequestBody body) throws IOException {
-        if (body instanceof FormBody) return true;
         long length = body.contentLength();
-        if (length < 0 || length > PRECOPY_MAX || isOneShot(body)) return false;
+        if (length < 0 || length > PRECOPY_MAX) return false;
+        if (body instanceof FormBody) return true;
+        if (isOneShot(body)) return false;
         if (body instanceof MultipartBody) {
             for (MultipartBody.Part part : ((MultipartBody) body).parts()) {
                 if (!isReplayable(part.body())) return false;
