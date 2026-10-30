@@ -10,6 +10,7 @@ import { FlowCollector, launchAndSettle } from './graph.js';
 import { center, dumpHierarchy, findNodes, type Selector, type ViewNode } from './hierarchy.js';
 import { Scenario, type ScenarioData } from './scenario.js';
 import { sdkFor } from './sdk.js';
+import { kbToMb, measureStartup, MAX_STARTUP_RUNS, perfSample, resetFrameStats } from './perf.js';
 import { ensureDir, safeName } from './workspace.js';
 
 /**
@@ -25,6 +26,8 @@ import { ensureDir, safeName } from './workspace.js';
  *   - tap: { id: save }
  *   - assert: { visible: { textContains: 장보기 } }
  *   - assert: { network: { url: /api/notes, method: POST, status: 201 } }
+ *   - assert: { perf: { maxMemoryMb: 300, maxJankPercent: 10 } }
+ *   - startup: { cold: true, runs: 3, maxMs: 1500 }
  * ```
  */
 
@@ -69,6 +72,12 @@ const assertion = z
     pref: z.object({ file: z.string(), key: z.string(), equals: z.union([z.string(), z.number(), z.boolean()]) }).optional(),
     db: z.object({ db: z.string(), sql: z.string(), equals: z.union([z.string(), z.number(), z.null()]) }).optional(),
     event: z.string().optional(),
+    /** 지금 메모리(PSS)와 스크립트 시작 이후 버벅인 프레임 비율의 상한 */
+    perf: z
+      .object({ maxMemoryMb: z.number().positive().optional(), maxJankPercent: z.number().min(0).max(100).optional() })
+      .strict()
+      .refine((p) => p.maxMemoryMb !== undefined || p.maxJankPercent !== undefined, 'maxMemoryMb 나 maxJankPercent 가 필요합니다')
+      .optional(),
     noCrash: z.boolean().optional(),
     timeout: z.number().int().optional(),
   })
@@ -108,6 +117,16 @@ const stepUnion = z.union([
   z.object({ launch: z.object({ restart: z.boolean().optional() }).strict().optional().nullable() }).strict(),
   z.object({ deeplink: z.string() }).strict(),
   z.object({ screenshot: z.string().optional().nullable() }).strict(),
+  /** 앱 시작 시간을 재고 중앙값이 maxMs 를 넘으면 실패. 앱이 다시 시작된다 */
+  z
+    .object({
+      startup: z
+        .object({ cold: z.boolean().optional(), runs: z.number().int().min(1).max(MAX_STARTUP_RUNS).optional(), maxMs: z.number().int().positive().optional() })
+        .strict()
+        .optional()
+        .nullable(),
+    })
+    .strict(),
   z.object({ assert: assertion }).strict(),
 ]);
 
@@ -357,6 +376,23 @@ export async function evaluateAssertion(dev: DeviceAdb, app: string, a: Assertio
       () => `기대: 이벤트 ${a.event} / 실제: 기록 없음`,
     );
   }
+  if (a.perf) {
+    const p = a.perf;
+    const s = await perfSample(dev, app, { memory: p.maxMemoryMb !== undefined, frames: p.maxJankPercent !== undefined });
+    if (!s) throw new StepFailure(`${app} 이(가) 실행 중이 아니라 성능을 잴 수 없습니다`);
+    if (p.maxMemoryMb !== undefined) {
+      const used = kbToMb(s.memory?.totalPssKb);
+      if (used === undefined) throw new StepFailure('메모리를 읽지 못했습니다');
+      if (used > p.maxMemoryMb) throw new StepFailure(`기대: 메모리 ${p.maxMemoryMb}MB 이하 / 실제: ${used}MB`);
+      evidence.push(`메모리 ${used}MB`);
+    }
+    if (p.maxJankPercent !== undefined) {
+      const f = s.frames;
+      if (!f) throw new StepFailure('프레임 통계를 읽지 못했습니다');
+      if (f.jankPercent > p.maxJankPercent) throw new StepFailure(`기대: 버벅인 프레임 ${p.maxJankPercent}% 이하 / 실제: ${f.jankPercent}% (${f.jankyFrames}/${f.totalFrames})`);
+      evidence.push(`버벅인 프레임 ${f.jankPercent}% (${f.jankyFrames}/${f.totalFrames})`);
+    }
+  }
   if (a.noCrash) {
     const crashes = await recentCrashes(dev, app, { since: ctx.since - 1000 });
     if (crashes.length) throw new StepFailure(`크래시 발생:\n${crashes[crashes.length - 1].split('\n').slice(0, 8).join('\n')}`);
@@ -403,6 +439,8 @@ export async function runScript(dev: DeviceAdb, script: Script, opts: ScriptRunO
       for (const p of script.setup.prefs) await c.setPref(p.file, p.key, p.type, p.value);
     }
     if (script.setup?.restart !== false) await launchAndSettle(dev, app, { restart: true });
+    // 버벅인 프레임 비율 assert 가 준비 단계를 빼고 스크립트 단계만 보게 한다
+    await resetFrameStats(dev, app).catch(() => undefined);
     const seen = await flow?.observe();
     await record('준비: 앱 실행', 'info', script.setup ? JSON.stringify(script.setup) : undefined, shotAll, seen?.screen);
   } catch (e) {
@@ -565,6 +603,17 @@ async function runStep(
     return '';
   }
   if ('screenshot' in step) return step.screenshot ?? '';
+  if ('startup' in step) {
+    const o = step.startup ?? {};
+    // 측정하며 앱을 여러 번 다시 시작하므로 흐름 수집은 다음 관찰부터 새로 잇는다
+    flow?.forget();
+    const r = await measureStartup(dev, app, { cold: o.cold, runs: o.runs, signal });
+    const detail = `${r.cold ? '콜드' : '다시 열기'} 시작 중앙값 ${r.medianMs}ms (${r.runs.map((x) => x.ms).join(', ')})`;
+    if (o.maxMs !== undefined && r.medianMs > o.maxMs) throw new StepFailure(`기대: ${o.maxMs}ms 이하 / 실제: ${detail}`);
+    // 다시 열기 측정은 프로세스가 그대로라 측정 중 그린 프레임이 이후 버벅임 assert 에 섞이지 않게 한다
+    await resetFrameStats(dev, app).catch(() => undefined);
+    return detail;
+  }
   if ('assert' in step) return evaluateAssertion(dev, app, step.assert, ctx);
   throw new StepFailure('알 수 없는 단계');
 }

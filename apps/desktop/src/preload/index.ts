@@ -9,7 +9,7 @@ const INVOKE = new Set([
   'bringToFront', 'chatSend', 'chatStatus', 'chatStop', 'copy', 'crashes', 'currentScreen', 'deeplink', 'deviceInfo', 'devices',
   'explore', 'exploreStop', 'graphExport', 'graphGet', 'graphImage', 'graphImport', 'graphNavigate', 'graphRecord', 'graphRecordHere',
   'graphReset', 'home', 'installAgents', 'integration', 'key', 'launch', 'logcatStart', 'logcatStop', 'longPress', 'mirrorStart',
-  'mirrorStop', 'openExternal', 'openPath', 'packages', 'platform', 'recordStart', 'recordStatus', 'recordStop', 'registerMcp', 'reveal',
+  'mirrorStop', 'openExternal', 'openPath', 'packages', 'perfResetFrames', 'perfSample', 'perfStartup', 'platform', 'recordStart', 'recordStatus', 'recordStop', 'registerMcp', 'reveal',
   'saveScreenshot', 'scenarioDelete', 'scenarioImage', 'scenarios', 'screenshot', 'screenshotPng', 'scriptDelete', 'scriptRead',
   'scriptRun', 'scriptsList', 'scriptStop', 'scriptWrite', 'sdk', 'sdkApps', 'setAdbPath', 'setTheme', 'snapshot', 'stop', 'swipe', 'tap',
   'typeText', 'updateCheck', 'updateInstall',
