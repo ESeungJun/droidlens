@@ -60,6 +60,8 @@ export interface ScreenEdge {
 
 export interface GraphData {
   packageName: string;
+  /** 초기화할 때마다 바뀌는 세대 id (예전 파일엔 없다) */
+  generation?: string;
   createdAt: number;
   updatedAt: number;
   /** 앱을 실행하면 처음 뜨는 화면 (경로 찾기·화면 이동의 출발점). 실제로 앱을 실행해 본 적이 있을 때만 있다 */

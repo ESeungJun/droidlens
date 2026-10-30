@@ -1,5 +1,5 @@
-import { createHash } from 'node:crypto';
-import { readFile, rm, stat, writeFile } from 'node:fs/promises';
+import { createHash, randomUUID } from 'node:crypto';
+import { mkdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { basename, join } from 'node:path';
 import { DeviceAdb, sleep } from './adb.js';
 import { ensureAgent } from './agent.js';
@@ -178,8 +178,13 @@ export class ScreenGraph {
   createdAt = Date.now();
   updatedAt = Date.now();
   launchScreen?: string;
-  /** 마지막으로 읽거나 쓴 graph.json 의 수정 시각 (다른 프로세스가 고쳤는지 확인) */
+  /** 마지막으로 읽거나 쓴 graph.json 의 수정 시각 (다른 프로세스가 고쳤는지 확인). 0 이면 아직 파일과 맞춘 적 없음 */
   private mtime = 0;
+  /**
+   * 그래프 세대. 초기화(reset)한 뒤 처음 저장하는 쪽이 새 세대를 쓴다. 디스크 세대가 내 것과 다르면
+   * 그사이 초기화된 것이라 합치지 않고 디스크 내용으로 바꾼다 (옛 내용을 쥔 다른 프로세스가 되살리지 않게)
+   */
+  private generation: string = randomUUID();
   private saving: Promise<unknown> = Promise.resolve();
   /** saveSoon 으로 미뤄 둔 저장 */
   private pending?: ReturnType<typeof setTimeout>;
@@ -200,8 +205,25 @@ export class ScreenGraph {
   static async reset(packageName: string): Promise<void> {
     assertPackage(packageName);
     const dir = ScreenGraph.dirOf(packageName);
+    const p = ScreenGraph.opened.get(dir);
     ScreenGraph.opened.delete(dir);
+    // 이미 열린 인스턴스(스크립트 실행 중인 흐름 수집 등)도 비운다. 미뤄 둔 저장은 버리고 진행 중인 저장이 끝난 뒤 지운다
+    const g = await p?.catch(() => undefined);
+    if (g) {
+      if (g.pending) clearTimeout(g.pending);
+      g.pending = undefined;
+      await g.saving;
+      g.clear();
+    }
     await rm(dir, { recursive: true, force: true });
+  }
+
+  /**
+   * 열린 그래프의 미뤄 둔 저장(saveSoon)을 모두 바로 쓰고 끝나길 기다린다.
+   * 프로세스를 끝내기 전에 불러 모아 둔 기록이 사라지지 않게 한다 (실패한 저장은 건너뛴다)
+   */
+  static async flushAll(): Promise<void> {
+    await Promise.all([...ScreenGraph.opened.values()].map((p) => p.then((g) => g.flush()).catch(() => undefined)));
   }
 
   static async open(packageName: string): Promise<ScreenGraph> {
@@ -222,17 +244,38 @@ export class ScreenGraph {
 
   /**
    * 다른 프로세스(MCP 서버·데스크톱 앱)가 graph.json 을 고쳤으면 다시 읽어 지금 것과 합친다.
-   * 화면·연결은 지우는 일이 없으므로 합집합으로 두면 어느 쪽 기록도 사라지지 않는다
+   * 화면·연결은 초기화 말고는 지우는 일이 없으므로 같은 세대 안에서는 합집합으로 두면 어느 쪽 기록도 사라지지 않는다.
+   * 초기화됐으면(파일이 없어졌거나 세대가 바뀜) 메모리 내용을 버린다
    */
   private async refresh(): Promise<void> {
     const file = join(this.dir, 'graph.json');
     const m = await stat(file).then((st) => st.mtimeMs).catch(() => 0);
-    if (!m || m === this.mtime) return;
+    if (!m) {
+      // 맞춰 둔 파일이 없어졌으면 다른 프로세스가 초기화한 것이다 (그대로 저장하면 지운 내용이 되살아난다).
+      // 어느 것이 초기화 뒤에 생긴 기록인지 알 수 없어 메모리 내용을 모두 버린다
+      if (this.mtime) this.clear();
+      return;
+    }
+    if (m === this.mtime) return;
     // 예전 버전이 쓰는 도중이라 깨진 파일이면 이번엔 합치지 않는다 (다음 저장 때 다시 본다)
     const data = await readJson<GraphData>(file).catch(() => undefined);
     if (!data) return;
+    // 세대가 없는 예전 파일은 만든 시각을 세대로 쓴다 (어느 프로세스가 읽어도 같은 값)
+    const generation = data.generation ?? String(data.createdAt);
+    if (this.mtime && generation !== this.generation) this.clear();
+    this.generation = generation;
     this.mtime = m;
     this.merge(data);
+  }
+
+  /** 메모리 내용을 버리고 빈 그래프로 돌아간다 (다음에 읽는 파일의 세대를 따른다) */
+  private clear(): void {
+    this.nodes.clear();
+    this.edges.clear();
+    this.launchScreen = undefined;
+    this.createdAt = this.updatedAt = Date.now();
+    this.generation = randomUUID();
+    this.mtime = 0;
   }
 
   private merge(data: GraphData): void {
@@ -284,6 +327,8 @@ export class ScreenGraph {
       let shot: string | undefined;
       if (png) {
         shot = `${safeName(id)}.png`;
+        // 다른 프로세스가 초기화하며 폴더를 지웠을 수 있다
+        await mkdir(this.dir, { recursive: true });
         await writeFile(join(this.dir, shot), png);
       }
       const frag = s.screen.fragments.length ? ` / ${s.screen.fragments.join(', ')}` : '';
@@ -344,6 +389,7 @@ export class ScreenGraph {
   toJSON(): GraphData {
     return {
       packageName: this.packageName,
+      generation: this.generation,
       createdAt: this.createdAt,
       updatedAt: this.updatedAt,
       launchScreen: this.launchScreen,
@@ -362,6 +408,7 @@ export class ScreenGraph {
     const p = join(this.dir, 'graph.json');
     const write = async () => {
       await this.refresh();
+      await mkdir(this.dir, { recursive: true });
       await writeJson(p, this.toJSON());
       await writeFileAtomic(join(this.dir, 'graph.mmd'), this.toMermaid());
       this.mtime = await stat(p).then((st) => st.mtimeMs).catch(() => this.mtime);
