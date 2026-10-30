@@ -3,7 +3,7 @@ import { execFile } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { copyFile, mkdir, readdir, readFile, stat, writeFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
-import { basename, join, resolve, sep } from 'node:path';
+import { basename, isAbsolute, join, resolve, sep } from 'node:path';
 import { promisify } from 'node:util';
 import * as dl from '@droidlens/core';
 import { resolveClaude, sendChat, stopChat, type ChatRequest } from './chat';
@@ -551,6 +551,8 @@ async function updateConfig(patch: Record<string, unknown>): Promise<void> {
   await dl.writeJson(configPath(), cfg);
 }
 handle('setAdbPath', async (p: string) => {
+  // 여기 등록한 파일은 앱이 계속 실행하므로 adb 실행 파일 경로만 받는다 (비우면 자동 탐색)
+  if (p && !(isAbsolute(p) && /^adb(\.exe)?$/i.test(basename(p)))) throw new Error('adb 실행 파일의 전체 경로를 입력하세요 (파일 이름이 adb 또는 adb.exe)');
   await updateConfig({ adbPath: p || undefined });
   adb = new dl.Adb();
   return adb.version();

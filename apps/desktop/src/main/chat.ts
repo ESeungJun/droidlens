@@ -112,6 +112,9 @@ export async function sendChat(
   emitRaw: (e: ChatEvent & { run: number }) => void,
 ): Promise<void> {
   const emit = (e: ChatEvent) => emitRaw({ ...e, run: req.runId });
+  // 세션 id 는 렌더러에서 받아 claude 인자로 넘긴다. Windows 는 셸(cmd.exe)로 실행하므로 UUID 모양만 허용한다
+  if (req.sessionId !== undefined && !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(req.sessionId))
+    throw new Error('잘못된 대화 세션 id 입니다');
   stopChat();
   const mine = ++generation;
   const claude = await resolveClaude();
