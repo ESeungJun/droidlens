@@ -48,6 +48,8 @@ public final class NetworkStore {
         public boolean responseTruncated;
         public long durationMs = -1;
         public String error;
+        /** 목 규칙으로 처리했으면 그 규칙 id */
+        public String mockId;
         /** 저장소에 잡혀 있는 본문 바이트 수 (entries 락으로 보호) */
         private long bodyBytes;
         private boolean removed;
@@ -210,6 +212,7 @@ public final class NetworkStore {
         o.put("responseSize", e.responseSize);
         o.put("responseContentType", e.responseContentType);
         if (e.error != null) o.put("error", e.error);
+        if (e.mockId != null) o.put("mockId", e.mockId);
         return o;
     }
 

@@ -29,6 +29,28 @@ export interface NetworkEntry {
   responseSize: number;
   responseContentType?: string;
   error?: string;
+  /** 목 규칙으로 처리한 요청이면 그 규칙 id */
+  mockId?: string;
+}
+
+/**
+ * 네트워크 목 규칙 (SDK 가 앱 안에 저장해 앱을 다시 시작해도 남는다).
+ * 요청 URL 에 url 이 들어 있고 method 가 맞는(없으면 아무 메서드) 첫 규칙을 적용한다.
+ * status 가 있으면 서버에 보내지 않고 그 응답을, fail 이면 연결 실패를, 둘 다 없으면 delayMs 만큼 늦춰 실제로 보낸다
+ */
+export interface MockRule {
+  id?: string;
+  enabled?: boolean;
+  url: string;
+  method?: string;
+  status?: number;
+  contentType?: string;
+  body?: string;
+  headers?: Record<string, string>;
+  delayMs?: number;
+  fail?: boolean;
+  /** 적용된 횟수 (SDK 가 센다) */
+  hits?: number;
 }
 
 export interface NetworkDetail extends NetworkEntry {
@@ -119,6 +141,25 @@ export class SdkClient {
 
   async clearNetwork(): Promise<void> {
     await this.req('POST', '/network/clear');
+  }
+
+  /** 목 규칙을 쓰려면 SDK 가 mock 을 지원해야 한다 (예전 SDK 는 404) */
+  async mocks(): Promise<MockRule[]> {
+    return (await this.req<{ mocks: MockRule[] }>('GET', '/mocks')).mocks;
+  }
+
+  /** id 가 있으면 그 규칙을 바꾸고, 없으면 추가한다 */
+  setMock(rule: MockRule): Promise<MockRule> {
+    const { hits: _hits, ...body } = rule;
+    return this.req('POST', '/mocks/set', undefined, JSON.stringify(body));
+  }
+
+  async removeMock(id: string): Promise<boolean> {
+    return (await this.req<{ removed: boolean }>('POST', '/mocks/remove', { id })).removed;
+  }
+
+  async clearMocks(): Promise<void> {
+    await this.req('POST', '/mocks/clear');
   }
 
   async prefs(): Promise<PrefsFile[]> {

@@ -70,7 +70,7 @@ Then enable **Developer options → USB debugging** on your device and connect i
 | **View hierarchy** | Two-way selection between screenshot and tree, attributes and selectors, node count by depth, Compose detection, **3D exploded view** |
 | **Screen flow** | A per-app **screen map** — screens and transitions from auto-exploration, manual use, and scenario runs keep adding up in one map (thumbnails + action labels). **Auto-exploration** (never taps payment, delete, logout, or send buttons), **pick buttons, long presses, or swipes on a screenshot and explore only the flows they open**, tapped-button coverage per screen, path from the first screen, **auto-navigate to a screen** along the recorded path, map export/import (merge) |
 | **Logs** | Live logcat (app PID filter, level, search), recent crashes |
-| **Network** ¹ | OkHttp requests and responses (headers, pretty-printed JSON bodies, image preview, timing), failure filter, copy as cURL |
+| **Network** ¹ | OkHttp requests and responses (headers, pretty-printed JSON bodies, image preview, timing), failure filter, copy as cURL, **network mocking** (response, failure, delay) |
 | **Performance** | Live CPU, memory (PSS, by region) and frames-per-second graphs, janky-frame ratio and frame-time percentiles, app startup time (cold or reopen, repeated runs with the median) |
 | **App data** ¹ | View and edit SharedPreferences, SQLite/Room DB browser with SQL execution, custom events |
 | **Libraries** | Detects 100+ libraries and frameworks from the APK's DEX and native libs, estimates obfuscation |
@@ -112,12 +112,13 @@ DroidLens.event("purchase_clicked", JSONObject().put("itemId", 42))
 - Request and response bodies are capped at 256KB each; the latest 500 entries are kept in memory only
 - Sensitive values are masked **on the device, before they are stored** — in headers, URL queries, `Location` redirects, JSON bodies (including nested objects/arrays and JSON inside strings), GraphQL arguments, form, multipart and XML bodies, error messages and custom events. Keys match regardless of case and separators, and common words match anywhere in the name (`newPassword`, `fcmToken`, `X-Refresh-Token`); short ones like `jwt`, `otp`, `pin` match exactly. Add your own with `DroidLens.redactHeaders("X-Session")` / `DroidLens.redactKeys("phone")`, or call `DroidLens.clearDefaultRedaction()` to use only your list. Compressed bodies the app requested itself (`Content-Encoding`) are not recorded
 - DB write SQL runs only when explicitly allowed
+- **Network mocking**: requests whose URL contains a given string can be answered with any status code and body without reaching the server, failed as a connection error, or delayed (**Mock rules** in the Network tab, or **Mock this** on a recorded request). Rules are kept in the app's private storage and survive restarts; while any are on, a warning is written to logcat
 
 ## Claude Code integration
 
 Just press two buttons in the app's **Settings & Integrations** tab.
 
-1. **Register MCP** — registers the app's built-in MCP server (46 tools) with `claude mcp add --scope user`. No separate Node install needed.
+1. **Register MCP** — registers the app's built-in MCP server (49 tools) with `claude mcp add --scope user`. No separate Node install needed.
 2. **Install agents** — copies the bundled agents to `~/.claude/agents/`.
 
 | Agent | What it does |
@@ -139,7 +140,7 @@ Save verified flows as YAML and replay them anytime. When an agent **passes** a 
 ```yaml
 name: Product search
 app: com.example.shop
-setup: { restart: true }          # clearData and prefs (SDK) can also set up the initial state
+setup: { restart: true }          # clearData and prefs (SDK) can also set up the initial state, and mocks (SDK) for network mocks that stay on only during the run
 steps:
   - tap: { text: Search }
   - type: { text: sneakers, into: { className: EditText } }

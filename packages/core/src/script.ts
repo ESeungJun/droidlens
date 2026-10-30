@@ -29,6 +29,7 @@ import { ensureDir, safeName } from './workspace.js';
  *   - assert: { perf: { maxMemoryMb: 300, maxJankPercent: 10 } }
  *   - startup: { cold: true, runs: 3, maxMs: 1500 }
  * ```
+ * setup.mocks 로 실행하는 동안만 네트워크 목을 켤 수 있다 (예: 주문 API 를 500 으로 만들어 오류 화면 확인)
  */
 
 // ---------- 스키마 ----------
@@ -144,6 +145,23 @@ export const scriptSchema = z
         clearData: z.boolean().optional(),
         prefs: z
           .array(z.object({ file: z.string(), key: z.string(), type: z.enum(['string', 'int', 'long', 'float', 'boolean', 'stringSet']), value: z.string() }))
+          .optional(),
+        /** 실행하는 동안만 켜 둘 네트워크 목 규칙 (SDK). 끝나면 지운다 */
+        mocks: z
+          .array(
+            z
+              .object({
+                url: z.string().min(1),
+                method: z.string().optional(),
+                status: z.number().int().min(200).max(599).optional(),
+                body: z.string().optional(),
+                contentType: z.string().optional(),
+                headers: z.record(z.string()).optional(),
+                delayMs: z.number().int().min(0).max(60_000).optional(),
+                fail: z.boolean().optional(),
+              })
+              .strict(),
+          )
           .optional(),
       })
       .strict()
@@ -429,14 +447,26 @@ export async function runScript(dev: DeviceAdb, script: Script, opts: ScriptRunO
     await scenario.step(title, status, { detail, png, screen: scr ? `${scr.packageName} ${scr.activity}` : undefined });
   };
 
+  // 이 실행이 켠 목 규칙. 끝나면(실패·중단 포함) 지워 다음 실행이나 수동 사용에 남지 않게 한다
+  const addedMocks: string[] = [];
+  const removeMocks = async () => {
+    if (!addedMocks.length) return;
+    const c = await sdkFor(dev, app).catch(() => undefined);
+    for (const id of addedMocks) await c?.removeMock(id).catch(() => undefined);
+  };
+
   // setup
   try {
     if (script.setup?.clearData) await clearAppData(dev, app);
-    if (script.setup?.prefs?.length) {
-      // Prefs는 앱 프로세스가 떠 있어야 SDK로 쓸 수 있다
+    if (script.setup?.prefs?.length || script.setup?.mocks?.length) {
+      // Prefs·목은 앱 프로세스가 떠 있어야 SDK로 쓸 수 있다. 목은 앱 안에 저장돼 아래 재시작 뒤에도 적용된다
       await launchAndSettle(dev, app);
       const c = await sdkFor(dev, app);
-      for (const p of script.setup.prefs) await c.setPref(p.file, p.key, p.type, p.value);
+      for (const p of script.setup.prefs ?? []) await c.setPref(p.file, p.key, p.type, p.value);
+      for (const m of script.setup.mocks ?? []) {
+        const saved = await c.setMock(m);
+        if (saved.id) addedMocks.push(saved.id);
+      }
     }
     if (script.setup?.restart !== false) await launchAndSettle(dev, app, { restart: true });
     // 버벅인 프레임 비율 assert 가 준비 단계를 빼고 스크립트 단계만 보게 한다
@@ -445,6 +475,7 @@ export async function runScript(dev: DeviceAdb, script: Script, opts: ScriptRunO
     await record('준비: 앱 실행', 'info', script.setup ? JSON.stringify(script.setup) : undefined, shotAll, seen?.screen);
   } catch (e) {
     await record('준비 실패', 'fail', (e as Error).message, true);
+    await removeMocks();
     await flow?.flush().catch(() => undefined);
     const report = await scenario.finish('blocked', `준비 단계 실패: ${(e as Error).message}`);
     return { verdict: 'blocked', passed, failed: 1, skipped, durationMs: Date.now() - t0, report, scenario: scenario.data };
@@ -486,6 +517,7 @@ export async function runScript(dev: DeviceAdb, script: Script, opts: ScriptRunO
     }
   }
 
+  await removeMocks();
   await flow?.flush().catch(() => undefined);
   const verdict = failed ? 'fail' : 'pass';
   const summary = `${passed} 통과 · ${failed} 실패 · ${skipped} 건너뜀 (${((Date.now() - t0) / 1000).toFixed(1)}초)`;
