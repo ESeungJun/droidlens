@@ -1,7 +1,7 @@
 import { createHash, randomBytes } from 'node:crypto';
 import { XMLParser } from 'fast-xml-parser';
 import { DeviceAdb, sleep } from './adb.js';
-import { stopAgent, withAgent } from './agent.js';
+import { isConnectionError, isTimeoutError, stopAgent, withAgent } from './agent.js';
 
 export type Bounds = [left: number, top: number, right: number, bottom: number];
 
@@ -102,6 +102,15 @@ export function parseHierarchyXml(xml: string): Hierarchy {
 }
 
 
+/** serial → 에이전트 덤프가 연달아 실패한 횟수 */
+const agentDumpFailures = new Map<string, number>();
+/** 에이전트가 응답은 하는데 이만큼 연달아 덤프에 실패하면 내리고 잠시 uiautomator 로 대체한다 */
+const MAX_AGENT_DUMP_FAILURES = 3;
+
+const dumpByAgent = (dev: DeviceAdb) => withAgent(dev, async (a) => parseHierarchyXml(await a.hierarchyXml()));
+/** 에이전트가 죽었거나 멈춘 실패 (응답이 온 오류와 달리 다시 보내도 나아지지 않는다) */
+const agentBroken = (e: unknown) => isConnectionError(e) || isTimeoutError(e);
+
 /**
  * 뷰 계층 덤프. 온디바이스 에이전트가 있으면 그것을 쓰고(0.1~0.3초), 없으면 uiautomator dump.
  * uiautomator dump는 애니메이션 중에는 "could not get idle state"로 실패할 수 있어 재시도한다.
@@ -109,11 +118,24 @@ export function parseHierarchyXml(xml: string): Hierarchy {
  */
 export async function dumpHierarchy(dev: DeviceAdb, retries = 3): Promise<Hierarchy> {
   try {
-    const r = await withAgent(dev, async (a) => parseHierarchyXml(await a.hierarchyXml()));
+    // 에이전트가 응답한 오류(화면 전환 중 루트 노드 없음 등)는 일시적일 수 있어 잠시 뒤 한 번 더 받아 본다
+    const r = await dumpByAgent(dev).catch(async (e) => {
+      if (agentBroken(e)) throw e;
+      await sleep(300);
+      return dumpByAgent(dev);
+    });
+    agentDumpFailures.delete(dev.serial);
     if (r) return r.value;
   } catch (e) {
-    // 에이전트가 UiAutomation을 쥐고 있으면 uiautomator dump가 실패하므로 내리고 대체한다.
-    // 실패로 기록해 잠시 uiautomator 만 쓴다 (덤프마다 에이전트를 다시 띄우지 않게)
+    const fails = (agentDumpFailures.get(dev.serial) ?? 0) + 1;
+    // 일시 오류면 에이전트를 두고 오류를 그대로 올린다 (한 번 실패로 60초씩 느린 uiautomator 로 떨어지지 않게).
+    // 연결이 끊겼거나 응답이 없거나 연달아 실패할 때만 내리고 잠시 uiautomator 만 쓴다.
+    // 에이전트가 UiAutomation 을 쥐고 있으면 uiautomator dump 가 실패하므로 대체하려면 내려야 한다
+    if (!agentBroken(e) && fails < MAX_AGENT_DUMP_FAILURES) {
+      agentDumpFailures.set(dev.serial, fails);
+      throw e;
+    }
+    agentDumpFailures.delete(dev.serial);
     await stopAgent(dev, `뷰 계층 조회 실패: ${(e as Error).message}`);
   }
   // 덤프 파일은 호출마다 다른 이름으로 쓰고 지운다 (동시에 덤프하는 다른 호출·프로세스와 파일을 겹쳐 쓰지 않게)
