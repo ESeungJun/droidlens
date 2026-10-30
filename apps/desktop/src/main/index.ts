@@ -537,9 +537,7 @@ handle('updateInstall', async (info: UpdateInfo) => {
   // 렌더러가 넘긴 정보 대신 다시 확인한 결과로 설치한다 (다운로드 URL을 렌더러에서 받지 않음)
   const fresh = await checkForUpdate();
   if (!fresh.available || fresh.latest !== info.latest) throw new Error('설치할 업데이트가 없습니다');
-  stopChat();
-  mirror?.m.stop();
-  logStream?.stop();
+  // 로그·미러·대화는 설치를 예약한 뒤 app.quit() 의 종료 정리(stopAll)에서 멈춘다. 다운로드가 실패하면 그대로 쓸 수 있다
   await installUpdate(fresh, (p, message) => send('update:progress', { p, message }));
 });
 handle('adbStatus', async () => ({ ...(await adb.version()), candidates: dl.adbCandidates() }));

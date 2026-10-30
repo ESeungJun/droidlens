@@ -111,6 +111,10 @@ export const core: Record<string, string> = {
     'claude CLI not found. Install Claude Code and log in (https://claude.com/claude-code)',
   '개발 모드에서는 자동 설치를 하지 않습니다 (git pull 후 다시 빌드)': 'Auto-install is disabled in development mode (git pull and rebuild)',
   'AppImage로 실행한 경우에만 자동 업데이트를 지원합니다': 'Auto-update is only supported when running as an AppImage',
+  '앱이 macOS 임시 위치에서 실행 중이라 자동 업데이트를 할 수 없습니다. DroidLens 를 응용 프로그램 폴더로 옮긴 뒤 다시 여세요':
+    "Can't auto-update while macOS runs the app from a temporary location. Move DroidLens to the Applications folder and open it again",
+  '앱이 있는 폴더에 쓸 권한이 없어 자동 업데이트를 할 수 없습니다': "Can't auto-update: no write permission for the app's folder",
+  '다운로드가 30초 동안 진행되지 않아 중단했습니다': 'Download stopped: no progress for 30 seconds',
   '압축 해제 중…': 'Extracting…',
   '설치 프로그램 실행 중…': 'Running installer…',
   '교체 중…': 'Replacing…',
