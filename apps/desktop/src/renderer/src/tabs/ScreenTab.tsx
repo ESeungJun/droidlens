@@ -38,18 +38,31 @@ export function ScreenTab() {
   const [text, setText] = useState('');
   const [history, setHistory] = useState<string[]>([]);
   const imgRef = useRef<HTMLImageElement>(null);
+  // 스냅샷 모드 이미지는 blob URL 이다. 새 프레임으로 바꿀 때 이전 URL 을 해제해 메모리가 쌓이지 않게 한다
+  const imgUrl = useRef('');
+  const showImg = (url: string) => {
+    if (imgUrl.current) URL.revokeObjectURL(imgUrl.current);
+    imgUrl.current = url;
+    setImg(url);
+  };
+  useEffect(() => () => void (imgUrl.current && URL.revokeObjectURL(imgUrl.current)), []);
   const drag = useRef<{ x: number; y: number; t: number } | null>(null);
 
-  // 미러링 루프: 이전 프레임이 끝나야 다음 요청
+  // 미러링 루프: 이전 프레임이 끝나야 다음 요청. PNG 는 base64 대신 바이트로 받아 blob URL 로 보여 주고,
+  // 창이 가려져 있으면(최소화 등) 받지 않고 기다린다
   useEffect(() => {
     if (!serial || !live || mode !== 'snapshot') return;
     let stop = false;
     (async () => {
       while (!stop) {
         const t0 = Date.now();
+        if (document.hidden) {
+          await new Promise((r) => setTimeout(r, 1000));
+          continue;
+        }
         try {
-          const d = await api.screenshot(serial);
-          if (!stop) setImg(d);
+          const d = await api.screenshotPng(serial);
+          if (!stop) showImg(URL.createObjectURL(new Blob([d as BlobPart], { type: 'image/png' })));
         } catch {
           /* 일시적 실패 무시 */
         }
@@ -64,7 +77,7 @@ export function ScreenTab() {
   // 기기를 바꾸면 이전 기기의 해상도·화면으로 좌표를 계산하지 않게 비운 뒤 새로 받는다
   useEffect(() => {
     setInfo(null);
-    setImg('');
+    showImg('');
     if (!serial) return;
     let alive = true;
     run(api.deviceInfo(serial)).then((i) => alive && i && setInfo(i));
