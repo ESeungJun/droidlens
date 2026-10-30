@@ -16,6 +16,8 @@ export interface ScenarioStep {
   detail?: string;
   screenshot?: string;
   screen?: string;
+  /** 스크린샷 비교 단계: 어느 기준 이미지와 비교했는지와 지금 화면 파일 (screenshot 은 차이 이미지). 기준으로 받아들일 때 쓴다 */
+  baseline?: { app: string; name: string; actual: string };
 }
 
 export interface ScenarioData {
@@ -43,14 +45,25 @@ export class Scenario {
     return s;
   }
 
-  async step(title: string, status: StepStatus, opts: { detail?: string; png?: Buffer; screen?: string } = {}): Promise<ScenarioStep> {
+  async step(
+    title: string,
+    status: StepStatus,
+    opts: { detail?: string; png?: Buffer; screen?: string; baseline?: { app: string; name: string; actualPng: Buffer } } = {},
+  ): Promise<ScenarioStep> {
     const index = this.data.steps.length + 1;
+    const prefix = `step-${String(index).padStart(3, '0')}`;
     let screenshot: string | undefined;
     if (opts.png) {
-      screenshot = `step-${String(index).padStart(3, '0')}.png`;
+      screenshot = `${prefix}.png`;
       await writeFile(join(this.data.dir, screenshot), opts.png);
     }
-    const step: ScenarioStep = { index, at: Date.now(), title, status, detail: opts.detail, screenshot, screen: opts.screen };
+    let baseline: ScenarioStep['baseline'];
+    if (opts.baseline) {
+      const actual = `${prefix}-actual.png`;
+      await writeFile(join(this.data.dir, actual), opts.baseline.actualPng);
+      baseline = { app: opts.baseline.app, name: opts.baseline.name, actual };
+    }
+    const step: ScenarioStep = { index, at: Date.now(), title, status, detail: opts.detail, screenshot, screen: opts.screen, baseline };
     this.data.steps.push(step);
     await this.persist();
     return step;
@@ -84,6 +97,7 @@ export function renderReport(d: ScenarioData): string {
   ${s.detail ? `<pre>${esc(s.detail)}</pre>` : ''}
   ${s.screen ? `<div class="screen">${esc(s.screen)}</div>` : ''}
   ${s.screenshot ? `<img loading="lazy" src="${s.screenshot}" alt="step ${s.index}">` : ''}
+  ${s.baseline ? `<div class="screen">지금 화면: <a href="${esc(s.baseline.actual)}">${esc(s.baseline.actual)}</a></div>` : ''}
 </article>`,
     )
     .join('\n');
