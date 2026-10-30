@@ -243,6 +243,8 @@ export async function perfSample(
     opts.pid ? `set -- ${Math.trunc(opts.pid)}` : `set -- $(pidof ${pkg})`,
     '[ -n "$1" ] && [ -e /proc/$1 ] || exit 0',
     'echo "pids $*"',
+    // 같은 이름의 프로세스가 여럿이면 덤프하지 않고 pid 만 알린다 (아래에서 맞는 pid 로 다시 부른다)
+    '[ $# -eq 1 ] || exit 0',
     ...cpu,
     memory ? 'dumpsys meminfo $1' : 'true',
     `echo ${MARK}`,

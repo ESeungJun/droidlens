@@ -1,7 +1,5 @@
 package io.github.eseungjun.droidlens.sdk;
 
-import android.util.Log;
-
 import java.io.IOException;
 import java.net.SocketTimeoutException;
 import java.nio.charset.StandardCharsets;
@@ -68,7 +66,8 @@ public final class DroidLensInterceptor implements Interceptor {
         }
         MockStore.Rule mock = null;
         try {
-            mock = MockStore.get().match(request.method(), request.url().toString());
+            // addNetworkInterceptor 로 달린 경우 proceed 를 꼭 한 번 불러야 해서(안 부르면 OkHttp 가 예외) 응답 목은 맞추지 않는다
+            mock = MockStore.get().match(request.method(), request.url().toString(), !isNetworkInterceptor(chain));
             if (mock != null) e.mockId = mock.id;
         } catch (Throwable ignored) {
             // 목 확인에 실패하면 실제로 보낸다
@@ -150,11 +149,6 @@ public final class DroidLensInterceptor implements Interceptor {
      * 지연이 앱의 readTimeout 보다 길면 실제 서버가 느릴 때처럼 그 시간 뒤 SocketTimeoutException 으로 끝낸다
      */
     private static Response mocked(Chain chain, Request request, MockStore.Rule mock) throws IOException {
-        // addNetworkInterceptor 로 달린 경우 proceed 를 꼭 한 번 불러야 해서(안 부르면 OkHttp 가 예외) 응답 목은 할 수 없다
-        if (mock.status != 0 && isNetworkInterceptor(chain)) {
-            Log.w(DroidLens.TAG, "DroidLensInterceptor 가 addNetworkInterceptor 로 달려 있어 응답 목을 건너뜁니다. addInterceptor 로 다세요");
-            return chain.proceed(request);
-        }
         long timeout = readTimeoutMillis(chain);
         boolean timesOut = timeout > 0 && mock.delayMs > timeout;
         long until = System.currentTimeMillis() + (timesOut ? timeout : mock.delayMs);
