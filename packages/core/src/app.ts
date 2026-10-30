@@ -302,8 +302,10 @@ export function streamLogcat(
   if (opts.pid) args.push(`--pid=${opts.pid}`);
   const proc = dev.spawn(args);
   let buf = '';
-  proc.stdout!.on('data', (chunk: Buffer) => {
-    buf += chunk.toString('utf8');
+  // 청크 경계에서 잘린 한글 등 여러 바이트 글자가 깨지지 않게 문자열 디코딩을 스트림에 맡긴다
+  proc.stdout!.setEncoding('utf8');
+  proc.stdout!.on('data', (chunk: string) => {
+    buf += chunk;
     const parts = buf.split('\n');
     buf = parts.pop() ?? '';
     for (const p of parts) {
