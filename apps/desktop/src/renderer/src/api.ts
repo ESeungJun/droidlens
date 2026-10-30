@@ -81,6 +81,8 @@ export type ChatEvent =
   | { kind: 'toolResult'; id: string; text: string; isError: boolean }
   | { kind: 'done'; sessionId?: string; costUsd?: number; durationMs?: number; error?: string }
   | { kind: 'stderr'; text: string };
+/** 메인이 보내는 대화 이벤트. run 은 보낼 때 준 실행 번호 */
+export type ChatMessage = ChatEvent & { run: number };
 
 export interface ScriptEntry {
   file: string;
@@ -117,6 +119,7 @@ export const api = {
   avdStop: (s: string) => call<void>('avdStop', s),
   deviceInfo: (s: string) => call<DeviceInfo>('deviceInfo', s),
   screenshot: (s: string) => call<string>('screenshot', s),
+  screenshotPng: (s: string) => call<Uint8Array>('screenshotPng', s),
   saveScreenshot: (s: string, label?: string) => call<string>('saveScreenshot', s, label),
   snapshot: (s: string) => call<SnapshotDTO>('snapshot', s),
   currentScreen: (s: string) => call<CurrentScreen>('currentScreen', s),
@@ -125,6 +128,8 @@ export const api = {
   swipe: (s: string, x1: number, y1: number, x2: number, y2: number, ms?: number) => call<void>('swipe', s, x1, y1, x2, y2, ms),
   key: (s: string, key: string) => call<void>('key', s, key),
   typeText: (s: string, t: string) => call<void>('typeText', s, t),
+  /** 이 기기에서 진행 중인 녹화의 시작 시각 (없으면 null) */
+  recordStatus: (s: string) => call<number | null>('recordStatus', s),
   recordStart: (s: string) => call<number>('recordStart', s),
   recordStop: (s: string) => call<string>('recordStop', s),
   packages: (s: string, thirdPartyOnly: boolean) => call<PackageSummary[]>('packages', s, thirdPartyOnly),
@@ -135,8 +140,9 @@ export const api = {
   deeplink: (s: string, uri: string, pkg?: string) => call<string>('deeplink', s, uri, pkg),
   analyzeLibraries: (s: string, pkg: string) => call<ApkAnalysis>('analyzeLibraries', s, pkg),
   crashes: (s: string, pkg?: string) => call<string[]>('crashes', s, pkg),
-  logcatStart: (s: string, pkg?: string) => call<number | null>('logcatStart', s, pkg),
-  logcatStop: () => call<void>('logcatStop'),
+  /** id: 이 스트림을 가리키는 번호 (로그·종료 이벤트에 그대로 실려 와 이전 스트림 것과 구분한다) */
+  logcatStart: (s: string, pkg: string | undefined, id: number) => call<number | null>('logcatStart', s, pkg, id),
+  logcatStop: (id?: number) => call<void>('logcatStop', id),
   graphGet: (pkg: string) => call<GraphData>('graphGet', pkg),
   graphImage: (pkg: string, file: string) => call<string>('graphImage', pkg, file),
   graphRecord: (s: string, pkg: string, action: GraphAction) =>
@@ -165,12 +171,13 @@ export const api = {
   agentStatus: (s: string) => call<AgentStatus>('agentStatus', s),
   agentStart: (s: string) => call<AgentStatus>('agentStart', s),
   agentStop: (s: string) => call<AgentStatus>('agentStop', s),
-  mirrorStart: (s: string, maxSize?: number) => call<boolean>('mirrorStart', s, maxSize),
-  mirrorStop: () => call<void>('mirrorStop'),
-  onMirrorSession: (fn: (p: { width: number; height: number }) => void) => window.dl.on('mirror:session', (p) => fn(p as never)),
-  onMirrorPacket: (fn: (p: { data: Uint8Array; config: boolean; key: boolean; pts: number }) => void) =>
+  /** id: 이 세션을 가리키는 번호 (이벤트에 그대로 실려 와 이전 세션 것과 구분한다) */
+  mirrorStart: (s: string, maxSize: number | undefined, id: number) => call<boolean>('mirrorStart', s, maxSize, id),
+  mirrorStop: (id?: number) => call<void>('mirrorStop', id),
+  onMirrorSession: (fn: (p: { id: number; width: number; height: number }) => void) => window.dl.on('mirror:session', (p) => fn(p as never)),
+  onMirrorPacket: (fn: (p: { id: number; data: Uint8Array; config: boolean; key: boolean; pts: number }) => void) =>
     window.dl.on('mirror:packet', (p) => fn(p as never)),
-  onMirrorClosed: (fn: (p: { reason?: string }) => void) => window.dl.on('mirror:closed', (p) => fn(p as never)),
+  onMirrorClosed: (fn: (p: { id: number; reason?: string }) => void) => window.dl.on('mirror:closed', (p) => fn(p as never)),
   scriptsList: () => call<ScriptEntry[]>('scriptsList'),
   scriptRead: (name: string) => call<string>('scriptRead', name),
   scriptWrite: (name: string, yaml: string) => call<string>('scriptWrite', name, yaml),
@@ -179,9 +186,9 @@ export const api = {
   scriptStop: () => call<void>('scriptStop'),
   onScriptProgress: (fn: (p: ScriptProgress) => void) => window.dl.on('script:progress', (p) => fn(p as ScriptProgress)),
   chatStatus: () => call<{ version: string }>('chatStatus'),
-  chatSend: (req: { message: string; agent: string; sessionId?: string; serial?: string; packageName?: string }) => call<boolean>('chatSend', req),
+  chatSend: (req: { runId: number; message: string; agent: string; sessionId?: string; serial?: string; packageName?: string }) => call<boolean>('chatSend', req),
   chatStop: () => call<void>('chatStop'),
-  onChatEvent: (fn: (e: ChatEvent) => void) => window.dl.on('chat:event', (p) => fn(p as ChatEvent)),
+  onChatEvent: (fn: (e: ChatMessage) => void) => window.dl.on('chat:event', (p) => fn(p as ChatMessage)),
   sdkApps: (s: string) => call<string[]>('sdkApps', s),
   sdk: <T,>(s: string, pkg: string, method: string, ...args: unknown[]) => call<T>('sdk', s, pkg, method, ...args),
   updateCheck: () => call<UpdateInfo>('updateCheck'),
@@ -197,7 +204,8 @@ export const api = {
   installAgents: () => call<string[]>('installAgents'),
   copy: (t: string) => call<void>('copy', t),
   openExternal: (url: string) => call<void>('openExternal', url),
-  onLogcat: (fn: (lines: LogLine[]) => void) => window.dl.on('logcat', (p) => fn(p as LogLine[])),
+  onLogcat: (fn: (p: { id: number; lines: LogLine[] }) => void) => window.dl.on('logcat', (p) => fn(p as never)),
+  onLogcatClosed: (fn: (p: { id: number }) => void) => window.dl.on('logcat:closed', (p) => fn(p as never)),
   onProgress: (fn: (p: Progress) => void) => window.dl.on('progress', (p) => fn(p as Progress)),
 };
 
