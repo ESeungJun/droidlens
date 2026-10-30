@@ -1,4 +1,4 @@
-import { DeviceAdb } from './adb.js';
+import { DeviceAdb, isPackageProcess } from './adb.js';
 import { LocalHttpClient } from './http.js';
 
 /**
@@ -151,11 +151,10 @@ const clients = new Map<string, { client: SdkClient; pid: number }>();
 
 /**
  * forward 로 붙은 상대가 그 앱인지. abstract 소켓 이름은 어느 앱이나 먼저 열 수 있으므로
- * /info 가 알려 준 패키지·pid 가 실제 그 패키지 프로세스인지 확인한다 (다른 앱이 prefs·DB 요청을 가로채지 못하게)
+ * /info 가 알려 준 패키지·pid 가 실제 그 패키지 uid 로 도는 프로세스인지 확인한다 (다른 앱이 prefs·DB 요청을 가로채지 못하게)
  */
 async function verifyApp(dev: DeviceAdb, pkg: string, info: SdkInfo): Promise<void> {
-  const out = await dev.shell(`pidof ${pkg}`).catch(() => '');
-  if (info.package !== pkg || !out.trim().split(/\s+/).map(Number).includes(info.pid)) {
+  if (info.package !== pkg || !(await isPackageProcess(dev, pkg, info.pid))) {
     throw new Error(`${pkg}의 SDK 소켓을 다른 프로세스가 열고 있어 연결하지 않습니다`);
   }
 }
