@@ -40,8 +40,15 @@ final class AgentServer {
      * adb를 거친 연결(shell 2000 / root 0)만 받는다.
      */
     void serveForever() throws Exception {
-        LocalServerSocket server = new LocalServerSocket(socketName);
-        Log.i(AgentInstrumentation.TAG, "listening on localabstract:" + socketName);
+        LocalServerSocket server;
+        try {
+            server = new LocalServerSocket(socketName);
+        } catch (java.io.IOException e) {
+            // 다른 에이전트 인스턴스나 다른 앱이 같은 이름을 먼저 열었다. 호스트가 원인을 알 수 있게 분명히 남긴다
+            throw new java.io.IOException("localabstract:" + socketName + " 을 열지 못했습니다 (이미 다른 프로세스가 사용 중일 수 있음, pid "
+                    + Process.myPid() + ")", e);
+        }
+        Log.i(AgentInstrumentation.TAG, "listening on localabstract:" + socketName + " (pid " + Process.myPid() + ")");
         while (true) {
             try (LocalSocket s = server.accept()) {
                 int uid = s.getPeerCredentials().getUid();

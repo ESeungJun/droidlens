@@ -40,7 +40,7 @@ public class AgentInstrumentation extends Instrumentation {
         try {
             new AgentServer(this, ui, tracker, SOCKET_NAME).serveForever();
         } catch (Exception e) {
-            Log.e(TAG, "server stopped", e);
+            Log.e(TAG, "server stopped: " + e.getMessage(), e);
             Bundle result = new Bundle();
             result.putString("error", String.valueOf(e));
             finish(1, result);
