@@ -79,6 +79,8 @@ export async function startMirror(dev: DeviceAdb, h: MirrorHandlers, opts: Mirro
   let stderr = '';
   proc.stderr?.on('data', (d: Buffer) => (stderr += d.toString()));
   proc.stdout?.on('data', (d: Buffer) => (stderr += d.toString()));
+  // adb 실행 실패 등은 error 이벤트로 온다. 리스너가 없으면 uncaught 예외로 프로세스가 죽는다
+  proc.on('error', (e) => (stderr += e.message));
 
   let stopped = false;
   let sock: Socket | undefined;
@@ -121,6 +123,13 @@ export async function startMirror(dev: DeviceAdb, h: MirrorHandlers, opts: Mirro
     throw new Error(`scrcpy 서버에 연결하지 못했습니다 ${stderr.trim().slice(0, 300)}`);
   }
 
+  const closed = (reason?: string) => {
+    if (stopped) return;
+    stopped = true;
+    cleanup();
+    h.onClose(reason);
+  };
+
   // 스트림 파서
   let buf: Buffer = Buffer.alloc(0);
   let codecRead = false;
@@ -155,18 +164,12 @@ export async function startMirror(dev: DeviceAdb, h: MirrorHandlers, opts: Mirro
         buf = buf.subarray(12 + size);
       }
     } catch (e) {
-      stopped = true;
-      cleanup();
-      h.onClose((e as Error).message);
+      closed((e as Error).message);
     }
   });
-  sock.on('close', () => {
-    if (!stopped) {
-      stopped = true;
-      cleanup();
-      h.onClose(stderr.trim().slice(-500) || undefined);
-    }
-  });
+  // 연결 확인 때 붙였던 error 리스너는 떼었으므로, 미러링 중 ECONNRESET 등이 프로세스를 죽이지 않게 다시 붙인다
+  sock.on('error', (e) => closed(e.message));
+  sock.on('close', () => closed(stderr.trim().slice(-500) || undefined));
   sock.resume();
 
   return {

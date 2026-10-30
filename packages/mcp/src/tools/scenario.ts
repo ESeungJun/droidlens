@@ -1,15 +1,77 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
-import { readFile, writeFile } from 'node:fs/promises';
+import { lstat, readFile, realpath, stat, writeFile } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
-import { basename, join } from 'node:path';
+import { homedir } from 'node:os';
+import { basename, dirname, extname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { z } from 'zod';
 import * as dl from '@droidlens/core';
 import { device, text, serialArg, acts, readOnly, recorder } from '../common.js';
 
+const isYaml = (p: string) => ['.yaml', '.yml'].includes(extname(p).toLowerCase());
+
+/** p 가 root 안(같은 곳 포함)인지 */
+const within = (root: string, p: string) => {
+  const r = relative(root, p);
+  return r === '' || (!r.startsWith('..') && !isAbsolute(r));
+};
+
+/**
+ * cwd 가 프로젝트 폴더로 보이는지: git 저장소 루트이거나 홈 아래 두 단계 이상(~/Desktop/app).
+ * 홈·루트와 얕은 폴더(~/Desktop, /Users, /tmp)는 다른 파일이 너무 많이 들어 있어 허용 범위로 쓰지 않는다
+ */
+function isProjectDir(cwd: string, home: string): boolean {
+  if (within(cwd, home)) return false; // 홈 자체이거나 홈을 품은 폴더(/Users, /)
+  const underHome = within(home, cwd) ? relative(home, cwd).split(sep).length : 0;
+  return underHome >= 2 || existsSync(join(cwd, '.git'));
+}
+
+/** 허용하는 폴더: scripts 폴더 + 실행이면 MCP 서버를 띄운 프로젝트 폴더(cwd) */
+async function allowedRoots(run: boolean): Promise<string[]> {
+  const dir = await realpath(await dl.scriptsDir());
+  if (!run) return [dir];
+  const cwd = await realpath(process.cwd()).catch(() => undefined);
+  const home = await realpath(homedir()).catch(() => homedir());
+  return cwd && isProjectDir(cwd, home) ? [dir, cwd] : [dir];
+}
+
+/**
+ * 도구 인자 경로 → 허용된 폴더 안의 실제 경로 (심볼릭 링크를 따라간 것). 도구 인자는 화면·문서에 심어진 지시(프롬프트 인젝션)로
+ * 채워질 수 있으므로 scripts 폴더 밖 파일은 읽거나 쓰지 않는다. 상대 경로는 scripts 폴더 기준이고,
+ * 실행(script_run·suite_run)이면 cwd 안의 스크립트도 허용하며 cwd 기준으로 있는 파일을 먼저 쓴다 (CLI 처럼 프로젝트 상대 경로를 넘기는 경우)
+ */
+async function guardPath(input: string, run: boolean): Promise<string> {
+  const roots = await allowedRoots(run);
+  const p = run && existsSync(resolve(input)) ? resolve(input) : resolve(roots[0], input);
+  // 아직 없는 파일(새로 쓰는 스크립트)은 부모 폴더만 따라간다. 다만 깨진 심볼릭 링크도 "없는 파일"로 보이는데
+  // 그대로 쓰면 링크가 가리키는 폴더 밖에 쓰게 되므로 거부한다
+  if (!existsSync(p) && (await lstat(p).then((st) => st.isSymbolicLink(), () => false))) {
+    throw new Error(`대상이 없는 심볼릭 링크라 쓸 수 없습니다: ${input}`);
+  }
+  const real = existsSync(p) ? await realpath(p) : join(await realpath(dirname(p)).catch(() => dirname(p)), basename(p));
+  if (!roots.some((r) => within(r, real))) throw new Error(`스크립트 폴더(${roots.join(', ')}) 밖의 경로는 쓸 수 없습니다: ${input}`);
+  return real;
+}
+
 /** 스크립트 이름 또는 경로 → 파일 경로 (이름이면 ~/.droidlens/scripts/<이름>.yaml) */
-async function scriptPath(nameOrPath: string): Promise<string> {
-  if (nameOrPath.includes('/') || nameOrPath.endsWith('.yaml') || nameOrPath.endsWith('.yml')) return nameOrPath;
-  return join(await dl.scriptsDir(), `${dl.safeName(nameOrPath)}.yaml`);
+async function scriptPath(nameOrPath: string, run = false): Promise<string> {
+  const asPath = /[/\\]/.test(nameOrPath) || isYaml(nameOrPath);
+  const p = await guardPath(asPath ? nameOrPath : join(await dl.scriptsDir(), `${dl.safeName(nameOrPath)}.yaml`), run);
+  if (!isYaml(p)) throw new Error(`스크립트는 .yaml/.yml 파일이어야 합니다: ${nameOrPath}`);
+  return p;
+}
+
+/** suite_run 경로 (폴더 또는 스크립트 파일). 생략하면 scripts 폴더 */
+async function suitePath(path: string | undefined): Promise<string> {
+  const p = path ? await guardPath(path, true) : await realpath(await dl.scriptsDir());
+  if (!existsSync(p)) throw new Error(`경로를 찾을 수 없습니다: ${path}`);
+  if (!(await stat(p)).isDirectory()) return scriptPath(p, true);
+  // 폴더 안의 스크립트도 바깥을 가리키는 심볼릭 링크일 수 있어 하나씩 실제 경로를 확인한다
+  const roots = await allowedRoots(true);
+  for (const f of await dl.collectScripts(p)) {
+    const real = await realpath(f);
+    if (!roots.some((r) => within(r, real))) throw new Error(`스크립트 폴더 밖을 가리키는 파일이 있어 실행하지 않습니다: ${f}`);
+  }
+  return p;
 }
 
 const assertionSchema = z
@@ -46,7 +108,8 @@ export function register(server: McpServer): void {
         packageName,
         device: info ? `${info.manufacturer} ${info.model} (Android ${info.androidVersion})` : dev.serial,
       });
-      since = Date.now() - 2000;
+      // 검사가 비교하는 시각(네트워크·이벤트·크래시)은 기기 시계 기준이다
+      since = (await dl.deviceTime(dev).catch(() => Date.now())) - 2000;
       recorder.active = true;
       recorder.app = packageName;
       recorder.steps = [];
@@ -204,12 +267,13 @@ export function register(server: McpServer): void {
       inputSchema: { ...serialArg, script: z.string().describe('이름 또는 경로') },
       annotations: acts,
     },
-    async ({ serial, script }) => {
+    async ({ serial, script }, extra) => {
       const dev = await device(serial);
-      const p = await scriptPath(script);
+      const p = await scriptPath(script, true);
       const lines: string[] = [];
       const r = await dl.runScript(dev, await dl.loadScript(p), {
         sourcePath: p,
+        signal: extra.signal,
         onStep: (e) => {
           if (e.status !== 'running') lines.push(`${e.index + 1}/${e.total} ${e.status.toUpperCase()} ${e.title}${e.detail && e.status === 'fail' ? `\n    ${e.detail.replace(/\n/g, '\n    ')}` : ''}`);
         },
@@ -221,13 +285,14 @@ export function register(server: McpServer): void {
   server.registerTool(
     'suite_run',
     {
-      description: '폴더 안의 모든 스크립트(*.yaml)를 차례로 실행하는 회귀 테스트. path를 생략하면 ~/.droidlens/scripts',
+      description: '폴더 안의 모든 스크립트(*.yaml)를 차례로 실행하는 회귀 테스트. path를 생략하면 ~/.droidlens/scripts. ' +
+        '그 폴더나 MCP 서버를 띄운 프로젝트 폴더 안만 실행할 수 있다',
       inputSchema: { ...serialArg, path: z.string().optional() },
       annotations: acts,
     },
-    async ({ serial, path }) => {
+    async ({ serial, path }, extra) => {
       const dev = await device(serial);
-      const r = await dl.runSuite(dev, path ?? (await dl.scriptsDir()));
+      const r = await dl.runSuite(dev, await suitePath(path), { signal: extra.signal });
       const rows = r.results.map((x) =>
         x.error
           ? `✗ ${x.name}: ${x.error.split('\n')[0]}`

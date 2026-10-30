@@ -131,7 +131,7 @@ export function register(server: McpServer): void {
       const r = await (await dl.sdkFor(await device(serial), packageName)).query(db, sql, write);
       if (r.changes !== undefined) return text(`${r.changes}행 변경`);
       const rows = (r.rows ?? []).map((row) => row.map((v) => (v === null ? 'NULL' : String(v))).join(' | '));
-      return text([(r.columns ?? []).join(' | '), ...rows, r.truncated ? `… 총 ${r.total}행 중 500행` : `(${r.total}행)`].join('\n'));
+      return text([(r.columns ?? []).join(' | '), ...rows, r.truncated ? (r.totalExact === false ? `… 500행 넘음, 500행만 표시` : `… 총 ${r.total}행 중 500행`) : `(${r.total}행)`].join('\n'));
     },
   );
 

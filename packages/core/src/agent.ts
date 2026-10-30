@@ -1,6 +1,6 @@
 import { existsSync } from 'node:fs';
 import { dirname, join } from 'node:path';
-import { DeviceAdb, sleep } from './adb.js';
+import { DeviceAdb, isPackageProcess, sleep } from './adb.js';
 import { LocalHttpClient } from './http.js';
 import { droidlensHome } from './workspace.js';
 
@@ -12,7 +12,7 @@ import { droidlensHome } from './workspace.js';
  */
 
 export const AGENT_PACKAGE = 'io.github.eseungjun.droidlens.agent';
-export const AGENT_VERSION = 3;
+export const AGENT_VERSION = 4;
 /** 에이전트는 TCP가 아닌 abstract 유닉스 소켓으로 열고 adb(shell) 연결만 받는다 */
 const AGENT_REMOTE = 'localabstract:droidlens_agent';
 const INSTRUMENT = `${AGENT_PACKAGE}/.AgentInstrumentation`;
@@ -38,13 +38,22 @@ export function agentDisabled(): boolean {
 
 export class AgentClient {
   private readonly http: LocalHttpClient;
+  /** 에이전트 패키지 프로세스로 확인한 pid 와 마지막으로 확인한 시각 */
+  pid = 0;
+  checkedAt = 0;
 
   constructor(readonly serial: string, readonly port: number) {
     this.http = new LocalHttpClient(port, 'agent');
   }
 
-  private req(method: 'GET' | 'POST', path: string, query?: Record<string, string>, timeoutMs = 10_000): Promise<string> {
-    return this.http.text(method, path, { query, timeoutMs });
+  private async req(method: 'GET' | 'POST', path: string, query?: Record<string, string>, timeoutMs = 10_000): Promise<string> {
+    try {
+      return await this.http.text(method, path, { query, timeoutMs });
+    } catch (e) {
+      // 연결 자체가 안 되면 에이전트 프로세스가 죽은 것이라 캐시에서 버린다 (다음 ensureAgent 가 다시 띄운다)
+      if (isConnectionError(e) && clients.get(this.serial) === this) clients.delete(this.serial);
+      throw e;
+    }
   }
 
   async ping(): Promise<{ ok: boolean; version: number; pid: number }> {
@@ -70,6 +79,25 @@ export class AgentClient {
   }
 }
 
+const CONNECTION_CODES = new Set(['ECONNREFUSED', 'ECONNRESET', 'EPIPE', 'ECONNABORTED', 'UND_ERR_SOCKET']);
+
+/**
+ * 연결이 안 되거나 끊긴 실패 (fetch 가 TypeError 'fetch failed' 로 던진다). 에이전트가 죽었다는 뜻이다.
+ * ECONNRESET 등은 응답을 읽다가도 나므로 기기에서 이미 실행됐을 수 있다 (다시 보내도 되는지는 요청마다 다르다).
+ * 응답 처리 코드의 TypeError(버그)까지 연결 실패로 보지 않게 메시지·원인 코드로 가린다
+ */
+export function isConnectionError(e: unknown): boolean {
+  if (!(e instanceof TypeError)) return false;
+  const code = (e.cause as { code?: unknown } | undefined)?.code;
+  return e.message === 'fetch failed' || (typeof code === 'string' && CONNECTION_CODES.has(code));
+}
+
+/** 요청이 시간 안에 끝나지 않음 (fetch 의 AbortSignal.timeout 이 TimeoutError 로 던진다) */
+export function isTimeoutError(e: unknown): boolean {
+  const name = (e as { name?: unknown } | undefined)?.name;
+  return name === 'TimeoutError' || name === 'AbortError';
+}
+
 const clients = new Map<string, AgentClient>();
 const failed = new Map<string, number>(); // serial → 실패 시각 (잠시 재시도 안 함)
 const lastError = new Map<string, string>(); // serial → 마지막 실패 원인 (UI에 표시)
@@ -91,6 +119,12 @@ export function agentFor(serial: string): AgentClient | undefined {
   return clients.get(serial);
 }
 
+/** 캐시된 에이전트를 재확인해 돌려준다 (새로 띄우지 않는다). 없거나 다른 프로세스로 바뀌었으면 undefined */
+export async function checkedAgent(dev: DeviceAdb): Promise<AgentClient | undefined> {
+  const c = clients.get(dev.serial);
+  return c && (await stillAgent(dev, c)) ? c : undefined;
+}
+
 /** 연결된 에이전트를 버린다 (요청 실패 시 다음에 다시 연결) */
 export function dropAgent(serial: string): void {
   clients.delete(serial);
@@ -105,13 +139,53 @@ async function installedVersion(dev: DeviceAdb): Promise<number | undefined> {
 const forward = (dev: DeviceAdb) => dev.forward(AGENT_REMOTE);
 
 /**
+ * forward 로 붙은 상대가 진짜 에이전트인지. abstract 소켓 이름은 어느 앱이나 먼저 열 수 있으므로
+ * ping 이 알려 준 pid 가 에이전트 패키지 uid 로 도는 프로세스인지 확인한다 (다른 앱이 덤프·입력 텍스트를 가로채지 못하게)
+ */
+async function verifyAgent(dev: DeviceAdb, client: AgentClient, pid: number): Promise<boolean> {
+  if (!(await isPackageProcess(dev, AGENT_PACKAGE, pid))) return false;
+  // 확인한 pid 를 남겨 두고 캐시를 쓸 때 ping 의 pid 와 비교한다
+  client.pid = pid;
+  client.checkedAt = Date.now();
+  return true;
+}
+
+/** 확인한 지 이만큼 지난 캐시는 쓰기 전에 다시 본다 (에이전트가 죽은 자리를 다른 앱이 차지했을 수 있다) */
+const RECHECK_MS = 5000;
+
+/**
+ * 캐시된 연결이 아직 확인한 에이전트인지. 요청마다 왕복을 늘리지 않게 RECHECK_MS 마다만 ping 의 pid 를 비교한다.
+ * 에이전트는 연결을 순서대로 처리하므로 긴 요청(/idle·/hierarchy) 뒤에 줄 선 ping 은 시간 초과될 수 있다.
+ * 시간 초과는 그것만으로 믿지 않고(소켓을 차지한 다른 앱이 일부러 늦출 수 있다) 확인해 둔 pid 가 아직 에이전트 프로세스인지 본다.
+ * 연결 오류는 req 가 이미 캐시에서 뺐다
+ */
+async function stillAgent(dev: DeviceAdb, c: AgentClient): Promise<boolean> {
+  if (Date.now() - c.checkedAt < RECHECK_MS) return true;
+  let pid: number;
+  try {
+    pid = (await c.ping()).pid;
+  } catch (e) {
+    // abstract 소켓 이름은 연 프로세스가 살아 있는 동안 다른 앱이 열 수 없으므로, 확인한 에이전트 프로세스가 살아 있으면 소켓도 그대로다
+    pid = isTimeoutError(e) && clients.get(c.serial) === c && (await isPackageProcess(dev, AGENT_PACKAGE, c.pid)) ? c.pid : -1;
+  }
+  if (pid === c.pid) {
+    c.checkedAt = Date.now();
+    return true;
+  }
+  // pid 가 바뀌었거나 에이전트 프로세스가 사라졌거나 에이전트답지 않은 응답이면 처음부터 다시 확인한다
+  if (clients.get(c.serial) === c) clients.delete(c.serial);
+  return false;
+}
+const IMPOSTOR = '에이전트 소켓을 에이전트가 아닌 프로세스가 열고 있어 연결하지 않습니다';
+
+/**
  * 에이전트를 준비한다: 필요하면 설치/업데이트 → 실행(기기에서 setsid로 분리해 호스트 종료 후에도 유지) → 포트 포워딩 → ping.
  * 실패하면 undefined (호출부는 uiautomator 사용).
  */
 export async function ensureAgent(dev: DeviceAdb, opts: { force?: boolean } = {}): Promise<AgentClient | undefined> {
   if (agentDisabled()) return undefined;
   const cached = clients.get(dev.serial);
-  if (cached) return cached;
+  if (cached && (await stillAgent(dev, cached))) return cached;
   const lastFail = failed.get(dev.serial);
   if (!opts.force && lastFail && Date.now() - lastFail < 60_000) return undefined;
   const inflight = starting.get(dev.serial);
@@ -124,6 +198,7 @@ export async function ensureAgent(dev: DeviceAdb, opts: { force?: boolean } = {}
       // 이미 떠 있으면 바로 사용 (다른 DroidLens 프로세스가 띄웠을 수 있음)
       const alive = await client.ping().catch(() => undefined);
       if (alive && alive.version === AGENT_VERSION) {
+        if (!(await verifyAgent(dev, client, alive.pid))) throw new Error(IMPOSTOR);
         clients.set(dev.serial, client);
         return client;
       }
@@ -140,6 +215,7 @@ export async function ensureAgent(dev: DeviceAdb, opts: { force?: boolean } = {}
         await sleep(500);
         const r = await client.ping().catch(() => undefined);
         if (r?.ok && r.version === AGENT_VERSION) {
+          if (!(await verifyAgent(dev, client, r.pid))) throw new Error(IMPOSTOR);
           clients.set(dev.serial, client);
           failed.delete(dev.serial);
           lastError.delete(dev.serial);
@@ -159,10 +235,38 @@ export async function ensureAgent(dev: DeviceAdb, opts: { force?: boolean } = {}
   return p;
 }
 
-/** 에이전트 종료 (uiautomator dump를 다시 쓰려면 UiAutomation 연결을 놓아줘야 한다) */
-export async function stopAgent(dev: DeviceAdb): Promise<void> {
+/**
+ * 에이전트 종료 (uiautomator dump를 다시 쓰려면 UiAutomation 연결을 놓아줘야 한다).
+ * failure 를 주면 실패로 기록해 잠시(60초) 다시 띄우지 않는다 (호출마다 최대 25초씩 재시작하지 않게)
+ */
+export async function stopAgent(dev: DeviceAdb, failure?: string): Promise<void> {
   clients.delete(dev.serial);
+  if (failure) {
+    failed.set(dev.serial, Date.now());
+    lastError.set(dev.serial, failure);
+  }
   await dev.shell(`am force-stop ${AGENT_PACKAGE}`).catch(() => undefined);
+}
+
+/**
+ * 에이전트로 요청한다. 캐시된 연결이 끊겼으면(에이전트가 죽음) 다시 준비해 한 번만 더 보낸다.
+ * 연결이 응답 도중 끊기면 기기에서 이미 실행됐을 수 있으므로, 두 번 실행되면 결과가 달라지는 요청(텍스트 이어 붙이기 등)은
+ * retry=false 로 다시 보내지 않는다. 에이전트를 쓸 수 없으면 undefined (호출부가 대체 경로를 쓴다)
+ */
+export async function withAgent<T>(
+  dev: DeviceAdb,
+  fn: (a: AgentClient) => Promise<T>,
+  opts: { retry?: boolean } = {},
+): Promise<{ value: T } | undefined> {
+  for (let attempt = 0; ; attempt++) {
+    const agent = await ensureAgent(dev);
+    if (!agent) return undefined;
+    try {
+      return { value: await fn(agent) };
+    } catch (e) {
+      if (attempt > 0 || opts.retry === false || !isConnectionError(e)) throw e;
+    }
+  }
 }
 
 export async function agentStatus(
@@ -175,7 +279,7 @@ export async function agentStatus(
     if (port) c = new AgentClient(dev.serial, port);
   }
   const alive = c ? await c.ping().catch(() => undefined) : undefined;
-  const running = !!alive && alive.version === AGENT_VERSION;
+  const running = !!alive && !!c && alive.version === AGENT_VERSION && (await verifyAgent(dev, c, alive.pid));
   if (running && c) clients.set(dev.serial, c);
   return {
     installed: await installedVersion(dev),

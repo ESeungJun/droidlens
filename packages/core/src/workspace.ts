@@ -1,4 +1,4 @@
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
@@ -30,5 +30,17 @@ export async function readJson<T>(path: string): Promise<T | undefined> {
 }
 
 export async function writeJson(path: string, data: unknown): Promise<void> {
-  await writeFile(path, JSON.stringify(data, null, 2));
+  await writeFileAtomic(path, JSON.stringify(data, null, 2));
+}
+
+/** 임시 파일에 쓴 뒤 이름을 바꿔 덮는다. 다른 프로세스가 쓰는 도중의 반쪽 파일을 읽지 않게 */
+export async function writeFileAtomic(path: string, data: string | Uint8Array): Promise<void> {
+  const tmp = `${path}.${process.pid}.${Math.random().toString(36).slice(2)}.tmp`;
+  try {
+    await writeFile(tmp, data);
+    await rename(tmp, path);
+  } catch (e) {
+    await rm(tmp, { force: true }).catch(() => undefined);
+    throw e;
+  }
 }

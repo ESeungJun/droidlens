@@ -26,6 +26,9 @@ function codecFromConfig(data: Uint8Array): string {
   return 'avc1.42E01F';
 }
 
+/** 미러링 세션 번호. 화면이 바뀔 때마다 새로 받아 이전 세션의 늦은 패킷을 버린다 */
+let lastSessionId = 0;
+
 export const MirrorCanvas = forwardRef<
   MirrorHandle,
   {
@@ -43,6 +46,7 @@ export const MirrorCanvas = forwardRef<
   useImperativeHandle(ref, () => ({ canvas: canvasRef.current, videoSize: size }), [size]);
 
   useEffect(() => {
+    const id = ++lastSessionId;
     let decoder: VideoDecoder | null = null;
     let pendingConfig: Uint8Array | null = null;
     let configured = false;
@@ -77,11 +81,12 @@ export const MirrorCanvas = forwardRef<
     newDecoder();
 
     const offSession = api.onMirrorSession((s) => {
-      setSize(s);
+      if (s.id !== id) return;
+      setSize({ width: s.width, height: s.height });
       setStatus('');
     });
     const offPacket = api.onMirrorPacket((p) => {
-      if (!decoder || decoder.state === 'closed') return;
+      if (p.id !== id || !decoder || decoder.state === 'closed') return;
       if (p.config) {
         pendingConfig = p.data;
         // 회전 등으로 설정이 바뀌면 디코더를 새로 구성
@@ -104,7 +109,7 @@ export const MirrorCanvas = forwardRef<
       decoder.decode(new EncodedVideoChunk({ type: p.key ? 'key' : 'delta', timestamp: p.pts, data }));
     });
     const offClosed = api.onMirrorClosed((c) => {
-      if (!closed) onError(c.reason ? t('미러링이 끊겼습니다: {reason}', { reason: c.reason }) : t('미러링이 끊겼습니다'));
+      if (c.id === id && !closed) onError(c.reason ? t('미러링이 끊겼습니다: {reason}', { reason: c.reason }) : t('미러링이 끊겼습니다'));
     });
 
     // 화면이 정지해 있으면 scrcpy는 첫 프레임을 보내지 않으므로, 디코딩 전까지 스크린샷 한 장을 먼저 그려 둔다
@@ -125,7 +130,7 @@ export const MirrorCanvas = forwardRef<
       })
       .catch(() => undefined);
 
-    api.mirrorStart(serial, maxSize).catch((e) => onError((e as Error).message));
+    api.mirrorStart(serial, maxSize, id).catch((e) => !closed && onError((e as Error).message));
 
     return () => {
       closed = true;
@@ -133,7 +138,7 @@ export const MirrorCanvas = forwardRef<
       offSession();
       offPacket();
       offClosed();
-      api.mirrorStop().catch(() => undefined);
+      api.mirrorStop(id).catch(() => undefined);
       decoder?.close();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps

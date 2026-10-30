@@ -141,3 +141,35 @@ export function quoteShell(value: string): string {
 export function sleep(ms: number): Promise<void> {
   return new Promise((r) => setTimeout(r, ms));
 }
+
+/** serial|패키지 → 패키지 uid */
+const packageUids = new Map<string, number>();
+
+/** 여러 사용자(user 10 등)에서는 같은 앱도 사용자마다 uid 가 달라 앱 id(uid % 100000)로 비교한다 */
+const appId = (uid: number) => uid % 100_000;
+
+/**
+ * pid 프로세스가 그 패키지의 uid 로 도는지. 프로세스 이름(pidof)은 앱이 매니페스트 android:process 로
+ * 아무렇게나 지을 수 있어 믿지 않는다 (uid 는 같은 서명의 앱끼리만 나눠 쓸 수 있다).
+ * 프로세스 uid 와 패키지 uid 를 셸 명령 한 번으로 읽고, 패키지 uid 는 캐시해 다음부터는 프로세스 uid 만 읽는다
+ */
+export async function isPackageProcess(dev: DeviceAdb, pkg: string, pid: number): Promise<boolean> {
+  if (!/^[\w.]+$/.test(pkg) || !Number.isInteger(pid) || pid <= 0) return false;
+  const key = `${dev.serial}|${pkg}`;
+  const check = async (lookup: boolean) => {
+    // cmd package list packages -U 가 없는 예전 기기는 dumpsys 의 userId=(최근 버전은 appId=)로 대신한다
+    const pkgCmd = `cmd package list packages -U ${pkg} 2>/dev/null | grep -F 'package:${pkg} uid:' || dumpsys package ${pkg} | grep -m1 -E 'userId=|appId='`;
+    const out = await dev.shell(`stat -c %u /proc/${pid} 2>/dev/null${lookup ? `; echo '--'; ${pkgCmd}` : ''}`).catch(() => '');
+    const [proc, info = ''] = out.split('--');
+    if (lookup) {
+      const uid = Number(/(?:uid:|userId=|appId=)(\d+)/.exec(info)?.[1]);
+      if (uid > 0) packageUids.set(key, uid);
+      else packageUids.delete(key);
+    }
+    const procUid = /^\s*(\d+)\s*$/.exec(proc)?.[1];
+    const pkgUid = packageUids.get(key);
+    return procUid !== undefined && pkgUid !== undefined && appId(Number(procUid)) === appId(pkgUid);
+  };
+  // 캐시와 맞지 않으면 앱을 다시 설치해 uid 가 바뀌었을 수 있어 한 번 새로 읽는다
+  return (packageUids.has(key) && (await check(false))) || check(true);
+}

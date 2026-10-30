@@ -1,7 +1,7 @@
-import { createHash } from 'node:crypto';
+import { createHash, randomBytes } from 'node:crypto';
 import { XMLParser } from 'fast-xml-parser';
 import { DeviceAdb, sleep } from './adb.js';
-import { ensureAgent, stopAgent } from './agent.js';
+import { isConnectionError, isTimeoutError, stopAgent, withAgent } from './agent.js';
 
 export type Bounds = [left: number, top: number, right: number, bottom: number];
 
@@ -101,7 +101,18 @@ export function parseHierarchyXml(xml: string): Hierarchy {
   return { root, capturedAt: Date.now(), nodeCount, maxDepth };
 }
 
-const REMOTE_DUMP = '/sdcard/droidlens_ui.xml';
+
+/** serial → 에이전트 덤프가 연달아 실패한 횟수 */
+const agentDumpFailures = new Map<string, number>();
+/** 에이전트가 응답은 하는데 이만큼 연달아 덤프에 실패하면 내리고 잠시 uiautomator 로 대체한다 */
+const MAX_AGENT_DUMP_FAILURES = 3;
+
+/** uiautomator dump 출력과 덤프 파일 내용 사이 구분 줄 */
+const XML_MARK = '__DROIDLENS_XML__';
+
+const dumpByAgent = (dev: DeviceAdb) => withAgent(dev, async (a) => parseHierarchyXml(await a.hierarchyXml()));
+/** 에이전트가 죽었거나 멈춘 실패 (응답이 온 오류와 달리 다시 보내도 나아지지 않는다) */
+const agentBroken = (e: unknown) => isConnectionError(e) || isTimeoutError(e);
 
 /**
  * 뷰 계층 덤프. 온디바이스 에이전트가 있으면 그것을 쓰고(0.1~0.3초), 없으면 uiautomator dump.
@@ -109,22 +120,39 @@ const REMOTE_DUMP = '/sdcard/droidlens_ui.xml';
  * 다른 uiautomator 세션(예: Appium)이 떠 있으면 실패한다.
  */
 export async function dumpHierarchy(dev: DeviceAdb, retries = 3): Promise<Hierarchy> {
-  const agent = await ensureAgent(dev);
-  if (agent) {
-    try {
-      return parseHierarchyXml(await agent.hierarchyXml());
-    } catch {
-      // 에이전트가 UiAutomation을 쥐고 있으면 uiautomator dump가 실패하므로 내리고 대체한다
-      await stopAgent(dev);
+  try {
+    // 에이전트가 응답한 오류(화면 전환 중 루트 노드 없음 등)는 일시적일 수 있어 잠시 뒤 한 번 더 받아 본다
+    const r = await dumpByAgent(dev).catch(async (e) => {
+      if (agentBroken(e)) throw e;
+      await sleep(300);
+      return dumpByAgent(dev);
+    });
+    agentDumpFailures.delete(dev.serial);
+    if (r) return r.value;
+  } catch (e) {
+    const fails = (agentDumpFailures.get(dev.serial) ?? 0) + 1;
+    // 일시 오류면 에이전트를 두고 오류를 그대로 올린다 (한 번 실패로 60초씩 느린 uiautomator 로 떨어지지 않게).
+    // 연결이 끊겼거나 응답이 없거나 연달아 실패할 때만 내리고 잠시 uiautomator 만 쓴다.
+    // 에이전트가 UiAutomation 을 쥐고 있으면 uiautomator dump 가 실패하므로 대체하려면 내려야 한다
+    if (!agentBroken(e) && fails < MAX_AGENT_DUMP_FAILURES) {
+      agentDumpFailures.set(dev.serial, fails);
+      throw e;
     }
+    agentDumpFailures.delete(dev.serial);
+    await stopAgent(dev, `뷰 계층 조회 실패: ${(e as Error).message}`);
   }
+  // 덤프 파일은 호출마다 다른 이름으로 쓰고 지운다 (동시에 덤프하는 다른 호출·프로세스와 파일을 겹쳐 쓰지 않게).
+  // 덤프·읽기·지우기를 셸 명령 한 번에 묶어 왕복을 줄이고, 덤프가 실패해도 지우기는 실행된다
+  const remote = `/data/local/tmp/droidlens_ui_${randomBytes(6).toString('hex')}.xml`;
+  const cmd = `uiautomator dump --compressed ${remote} 2>&1; echo ${XML_MARK}; cat ${remote} 2>/dev/null; rm -f ${remote}`;
   let lastErr: unknown;
   for (let i = 0; i < retries; i++) {
     try {
-      const out = await dev.shell(`uiautomator dump --compressed ${REMOTE_DUMP}`, { timeoutMs: 20_000 });
-      if (!out.includes('dumped')) throw new Error(out.trim() || 'uiautomator dump 실패');
-      const xml = (await dev.execOut(`cat ${REMOTE_DUMP}`)).toString('utf8');
-      return parseHierarchyXml(xml);
+      const out = (await dev.execOut(cmd, { timeoutMs: 20_000 })).toString('utf8');
+      const at = out.indexOf(XML_MARK);
+      const status = at < 0 ? out : out.slice(0, at);
+      if (!status.includes('dumped')) throw new Error(status.trim() || 'uiautomator dump 실패');
+      return parseHierarchyXml(out.slice(at + XML_MARK.length).trimStart());
     } catch (e) {
       lastErr = e;
       await sleep(400);

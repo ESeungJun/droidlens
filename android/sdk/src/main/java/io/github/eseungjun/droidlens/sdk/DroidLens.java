@@ -1,9 +1,16 @@
 package io.github.eseungjun.droidlens.sdk;
 
+import android.app.Application;
 import android.content.Context;
+import android.os.Build;
+import android.os.Process;
 import android.util.Log;
 
 import org.json.JSONObject;
+
+import java.io.FileInputStream;
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 
 import io.github.eseungjun.droidlens.sdk.internal.EventStore;
 import io.github.eseungjun.droidlens.sdk.internal.Redactor;
@@ -23,21 +30,58 @@ public final class DroidLens {
 
     private DroidLens() {}
 
-    /** 수동 초기화. 자동 초기화를 끈 경우(매니페스트에서 provider 제거)에만 호출하면 된다. 여러 번 불러도 안전하다. */
+    /**
+     * 수동 초기화. 자동 초기화를 끈 경우(매니페스트에서 provider 제거)에만 호출하면 된다. 여러 번 불러도 안전하다.
+     * 소켓 이름이 패키지 단위라 한 앱에서 서버는 한 프로세스만 열 수 있다. 보조 프로세스에서 부르면 열지 못하고
+     * 그 프로세스의 네트워크는 기록되지 않는다.
+     */
     public static synchronized void init(Context context) {
-        if (server != null) return;
+        if (server != null && server.isRunning()) return;
+        server = null;
+        SdkServer s = null;
         try {
-            server = new SdkServer(context.getApplicationContext());
-            server.start();
-            Log.i(TAG, "DroidLens SDK " + BuildConfig.SDK_VERSION + " listening on " + server.socketName());
+            s = new SdkServer(context.getApplicationContext());
+            s.start();
+            server = s;
+            Log.i(TAG, "DroidLens SDK " + BuildConfig.SDK_VERSION + " listening on " + s.socketName() + " (" + processLabel() + ")");
         } catch (Exception e) {
-            Log.w(TAG, "DroidLens SDK를 시작하지 못했습니다", e);
-            server = null;
+            if (s != null && e instanceof IOException) {
+                // LocalServerSocket 바인드 실패: 같은 이름을 다른 프로세스가 이미 열었다
+                Log.e(TAG, "DroidLens SDK 소켓 localabstract:" + s.socketName() + " 을 열지 못했습니다. "
+                        + "같은 앱의 다른 프로세스(주 프로세스 등)가 이미 열었거나 다른 앱이 선점했을 수 있습니다. "
+                        + "이 프로세스(" + processLabel() + ")에서는 DroidLens 가 꺼집니다", e);
+            } else {
+                Log.w(TAG, "DroidLens SDK를 시작하지 못했습니다 (" + processLabel() + ")", e);
+            }
         }
     }
 
+    private static String processLabel() {
+        String name = null;
+        if (Build.VERSION.SDK_INT >= 28) {
+            name = Application.getProcessName();
+        } else {
+            try (FileInputStream in = new FileInputStream("/proc/self/cmdline")) {
+                byte[] buf = new byte[256];
+                int n = in.read(buf);
+                int end = 0;
+                while (end < n && buf[end] != 0) end++;
+                name = new String(buf, 0, end, StandardCharsets.UTF_8);
+            } catch (Exception ignored) {
+                // 이름을 못 읽으면 pid 만 쓴다
+            }
+        }
+        return "pid " + Process.myPid() + (name != null && !name.isEmpty() ? ", " + name : "");
+    }
+
+    /** SDK 버전. release 의 sdk-noop 은 "noop" 을 돌려주므로 BuildConfig 대신 이것을 쓰면 두 빌드 모두 컴파일된다 */
+    public static String version() {
+        return BuildConfig.SDK_VERSION;
+    }
+
     public static boolean isRunning() {
-        return server != null;
+        SdkServer s = server;
+        return s != null && s.isRunning();
     }
 
     /** DroidLens 이벤트 탭에 표시할 커스텀 이벤트 (분석 이벤트, 상태 변화 등) */

@@ -29,6 +29,7 @@ export const data: Record<string, string> = {
   'INSERT/UPDATE/DELETE 등 앱 데이터를 바꾸는 SQL 허용': 'Allow SQL that modifies app data (INSERT/UPDATE/DELETE, etc.)',
   '쓰기 허용': 'Allow writes',
   '{n}행 중 500행': '500 of {n} rows',
+  '500행 넘음, 500행만 표시': 'More than 500 rows, showing 500',
   '{n}행': '{n} rows',
   '왼쪽에서 테이블을 고르거나 SQL을 실행하세요': 'Pick a table on the left or run SQL',
   앱에서: 'Events recorded in the app with',
