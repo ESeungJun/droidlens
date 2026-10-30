@@ -119,6 +119,12 @@ export function agentFor(serial: string): AgentClient | undefined {
   return clients.get(serial);
 }
 
+/** 캐시된 에이전트를 재확인해 돌려준다 (새로 띄우지 않는다). 없거나 다른 프로세스로 바뀌었으면 undefined */
+export async function checkedAgent(serial: string): Promise<AgentClient | undefined> {
+  const c = clients.get(serial);
+  return c && (await stillAgent(c)) ? c : undefined;
+}
+
 /** 연결된 에이전트를 버린다 (요청 실패 시 다음에 다시 연결) */
 export function dropAgent(serial: string): void {
   clients.delete(serial);

@@ -2,7 +2,7 @@ import { mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { ChildProcess } from 'node:child_process';
 import { DeviceAdb, quoteShell } from './adb.js';
-import { agentFor } from './agent.js';
+import { checkedAgent } from './agent.js';
 
 const PKG_RE = /^[a-zA-Z][\w]*(\.[\w]+)+$/;
 
@@ -24,7 +24,7 @@ export interface CurrentScreen {
  * 에이전트가 있으면 Activity를 접근성 이벤트로 즉시 얻는다.
  */
 export async function currentScreen(dev: DeviceAdb, opts: { fragments?: boolean } = {}): Promise<CurrentScreen> {
-  const agent = agentFor(dev.serial);
+  const agent = await checkedAgent(dev.serial);
   if (agent) {
     const st = await agent.state().catch(() => undefined);
     if (st?.package && st.activity) {
