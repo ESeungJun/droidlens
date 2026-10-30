@@ -92,6 +92,12 @@ export function isConnectionError(e: unknown): boolean {
   return e.message === 'fetch failed' || (typeof code === 'string' && CONNECTION_CODES.has(code));
 }
 
+/** 요청이 시간 안에 끝나지 않음 (fetch 의 AbortSignal.timeout 이 TimeoutError 로 던진다) */
+export function isTimeoutError(e: unknown): boolean {
+  const name = (e as { name?: unknown } | undefined)?.name;
+  return name === 'TimeoutError' || name === 'AbortError';
+}
+
 const clients = new Map<string, AgentClient>();
 const failed = new Map<string, number>(); // serial → 실패 시각 (잠시 재시도 안 함)
 const lastError = new Map<string, string>(); // serial → 마지막 실패 원인 (UI에 표시)
