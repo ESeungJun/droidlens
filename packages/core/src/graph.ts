@@ -204,6 +204,14 @@ export class ScreenGraph {
     await rm(dir, { recursive: true, force: true });
   }
 
+  /**
+   * 열린 그래프의 미뤄 둔 저장(saveSoon)을 모두 바로 쓰고 끝나길 기다린다.
+   * 프로세스를 끝내기 전에 불러 모아 둔 기록이 사라지지 않게 한다 (실패한 저장은 건너뛴다)
+   */
+  static async flushAll(): Promise<void> {
+    await Promise.all([...ScreenGraph.opened.values()].map((p) => p.then((g) => g.flush()).catch(() => undefined)));
+  }
+
   static async open(packageName: string): Promise<ScreenGraph> {
     assertPackage(packageName);
     const key = ScreenGraph.dirOf(packageName);
