@@ -100,8 +100,7 @@ button, input, select { font: inherit; color: inherit; }
 }
 .tab:hover { color: var(--fg); }
 .tab.active { color: var(--fg); border-bottom-color: var(--accent); }
-.tab.active:not(.gear) { font-weight: 600; }
-.tab.gear { font-size: 16px; padding: 0 12px; }
+.tab.active { font-weight: 600; }
 .subtabs { display: flex; gap: 4px; padding: 6px 10px; border-bottom: 1px solid var(--line); background: var(--panel); }
 .subtab {
   border: 0; background: none; padding: 4px 12px; border-radius: 6px; cursor: pointer; color: var(--fg-dim);
