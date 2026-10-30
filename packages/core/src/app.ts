@@ -24,7 +24,7 @@ export interface CurrentScreen {
  * 에이전트가 있으면 Activity를 접근성 이벤트로 즉시 얻는다.
  */
 export async function currentScreen(dev: DeviceAdb, opts: { fragments?: boolean } = {}): Promise<CurrentScreen> {
-  const agent = await checkedAgent(dev.serial);
+  const agent = await checkedAgent(dev);
   if (agent) {
     const st = await agent.state().catch(() => undefined);
     if (st?.package && st.activity) {

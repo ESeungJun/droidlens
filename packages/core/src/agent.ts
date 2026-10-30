@@ -120,9 +120,9 @@ export function agentFor(serial: string): AgentClient | undefined {
 }
 
 /** 캐시된 에이전트를 재확인해 돌려준다 (새로 띄우지 않는다). 없거나 다른 프로세스로 바뀌었으면 undefined */
-export async function checkedAgent(serial: string): Promise<AgentClient | undefined> {
-  const c = clients.get(serial);
-  return c && (await stillAgent(c)) ? c : undefined;
+export async function checkedAgent(dev: DeviceAdb): Promise<AgentClient | undefined> {
+  const c = clients.get(dev.serial);
+  return c && (await stillAgent(dev, c)) ? c : undefined;
 }
 
 /** 연결된 에이전트를 버린다 (요청 실패 시 다음에 다시 연결) */
@@ -156,23 +156,23 @@ const RECHECK_MS = 5000;
 /**
  * 캐시된 연결이 아직 확인한 에이전트인지. 요청마다 왕복을 늘리지 않게 RECHECK_MS 마다만 ping 의 pid 를 비교한다.
  * 에이전트는 연결을 순서대로 처리하므로 긴 요청(/idle·/hierarchy) 뒤에 줄 선 ping 은 시간 초과될 수 있다.
- * 시간 초과는 캐시를 그대로 두고 확인 시각만 두어 다음에 다시 본다 (버리면 ensureAgent 가 에이전트를 재시작한다).
+ * 시간 초과는 그것만으로 믿지 않고(소켓을 차지한 다른 앱이 일부러 늦출 수 있다) 확인해 둔 pid 가 아직 에이전트 프로세스인지 본다.
  * 연결 오류는 req 가 이미 캐시에서 뺐다
  */
-async function stillAgent(c: AgentClient): Promise<boolean> {
+async function stillAgent(dev: DeviceAdb, c: AgentClient): Promise<boolean> {
   if (Date.now() - c.checkedAt < RECHECK_MS) return true;
   let pid: number;
   try {
     pid = (await c.ping()).pid;
   } catch (e) {
-    if (isTimeoutError(e)) return clients.get(c.serial) === c;
-    pid = -1;
+    // abstract 소켓 이름은 연 프로세스가 살아 있는 동안 다른 앱이 열 수 없으므로, 확인한 에이전트 프로세스가 살아 있으면 소켓도 그대로다
+    pid = isTimeoutError(e) && clients.get(c.serial) === c && (await isPackageProcess(dev, AGENT_PACKAGE, c.pid)) ? c.pid : -1;
   }
   if (pid === c.pid) {
     c.checkedAt = Date.now();
     return true;
   }
-  // pid 가 바뀌었거나 에이전트답지 않은 응답이면(다른 DroidLens 프로세스가 다시 띄웠거나 소켓 주인이 바뀜) 처음부터 다시 확인한다
+  // pid 가 바뀌었거나 에이전트 프로세스가 사라졌거나 에이전트답지 않은 응답이면 처음부터 다시 확인한다
   if (clients.get(c.serial) === c) clients.delete(c.serial);
   return false;
 }
@@ -185,7 +185,7 @@ const IMPOSTOR = '에이전트 소켓을 에이전트가 아닌 프로세스가 
 export async function ensureAgent(dev: DeviceAdb, opts: { force?: boolean } = {}): Promise<AgentClient | undefined> {
   if (agentDisabled()) return undefined;
   const cached = clients.get(dev.serial);
-  if (cached && (await stillAgent(cached))) return cached;
+  if (cached && (await stillAgent(dev, cached))) return cached;
   const lastFail = failed.get(dev.serial);
   if (!opts.force && lastFail && Date.now() - lastFail < 60_000) return undefined;
   const inflight = starting.get(dev.serial);
