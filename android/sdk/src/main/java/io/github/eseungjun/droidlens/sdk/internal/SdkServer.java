@@ -194,7 +194,7 @@ public final class SdkServer {
             case "GET /prefs": return prefs.list();
             case "POST /prefs/set": return prefs.set(req(q, "file"), req(q, "key"), req(q, "type"), q.containsKey("value") ? q.get("value") : body);
             case "POST /prefs/remove": return prefs.remove(req(q, "file"), req(q, "key"));
-            case "GET /db": return db.list();
+            case "GET /db": return db.list(!"0".equals(q.get("counts")));
             case "POST /db/query": return db.query(req(q, "db"), body.isEmpty() ? req(q, "sql") : body, "1".equals(q.get("write")));
             default: return null;
         }

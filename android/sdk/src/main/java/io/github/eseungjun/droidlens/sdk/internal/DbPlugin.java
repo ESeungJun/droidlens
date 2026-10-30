@@ -13,8 +13,11 @@ import java.io.File;
 import java.util.Locale;
 
 /**
- * 앱의 SQLite/Room DB 브라우저. 앱과 같은 프로세스에서 별도 연결을 열어 조회한다
- * (WAL 모드라 앱의 연결과 동시에 읽어도 안전). 쓰기 SQL은 write=true일 때만 허용.
+ * 앱의 SQLite/Room DB 브라우저. 앱과 같은 프로세스에서 별도 연결을 열어 조회한다.
+ * SQLite 파일 락 덕분에 앱의 연결과 동시에 열어도 데이터가 깨지지는 않는다. 다만 WAL 은 앱이 켰을 때만이고
+ * (Room 은 기본으로 켬, 직접 만든 SQLiteOpenHelper 는 기본이 롤백 저널), 롤백 저널 DB 에서는 조회하는 동안
+ * 앱의 쓰기가 기다리거나 SQLITE_BUSY 로 실패할 수 있다. 그래서 조회는 필요한 행만 읽고 바로 닫는다.
+ * 쓰기 SQL은 write=true일 때만 허용.
  */
 final class DbPlugin {
     private static final int MAX_ROWS = 500;
@@ -24,7 +27,8 @@ final class DbPlugin {
         this.context = context;
     }
 
-    JSONObject list() throws JSONException {
+    /** counts=false 면 테이블마다 COUNT(*) 를 하지 않는다 (큰 DB 에서 목록을 빨리 받고 싶을 때) */
+    JSONObject list(boolean counts) throws JSONException {
         JSONArray dbs = new JSONArray();
         for (String name : context.databaseList()) {
             if (name.endsWith("-journal") || name.endsWith("-wal") || name.endsWith("-shm")) continue;
@@ -39,10 +43,13 @@ final class DbPlugin {
                         String t = c.getString(0);
                         JSONObject tbl = new JSONObject().put("name", t).put("type", c.getString(1));
                         tbl.put("columns", columns(d, t));
-                        try (Cursor cnt = d.rawQuery("SELECT COUNT(*) FROM " + quote(t), null)) {
-                            if (cnt.moveToFirst()) tbl.put("rowCount", cnt.getLong(0));
-                        } catch (Exception ignored) {
-                            // 뷰 카운트 실패 등은 무시
+                        // 기존 응답과 같게 기본은 센다. 큰 DB 라 목록만 빨리 받고 싶으면 호스트가 counts=0 을 보낸다
+                        if (counts) {
+                            try (Cursor cnt = d.rawQuery("SELECT COUNT(*) FROM " + quote(t), null)) {
+                                if (cnt.moveToFirst()) tbl.put("rowCount", cnt.getLong(0));
+                            } catch (Exception ignored) {
+                                // 카운트 실패는 무시
+                            }
                         }
                         tables.put(tbl);
                     }
@@ -84,21 +91,27 @@ final class DbPlugin {
                 try (Cursor c = d.rawQuery("SELECT changes()", null)) {
                     if (c.moveToFirst()) changes = c.getLong(0);
                 }
-                return new JSONObject().put("changes", changes);
+                // 별도 연결로 썼기 때문에 앱 쪽 Room 의 무효화 추적(Flow·LiveData)은 알지 못한다
+                return new JSONObject().put("changes", changes)
+                        .put("note", "DroidLens 의 별도 연결로 썼기 때문에 Room Flow·LiveData 는 자동으로 갱신되지 않습니다. 화면에 반영하려면 앱에서 다시 조회하거나 앱을 다시 시작하세요");
             }
             try (Cursor c = d.rawQuery(trimmed, null)) {
                 JSONArray cols = new JSONArray();
                 for (String n : c.getColumnNames()) cols.put(n);
                 JSONArray rows = new JSONArray();
+                // 전체 행 수를 세려고 끝까지 훑으면 큰 테이블에서 읽기 락을 오래 잡는다. MAX_ROWS+1 행에서 멈춘다
                 int total = 0;
-                while (c.moveToNext()) {
+                while (total <= MAX_ROWS && c.moveToNext()) {
                     total++;
                     if (rows.length() >= MAX_ROWS) continue;
                     JSONArray row = new JSONArray();
                     for (int i = 0; i < c.getColumnCount(); i++) row.put(cell(c, i));
                     rows.put(row);
                 }
-                return new JSONObject().put("columns", cols).put("rows", rows).put("total", total).put("truncated", total > MAX_ROWS);
+                boolean truncated = total > MAX_ROWS;
+                // truncated 면 total 은 정확한 수가 아니라 "MAX_ROWS 보다 많음"(MAX_ROWS+1)이다
+                return new JSONObject().put("columns", cols).put("rows", rows).put("total", total)
+                        .put("truncated", truncated).put("totalExact", !truncated);
             }
         } finally {
             d.close();
