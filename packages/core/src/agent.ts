@@ -82,8 +82,8 @@ export class AgentClient {
 const CONNECTION_CODES = new Set(['ECONNREFUSED', 'ECONNRESET', 'EPIPE', 'ECONNABORTED', 'UND_ERR_SOCKET']);
 
 /**
- * 요청이 서버에 닿지 못한 실패 (fetch 가 TypeError 'fetch failed' 로 던진다).
- * 시간 초과(TimeoutError)·HTTP 오류와 달리 기기에서 실행되지 않았으므로 다시 보내도 된다.
+ * 연결이 안 되거나 끊긴 실패 (fetch 가 TypeError 'fetch failed' 로 던진다). 에이전트가 죽었다는 뜻이다.
+ * ECONNRESET 등은 응답을 읽다가도 나므로 기기에서 이미 실행됐을 수 있다 (다시 보내도 되는지는 요청마다 다르다).
  * 응답 처리 코드의 TypeError(버그)까지 연결 실패로 보지 않게 메시지·원인 코드로 가린다
  */
 export function isConnectionError(e: unknown): boolean {
@@ -250,16 +250,21 @@ export async function stopAgent(dev: DeviceAdb, failure?: string): Promise<void>
 
 /**
  * 에이전트로 요청한다. 캐시된 연결이 끊겼으면(에이전트가 죽음) 다시 준비해 한 번만 더 보낸다.
- * 에이전트를 쓸 수 없으면 undefined (호출부가 대체 경로를 쓴다)
+ * 연결이 응답 도중 끊기면 기기에서 이미 실행됐을 수 있으므로, 두 번 실행되면 결과가 달라지는 요청(텍스트 이어 붙이기 등)은
+ * retry=false 로 다시 보내지 않는다. 에이전트를 쓸 수 없으면 undefined (호출부가 대체 경로를 쓴다)
  */
-export async function withAgent<T>(dev: DeviceAdb, fn: (a: AgentClient) => Promise<T>): Promise<{ value: T } | undefined> {
+export async function withAgent<T>(
+  dev: DeviceAdb,
+  fn: (a: AgentClient) => Promise<T>,
+  opts: { retry?: boolean } = {},
+): Promise<{ value: T } | undefined> {
   for (let attempt = 0; ; attempt++) {
     const agent = await ensureAgent(dev);
     if (!agent) return undefined;
     try {
       return { value: await fn(agent) };
     } catch (e) {
-      if (attempt > 0 || !isConnectionError(e)) throw e;
+      if (attempt > 0 || opts.retry === false || !isConnectionError(e)) throw e;
     }
   }
 }
