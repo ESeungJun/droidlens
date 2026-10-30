@@ -52,9 +52,8 @@ export function register(server: McpServer): void {
       } else if (action.type === 'key') {
         ga = { type: 'key', key: action.key ?? 'back' };
       } else {
-        const { screen } = await dl.getDeviceInfo(dev);
         const direction = action.direction ?? 'up';
-        const [x1, y1, x2, y2] = dl.swipeVector(screen, direction);
+        const [x1, y1, x2, y2] = dl.swipeVector(await dl.screenSize(dev), direction);
         ga = { type: 'swipe', x1, y1, x2, y2, direction };
       }
       const r = await dl.recordTransition(dev, graph, ga, before);
@@ -125,7 +124,7 @@ export function register(server: McpServer): void {
       },
       annotations: acts,
     },
-    async ({ serial, packageName, maxSteps, maxDepth, avoid, relaunch, startScreen, only, allowDanger }) => {
+    async ({ serial, packageName, maxSteps, maxDepth, avoid, relaunch, startScreen, only, allowDanger }, extra) => {
       const dev = await device(serial);
       const log: string[] = [];
       const r = await dl.explore(dev, {
@@ -137,6 +136,8 @@ export function register(server: McpServer): void {
         only,
         allowDanger,
         avoid: avoid ? new RegExp(avoid, 'i') : undefined,
+        // 클라이언트가 도구 호출을 취소하면 탐색도 멈춘다
+        signal: extra.signal,
         onProgress: (e) => log.push(`#${e.step} ${e.message}`),
       });
       return text(

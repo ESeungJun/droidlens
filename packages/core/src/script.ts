@@ -4,7 +4,7 @@ import YAML from 'yaml';
 import { z } from 'zod';
 import { DeviceAdb, sleep } from './adb.js';
 import { ensureAgent } from './agent.js';
-import { clearAppData, currentScreen, openDeepLink, recentCrashes } from './app.js';
+import { clearAppData, currentScreen, deviceTime, openDeepLink, recentCrashes, type CurrentScreen } from './app.js';
 import { KEYCODES, longPress, pressKey, replaceText, screenshot, swipeDirection, tap, typeText } from './device.js';
 import { FlowCollector, launchAndSettle } from './graph.js';
 import { center, dumpHierarchy, findNodes, type Selector, type ViewNode } from './hierarchy.js';
@@ -244,7 +244,7 @@ async function findWithin(dev: DeviceAdb, sel: Selector, timeoutMs: number): Pro
   }
 }
 
-/** 단일 assertion 평가. 통과하면 근거 문자열, 실패하면 StepFailure */
+/** 단일 assertion 평가. 통과하면 근거 문자열, 실패하면 StepFailure. ctx.since 는 기기 시계 기준 (deviceTime) */
 export async function evaluateAssertion(dev: DeviceAdb, app: string, a: Assertion, ctx: { since: number }): Promise<string> {
   const timeout = a.timeout ?? 3000;
   const evidence: string[] = [];
@@ -355,12 +355,7 @@ export async function evaluateAssertion(dev: DeviceAdb, app: string, a: Assertio
     );
   }
   if (a.noCrash) {
-    const crashes = (await recentCrashes(dev, app)).filter((c) => {
-      const m = /^(\d\d-\d\d \d\d:\d\d:\d\d)/m.exec(c);
-      if (!m) return true;
-      const t = new Date(`${new Date().getFullYear()}-${m[1].replace(' ', 'T')}`).getTime();
-      return t >= ctx.since - 1000;
-    });
+    const crashes = await recentCrashes(dev, app, { since: ctx.since - 1000 });
     if (crashes.length) throw new StepFailure(`크래시 발생:\n${crashes[crashes.length - 1].split('\n').slice(0, 8).join('\n')}`);
     evidence.push('크래시 없음');
   }
@@ -384,12 +379,14 @@ export async function runScript(dev: DeviceAdb, script: Script, opts: ScriptRunO
   let skipped = 0;
   const total = script.steps.length;
   const shotAll = script.screenshots === 'all';
-  // 네트워크/이벤트 assertion은 실행 시작 이후 것만 본다 (기기 시계와 호스트 시계 차이를 감안해 여유를 둔다)
-  const ctx = { since: Date.now() - 2000 };
+  // 네트워크·이벤트·크래시 assertion은 실행 시작 이후 것만 본다. 기기가 남긴 시각이라 기준도 기기 시계로 잡는다
+  // (읽지 못하면 호스트 시계). 초 단위라 여유를 둔다
+  const ctx = { since: (await deviceTime(dev).catch(() => Date.now())) - 2000 };
 
-  const record = async (title: string, status: 'pass' | 'fail' | 'info' | 'skip', detail?: string, withShot = false) => {
+  /** seen: 흐름 수집이 방금 확인한 화면 (있으면 다시 조회하지 않는다) */
+  const record = async (title: string, status: 'pass' | 'fail' | 'info' | 'skip', detail?: string, withShot = false, seen?: CurrentScreen) => {
     const png = withShot ? await screenshot(dev).catch(() => undefined) : undefined;
-    const scr = await currentScreen(dev).catch(() => undefined);
+    const scr = seen ?? (await currentScreen(dev).catch(() => undefined));
     await scenario.step(title, status, { detail, png, screen: scr ? `${scr.packageName} ${scr.activity}` : undefined });
   };
 
@@ -403,10 +400,11 @@ export async function runScript(dev: DeviceAdb, script: Script, opts: ScriptRunO
       for (const p of script.setup.prefs) await c.setPref(p.file, p.key, p.type, p.value);
     }
     if (script.setup?.restart !== false) await launchAndSettle(dev, app, { restart: true });
-    await record('준비: 앱 실행', 'info', script.setup ? JSON.stringify(script.setup) : undefined, shotAll);
-    await flow?.observe();
+    const seen = await flow?.observe();
+    await record('준비: 앱 실행', 'info', script.setup ? JSON.stringify(script.setup) : undefined, shotAll, seen?.screen);
   } catch (e) {
     await record('준비 실패', 'fail', (e as Error).message, true);
+    await flow?.flush().catch(() => undefined);
     const report = await scenario.finish('blocked', `준비 단계 실패: ${(e as Error).message}`);
     return { verdict: 'blocked', passed, failed: 1, skipped, durationMs: Date.now() - t0, report, scenario: scenario.data };
   }
@@ -421,17 +419,17 @@ export async function runScript(dev: DeviceAdb, script: Script, opts: ScriptRunO
     }
     opts.onStep?.({ index: i, total, title, status: 'running' });
     try {
-      const detail = await runStep(dev, app, step, defaultTimeout, ctx, flow);
-      await flow?.observe();
+      const detail = await runStep(dev, app, step, defaultTimeout, ctx, flow, opts.signal);
+      const seen = (await flow?.observe())?.screen;
       if (detail === 'skip') {
         skipped++;
-        await record(title, 'skip', '선택(optional) 요소가 없어 건너뜀', shotAll);
+        await record(title, 'skip', '선택(optional) 요소가 없어 건너뜀', shotAll, seen);
         opts.onStep?.({ index: i, total, title, status: 'skip' });
         continue;
       }
       passed++;
       const isCheck = 'assert' in step || 'screenshot' in step;
-      await record(title, 'pass', detail, shotAll || isCheck);
+      await record(title, 'pass', detail, shotAll || isCheck, seen);
       opts.onStep?.({ index: i, total, title, status: 'pass', detail });
     } catch (e) {
       // 조작 도중 실패하면 화면 상태를 알 수 없으므로 다음 관찰부터 지도에 새로 이어 붙인다
@@ -447,11 +445,15 @@ export async function runScript(dev: DeviceAdb, script: Script, opts: ScriptRunO
     }
   }
 
+  await flow?.flush().catch(() => undefined);
   const verdict = failed ? 'fail' : 'pass';
   const summary = `${passed} 통과 · ${failed} 실패 · ${skipped} 건너뜀 (${((Date.now() - t0) / 1000).toFixed(1)}초)`;
   const report = await scenario.finish(verdict, summary);
   return { verdict, passed, failed, skipped, durationMs: Date.now() - t0, report, scenario: scenario.data };
 }
+
+/** sleep 단계의 상한 */
+const MAX_SLEEP_MS = 60_000;
 
 async function runStep(
   dev: DeviceAdb,
@@ -460,6 +462,7 @@ async function runStep(
   defaultTimeout: number,
   ctx: { since: number },
   flow?: FlowCollector,
+  signal?: AbortSignal,
 ): Promise<string> {
   if ('tap' in step || 'longPress' in step) {
     const t = 'tap' in step ? step.tap : step.longPress;
@@ -538,8 +541,18 @@ async function runStep(
     return `발견: ${n.text || n.contentDesc || n.resourceId}`;
   }
   if ('sleep' in step) {
-    await sleep(step.sleep);
-    return '';
+    // 잘못 적은 값(예: 600000)으로 오래 멈추지 않게 상한을 두고, 중단하면 바로 깬다
+    const ms = Math.min(Math.max(step.sleep, 0), MAX_SLEEP_MS);
+    await new Promise<void>((resolve) => {
+      const done = () => {
+        clearTimeout(timer);
+        signal?.removeEventListener('abort', done);
+        resolve();
+      };
+      const timer = setTimeout(done, ms);
+      signal?.addEventListener('abort', done, { once: true });
+    });
+    return ms < step.sleep ? `${MAX_SLEEP_MS / 1000}초로 줄여 기다림` : '';
   }
   if ('launch' in step) {
     const s = await launchAndSettle(dev, app, { restart: step.launch?.restart });

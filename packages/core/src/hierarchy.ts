@@ -1,7 +1,7 @@
-import { createHash } from 'node:crypto';
+import { createHash, randomBytes } from 'node:crypto';
 import { XMLParser } from 'fast-xml-parser';
 import { DeviceAdb, sleep } from './adb.js';
-import { ensureAgent, stopAgent } from './agent.js';
+import { stopAgent, withAgent } from './agent.js';
 
 export type Bounds = [left: number, top: number, right: number, bottom: number];
 
@@ -101,7 +101,6 @@ export function parseHierarchyXml(xml: string): Hierarchy {
   return { root, capturedAt: Date.now(), nodeCount, maxDepth };
 }
 
-const REMOTE_DUMP = '/sdcard/droidlens_ui.xml';
 
 /**
  * 뷰 계층 덤프. 온디바이스 에이전트가 있으면 그것을 쓰고(0.1~0.3초), 없으면 uiautomator dump.
@@ -109,26 +108,31 @@ const REMOTE_DUMP = '/sdcard/droidlens_ui.xml';
  * 다른 uiautomator 세션(예: Appium)이 떠 있으면 실패한다.
  */
 export async function dumpHierarchy(dev: DeviceAdb, retries = 3): Promise<Hierarchy> {
-  const agent = await ensureAgent(dev);
-  if (agent) {
-    try {
-      return parseHierarchyXml(await agent.hierarchyXml());
-    } catch {
-      // 에이전트가 UiAutomation을 쥐고 있으면 uiautomator dump가 실패하므로 내리고 대체한다
-      await stopAgent(dev);
-    }
+  try {
+    const r = await withAgent(dev, async (a) => parseHierarchyXml(await a.hierarchyXml()));
+    if (r) return r.value;
+  } catch (e) {
+    // 에이전트가 UiAutomation을 쥐고 있으면 uiautomator dump가 실패하므로 내리고 대체한다.
+    // 실패로 기록해 잠시 uiautomator 만 쓴다 (덤프마다 에이전트를 다시 띄우지 않게)
+    await stopAgent(dev, `뷰 계층 조회 실패: ${(e as Error).message}`);
   }
+  // 덤프 파일은 호출마다 다른 이름으로 쓰고 지운다 (동시에 덤프하는 다른 호출·프로세스와 파일을 겹쳐 쓰지 않게)
+  const remote = `/data/local/tmp/droidlens_ui_${randomBytes(6).toString('hex')}.xml`;
   let lastErr: unknown;
-  for (let i = 0; i < retries; i++) {
-    try {
-      const out = await dev.shell(`uiautomator dump --compressed ${REMOTE_DUMP}`, { timeoutMs: 20_000 });
-      if (!out.includes('dumped')) throw new Error(out.trim() || 'uiautomator dump 실패');
-      const xml = (await dev.execOut(`cat ${REMOTE_DUMP}`)).toString('utf8');
-      return parseHierarchyXml(xml);
-    } catch (e) {
-      lastErr = e;
-      await sleep(400);
+  try {
+    for (let i = 0; i < retries; i++) {
+      try {
+        const out = await dev.shell(`uiautomator dump --compressed ${remote}`, { timeoutMs: 20_000 });
+        if (!out.includes('dumped')) throw new Error(out.trim() || 'uiautomator dump 실패');
+        const xml = (await dev.execOut(`cat ${remote}`)).toString('utf8');
+        return parseHierarchyXml(xml);
+      } catch (e) {
+        lastErr = e;
+        await sleep(400);
+      }
     }
+  } finally {
+    await dev.shell(`rm -f ${remote}`).catch(() => undefined);
   }
   throw lastErr;
 }

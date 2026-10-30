@@ -43,8 +43,14 @@ export class AgentClient {
     this.http = new LocalHttpClient(port, 'agent');
   }
 
-  private req(method: 'GET' | 'POST', path: string, query?: Record<string, string>, timeoutMs = 10_000): Promise<string> {
-    return this.http.text(method, path, { query, timeoutMs });
+  private async req(method: 'GET' | 'POST', path: string, query?: Record<string, string>, timeoutMs = 10_000): Promise<string> {
+    try {
+      return await this.http.text(method, path, { query, timeoutMs });
+    } catch (e) {
+      // 연결 자체가 안 되면 에이전트 프로세스가 죽은 것이라 캐시에서 버린다 (다음 ensureAgent 가 다시 띄운다)
+      if (isConnectionError(e) && clients.get(this.serial) === this) clients.delete(this.serial);
+      throw e;
+    }
   }
 
   async ping(): Promise<{ ok: boolean; version: number; pid: number }> {
@@ -68,6 +74,14 @@ export class AgentClient {
   async waitIdle(quietMs = 300, timeoutMs = 3000): Promise<{ idle: boolean; ms: number }> {
     return JSON.parse(await this.req('POST', '/idle', { quietMs: String(quietMs), timeoutMs: String(timeoutMs) }, timeoutMs + 3000));
   }
+}
+
+/**
+ * 요청이 서버에 닿지 못한 실패 (fetch 가 TypeError 'fetch failed' 로 던진다).
+ * 시간 초과(TimeoutError)·HTTP 오류와 달리 기기에서 실행되지 않았으므로 다시 보내도 된다
+ */
+export function isConnectionError(e: unknown): boolean {
+  return e instanceof TypeError;
 }
 
 const clients = new Map<string, AgentClient>();
@@ -105,6 +119,16 @@ async function installedVersion(dev: DeviceAdb): Promise<number | undefined> {
 const forward = (dev: DeviceAdb) => dev.forward(AGENT_REMOTE);
 
 /**
+ * forward 로 붙은 상대가 진짜 에이전트인지. abstract 소켓 이름은 어느 앱이나 먼저 열 수 있으므로
+ * ping 이 알려 준 pid 가 에이전트 패키지 프로세스의 pid 인지 확인한다 (다른 앱이 덤프·입력 텍스트를 가로채지 못하게)
+ */
+async function isAgentProcess(dev: DeviceAdb, pid: number): Promise<boolean> {
+  const out = await dev.shell(`pidof ${AGENT_PACKAGE}`).catch(() => '');
+  return out.trim().split(/\s+/).map(Number).includes(pid);
+}
+const IMPOSTOR = '에이전트 소켓을 에이전트가 아닌 프로세스가 열고 있어 연결하지 않습니다';
+
+/**
  * 에이전트를 준비한다: 필요하면 설치/업데이트 → 실행(기기에서 setsid로 분리해 호스트 종료 후에도 유지) → 포트 포워딩 → ping.
  * 실패하면 undefined (호출부는 uiautomator 사용).
  */
@@ -124,6 +148,7 @@ export async function ensureAgent(dev: DeviceAdb, opts: { force?: boolean } = {}
       // 이미 떠 있으면 바로 사용 (다른 DroidLens 프로세스가 띄웠을 수 있음)
       const alive = await client.ping().catch(() => undefined);
       if (alive && alive.version === AGENT_VERSION) {
+        if (!(await isAgentProcess(dev, alive.pid))) throw new Error(IMPOSTOR);
         clients.set(dev.serial, client);
         return client;
       }
@@ -140,6 +165,7 @@ export async function ensureAgent(dev: DeviceAdb, opts: { force?: boolean } = {}
         await sleep(500);
         const r = await client.ping().catch(() => undefined);
         if (r?.ok && r.version === AGENT_VERSION) {
+          if (!(await isAgentProcess(dev, r.pid))) throw new Error(IMPOSTOR);
           clients.set(dev.serial, client);
           failed.delete(dev.serial);
           lastError.delete(dev.serial);
@@ -159,10 +185,33 @@ export async function ensureAgent(dev: DeviceAdb, opts: { force?: boolean } = {}
   return p;
 }
 
-/** 에이전트 종료 (uiautomator dump를 다시 쓰려면 UiAutomation 연결을 놓아줘야 한다) */
-export async function stopAgent(dev: DeviceAdb): Promise<void> {
+/**
+ * 에이전트 종료 (uiautomator dump를 다시 쓰려면 UiAutomation 연결을 놓아줘야 한다).
+ * failure 를 주면 실패로 기록해 잠시(60초) 다시 띄우지 않는다 (호출마다 최대 25초씩 재시작하지 않게)
+ */
+export async function stopAgent(dev: DeviceAdb, failure?: string): Promise<void> {
   clients.delete(dev.serial);
+  if (failure) {
+    failed.set(dev.serial, Date.now());
+    lastError.set(dev.serial, failure);
+  }
   await dev.shell(`am force-stop ${AGENT_PACKAGE}`).catch(() => undefined);
+}
+
+/**
+ * 에이전트로 요청한다. 캐시된 연결이 끊겼으면(에이전트가 죽음) 다시 준비해 한 번만 더 보낸다.
+ * 에이전트를 쓸 수 없으면 undefined (호출부가 대체 경로를 쓴다)
+ */
+export async function withAgent<T>(dev: DeviceAdb, fn: (a: AgentClient) => Promise<T>): Promise<{ value: T } | undefined> {
+  for (let attempt = 0; ; attempt++) {
+    const agent = await ensureAgent(dev);
+    if (!agent) return undefined;
+    try {
+      return { value: await fn(agent) };
+    } catch (e) {
+      if (attempt > 0 || !isConnectionError(e)) throw e;
+    }
+  }
 }
 
 export async function agentStatus(
@@ -175,7 +224,7 @@ export async function agentStatus(
     if (port) c = new AgentClient(dev.serial, port);
   }
   const alive = c ? await c.ping().catch(() => undefined) : undefined;
-  const running = !!alive && alive.version === AGENT_VERSION;
+  const running = !!alive && alive.version === AGENT_VERSION && (await isAgentProcess(dev, alive.pid));
   if (running && c) clients.set(dev.serial, c);
   return {
     installed: await installedVersion(dev),

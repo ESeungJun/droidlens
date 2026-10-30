@@ -1,5 +1,5 @@
 import { Adb, DeviceAdb, quoteShell, sleep } from './adb.js';
-import { ensureAgent } from './agent.js';
+import { withAgent } from './agent.js';
 
 export interface DeviceSummary {
   serial: string;
@@ -61,18 +61,53 @@ export async function getDeviceInfo(dev: DeviceAdb): Promise<DeviceInfo> {
   };
 }
 
+const sizeCache = new Map<string, { at: number; size: { width: number; height: number } }>();
+
+/**
+ * 지금 화면 크기 (회전 반영). getDeviceInfo 의 wm size 는 회전과 무관한 자연 크기라 가로 화면에서 스와이프 좌표가 화면 밖이 된다.
+ * 논리 디스플레이 0 의 현재 크기(dumpsys window displays 의 cur=WxH)를 읽고, 스와이프마다 조회하지 않게 2초 캐시한다.
+ * 읽지 못하면 자연 크기를 쓴다
+ */
+export async function screenSize(dev: DeviceAdb): Promise<{ width: number; height: number }> {
+  const hit = sizeCache.get(dev.serial);
+  if (hit && Date.now() - hit.at < 2000) return hit.size;
+  const out = await dev.shell('dumpsys window displays | grep -E "mDisplayId=|cur="').catch(() => '');
+  let display: string | undefined;
+  let size: { width: number; height: number } | undefined;
+  for (const line of out.split('\n')) {
+    display = /mDisplayId=(\d+)/.exec(line)?.[1] ?? display;
+    const m = display === '0' ? /\bcur=(\d+)x(\d+)/.exec(line) : null;
+    if (m) {
+      size = { width: Number(m[1]), height: Number(m[2]) };
+      break;
+    }
+  }
+  size ??= (await getDeviceInfo(dev)).screen;
+  sizeCache.set(dev.serial, { at: Date.now(), size });
+  return size;
+}
+
 export const PNG_MAGIC = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
 
 /** screencap 이 다중 디스플레이 경고를 낸 기기 serial */
 const multiDisplaySerials = new Set<string>();
+/** serial → 논리 디스플레이 0 에 연결된 물리 디스플레이 id (스크린샷마다 dumpsys display 를 돌리지 않게 잠시 캐시) */
+const displayIds = new Map<string, { at: number; id?: string }>();
 
 /**
- * 논리 디스플레이 0(탭·입력·뷰 계층이 쓰는 화면)에 지금 연결된 물리 디스플레이를 골라 찍는다.
- * 폴더블은 접고 펼 때 연결이 바뀌므로 매번 조회하고, 못 찾으면 -d 없이 찍는다
+ * 논리 디스플레이 0(탭·입력·뷰 계층이 쓰는 화면)에 지금 연결된 물리 디스플레이.
+ * 폴더블은 접고 펼 때 연결이 바뀌므로 5초만 캐시한다. 못 찾으면 undefined (-d 없이 찍는다)
  */
-const SCREENCAP_ACTIVE_DISPLAY =
-  `id=$(dumpsys display | grep -o "displayId=0, uniqueId='local:[0-9]*" | head -1 | grep -o '[0-9]*$'); ` +
-  'if [ -n "$id" ]; then screencap -p -d "$id"; else screencap -p; fi';
+async function activeDisplayId(dev: DeviceAdb): Promise<string | undefined> {
+  const hit = displayIds.get(dev.serial);
+  if (hit && Date.now() - hit.at < 5000) return hit.id;
+  const out = await dev
+    .shell(`dumpsys display | grep -o "displayId=0, uniqueId='local:[0-9]*" | head -1 | grep -o '[0-9]*$'`)
+    .catch(() => '');
+  const id = /^\d+$/.test(out.trim()) ? out.trim() : undefined;
+  displayIds.set(dev.serial, { at: Date.now(), id });
+  return id;
+}
 
 /**
  * PNG 스크린샷. 디스플레이가 여럿인 기기(갤럭시 Z 플립·폴드의 커버 화면 등)는 screencap 이
@@ -80,8 +115,8 @@ const SCREENCAP_ACTIVE_DISPLAY =
  * 시그니처 앞을 잘라내고, 그 기기는 다음부터 디스플레이를 지정해 찍는다
  */
 export async function screenshot(dev: DeviceAdb): Promise<Buffer> {
-  const command = multiDisplaySerials.has(dev.serial) ? SCREENCAP_ACTIVE_DISPLAY : 'screencap -p';
-  const out = await dev.execOut(command, { timeoutMs: 30_000 });
+  const id = multiDisplaySerials.has(dev.serial) ? await activeDisplayId(dev) : undefined;
+  const out = await dev.execOut(id ? `screencap -p -d ${id}` : 'screencap -p', { timeoutMs: 30_000 });
   const start = out.indexOf(PNG_MAGIC);
   if (start <= 0) return out;
   multiDisplaySerials.add(dev.serial);
@@ -118,11 +153,7 @@ export async function swipe(
  * 에이전트가 있으면 ACTION_SET_TEXT(유니코드 지원), 없으면 adb input text(ASCII만, 공백은 %s).
  */
 export async function typeText(dev: DeviceAdb, text: string): Promise<void> {
-  const agent = await ensureAgent(dev);
-  if (agent) {
-    await agent.setText(text, true);
-    return;
-  }
+  if (await withAgent(dev, (a) => a.setText(text, true))) return;
   if (/[^\x20-\x7e]/.test(text)) {
     throw new Error('온디바이스 에이전트 없이는 ASCII만 입력할 수 있습니다 (adb input text 제약).');
   }
@@ -131,9 +162,7 @@ export async function typeText(dev: DeviceAdb, text: string): Promise<void> {
 
 /** 포커스된 입력창의 내용을 통째로 바꾼다 (에이전트 필요) */
 export async function replaceText(dev: DeviceAdb, text: string): Promise<void> {
-  const agent = await ensureAgent(dev);
-  if (!agent) throw new Error('텍스트 교체에는 온디바이스 에이전트가 필요합니다');
-  await agent.setText(text, false);
+  if (!(await withAgent(dev, (a) => a.setText(text, false)))) throw new Error('텍스트 교체에는 온디바이스 에이전트가 필요합니다');
 }
 
 export const KEYCODES = {
@@ -171,7 +200,11 @@ export function startRecording(
   const remotePath = `/sdcard/droidlens_${Date.now()}.mp4`;
   const args = ['shell', 'screenrecord', '--time-limit', String(Math.min(opts.maxSeconds ?? 180, 180))];
   if (opts.bitRateMbps) args.push('--bit-rate', String(opts.bitRateMbps * 1_000_000));
-  if (opts.size) args.push('--size', opts.size);
+  if (opts.size) {
+    // 기기 sh 가 다시 해석하는 인자라 형식을 확인한다
+    if (!/^\d+x\d+$/.test(opts.size)) throw new Error(`잘못된 녹화 크기: ${opts.size} (예: 1280x720)`);
+    args.push('--size', opts.size);
+  }
   args.push(remotePath);
   const proc = dev.spawn(args);
   const exited = new Promise<void>((r) => proc.once('exit', () => r()));
@@ -214,7 +247,6 @@ export function swipeVector(screen: { width: number; height: number }, direction
 }
 
 export async function swipeDirection(dev: DeviceAdb, direction: SwipeDirection, durationMs?: number): Promise<void> {
-  const { screen } = await getDeviceInfo(dev);
-  const [x1, y1, x2, y2] = swipeVector(screen, direction);
+  const [x1, y1, x2, y2] = swipeVector(await screenSize(dev), direction);
   await swipe(dev, x1, y1, x2, y2, durationMs);
 }
