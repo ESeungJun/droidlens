@@ -12,7 +12,7 @@ import { droidlensHome } from './workspace.js';
  */
 
 export const AGENT_PACKAGE = 'io.github.eseungjun.droidlens.agent';
-export const AGENT_VERSION = 3;
+export const AGENT_VERSION = 4;
 /** 에이전트는 TCP가 아닌 abstract 유닉스 소켓으로 열고 adb(shell) 연결만 받는다 */
 const AGENT_REMOTE = 'localabstract:droidlens_agent';
 const INSTRUMENT = `${AGENT_PACKAGE}/.AgentInstrumentation`;

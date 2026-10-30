@@ -69,6 +69,8 @@ export interface QueryResult {
   rows?: unknown[][];
   total?: number;
   truncated?: boolean;
+  /** false 면 total 은 정확한 행 수가 아니라 "상한보다 많음"을 뜻한다 (SDK 가 상한+1 행에서 조회를 멈춤) */
+  totalExact?: boolean;
   changes?: number;
 }
 

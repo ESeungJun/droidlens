@@ -179,7 +179,7 @@ function Db() {
               <input type="checkbox" checked={write} onChange={(e) => setWrite(e.target.checked)} />
               <span style={{ color: write ? 'var(--warn)' : undefined }}>{t('쓰기 허용')}</span>
             </label>
-            {res?.total !== undefined && <span className="muted">{res.truncated ? t('{n}행 중 500행', { n: res.total }) : t('{n}행', { n: res.total })}</span>}
+            {res?.total !== undefined && <span className="muted">{res.truncated ? (res.totalExact === false ? t('500행 넘음, 500행만 표시') : t('{n}행 중 500행', { n: res.total })) : t('{n}행', { n: res.total })}</span>}
           </div>
         </div>
         <div style={{ overflow: 'auto' }}>
