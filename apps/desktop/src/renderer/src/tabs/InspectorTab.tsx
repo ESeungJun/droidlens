@@ -483,7 +483,7 @@ function ThreeD({ snap, sel, setSel, hover, onHover }: {
   const root = snap.hierarchy.root;
   const W = root.bounds[2] - root.bounds[0] || 1080;
   const H = root.bounds[3] - root.bounds[1] || 2400;
-  const scale = (Math.min(window.innerHeight - 220, 760) / H) * zoom;
+  const scale = (Math.min(window.innerHeight - 260, 760) / H) * zoom;
   const nodes = useMemo(
     () =>
       flatten(root).filter((n) => {

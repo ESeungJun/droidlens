@@ -29,20 +29,30 @@ interface Ctx {
 const AppCtx = createContext<Ctx>(null!);
 export const useApp = () => useContext(AppCtx);
 
-const TABS = [
-  ['screen', '화면'],
-  ['inspect', '뷰 계층'],
-  ['flow', '화면 흐름'],
-  ['logs', '로그'],
-  ['network', '네트워크'],
-  ['perf', '성능'],
-  ['data', '앱 데이터'],
-  ['libs', '라이브러리'],
-  ['info', '앱 정보'],
-  ['scen', '시나리오'],
-  ['settings', '설정·연동'],
-] as const;
-type TabId = (typeof TABS)[number][0];
+const TAB_LABELS = {
+  screen: '기기 화면',
+  inspect: '뷰 계층',
+  flow: '화면 흐름',
+  logs: '로그',
+  network: '네트워크',
+  perf: '성능',
+  data: '앱 데이터',
+  info: '앱 정보',
+  libs: '라이브러리',
+  scen: '시나리오',
+  settings: '설정·연동',
+} as const;
+type TabId = keyof typeof TAB_LABELS;
+
+/** 대분류 탭. 고른 대분류의 소분류가 아래 줄에 나온다 (하나뿐이면 줄을 두지 않는다). 설정·연동은 오른쪽 톱니 */
+const TAB_GROUPS: readonly { id: string; label: string; tabs: readonly TabId[] }[] = [
+  { id: 'view', label: '화면', tabs: ['screen', 'inspect', 'flow'] },
+  { id: 'diag', label: '진단', tabs: ['logs', 'network', 'perf'] },
+  { id: 'app', label: '앱', tabs: ['data', 'info', 'libs'] },
+  { id: 'test', label: '테스트', tabs: ['scen'] },
+];
+const groupOf = (tab: TabId) => TAB_GROUPS.find((g) => g.tabs.includes(tab));
+const isTabId = (s: string | null): s is TabId => !!s && Object.hasOwn(TAB_LABELS, s);
 
 const initial = new URLSearchParams(location.hash.slice(1));
 
@@ -68,7 +78,21 @@ export function App() {
   });
   const [filter, setFilter] = useState('');
   const [thirdOnly, setThirdOnly] = useState(true);
-  const [tab, setTab] = useState<TabId>((initial.get('tab') as TabId) || 'screen');
+  const [tab, setTab] = useState<TabId>(() => {
+    const id = initial.get('tab');
+    return isTabId(id) ? id : 'screen';
+  });
+  // 대분류마다 마지막으로 본 소분류. 대분류를 다시 누르면 그 소분류로 돌아간다
+  const [lastInGroup, setLastInGroup] = useState<Record<string, TabId>>(() => {
+    const g = groupOf(tab);
+    return g ? { [g.id]: tab } : {};
+  });
+  const group = groupOf(tab);
+  const openTab = (id: TabId) => {
+    setTab(id);
+    const g = groupOf(id);
+    if (g) setLastInGroup((m) => ({ ...m, [g.id]: id }));
+  };
   const [toastMsg, setToastMsg] = useState<{ msg: string; err?: boolean } | null>(null);
   const [adbOk, setAdbOk] = useState<boolean | null>(null);
   const [chatOpen, setChatOpen] = useState(initial.get('chat') === '1');
@@ -367,13 +391,33 @@ export function App() {
             </div>
           </aside>
           <main className="main">
-            <nav className="tabs">
-              {TABS.map(([id, label]) => (
-                <button key={id} className={`tab ${tab === id ? 'active' : ''}`} onClick={() => setTab(id)}>
-                  {t(label)}
+            <div className="navs">
+              <nav className="tabs">
+                {TAB_GROUPS.map((g) => (
+                  <button key={g.id} className={`tab ${group?.id === g.id ? 'active' : ''}`} onClick={() => openTab(lastInGroup[g.id] ?? g.tabs[0])}>
+                    {t(g.label)}
+                  </button>
+                ))}
+                <div className="spacer" />
+                <button
+                  className={`tab gear ${tab === 'settings' ? 'active' : ''}`}
+                  onClick={() => openTab('settings')}
+                  title={t('설정·연동')}
+                  aria-label={t('설정·연동')}
+                >
+                  ⚙
                 </button>
-              ))}
-            </nav>
+              </nav>
+              {group && group.tabs.length > 1 && (
+                <nav className="subtabs">
+                  {group.tabs.map((id) => (
+                    <button key={id} className={`subtab ${tab === id ? 'active' : ''}`} onClick={() => openTab(id)}>
+                      {t(TAB_LABELS[id])}
+                    </button>
+                  ))}
+                </nav>
+              )}
+            </div>
             <section className="content">
               {!serial && tab !== 'scen' && tab !== 'settings' ? (
                 adbOk === null || !devicesLoaded ? (
@@ -386,7 +430,7 @@ export function App() {
                       <div style={{ textAlign: 'center' }}>
                         {t('adb를 찾지 못했습니다.')}
                         <br />
-                        <button className="btn primary" style={{ marginTop: 10 }} onClick={() => setTab('settings')}>
+                        <button className="btn primary" style={{ marginTop: 10 }} onClick={() => openTab('settings')}>
                           {t('설정에서 adb 연결하기')}
                         </button>
                       </div>
