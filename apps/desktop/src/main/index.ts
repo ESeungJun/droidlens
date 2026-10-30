@@ -382,7 +382,7 @@ handle('graphImport', async (pkg: string) => {
 });
 
 // ---------- 앱 SDK ----------
-const SDK_METHODS = ['info', 'network', 'networkDetail', 'clearNetwork', 'prefs', 'setPref', 'removePref', 'databases', 'query', 'events'] as const;
+const SDK_METHODS = ['info', 'network', 'networkDetail', 'clearNetwork', 'mocks', 'setMock', 'removeMock', 'clearMocks', 'prefs', 'setPref', 'removePref', 'databases', 'query', 'events'] as const;
 handle('sdkApps', (s: string) => dl.listSdkApps(dev(s)));
 handle('sdk', async (s: string, pkg: string, method: (typeof SDK_METHODS)[number], ...args: unknown[]) => {
   if (!SDK_METHODS.includes(method)) throw new Error(`지원하지 않는 SDK 메서드: ${method}`);

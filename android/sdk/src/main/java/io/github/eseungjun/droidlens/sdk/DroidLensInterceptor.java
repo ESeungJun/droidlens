@@ -1,13 +1,17 @@
 package io.github.eseungjun.droidlens.sdk;
 
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.util.Map;
 
+import io.github.eseungjun.droidlens.sdk.internal.MockStore;
 import io.github.eseungjun.droidlens.sdk.internal.NetworkStore;
 import io.github.eseungjun.droidlens.sdk.internal.Redactor;
 import okhttp3.FormBody;
 import okhttp3.Interceptor;
 import okhttp3.MediaType;
 import okhttp3.MultipartBody;
+import okhttp3.Protocol;
 import okhttp3.Request;
 import okhttp3.RequestBody;
 import okhttp3.Response;
@@ -33,6 +37,7 @@ import okio.Okio;
  * 마지막에 addInterceptor 하는 것을 권장한다.
  * 응답 본문도 앱이 읽는 만큼만 복사하고, 다 읽거나 닫을 때 기록을 마친다 (스트리밍·롱폴링 응답을 막지 않는다).
  * 인증 헤더·토큰 같은 민감 정보는 저장하기 전에 가린다 ({@link DroidLens#redactHeaders}, {@link DroidLens#redactKeys}).
+ * DroidLens 에서 켠 네트워크 목 규칙({@link MockStore})과 맞는 요청은 서버에 보내지 않고 정해 둔 응답·실패로 끝내거나 늦춰 보낸다.
  */
 public final class DroidLensInterceptor implements Interceptor {
     private final long maxBodyBytes;
@@ -57,6 +62,13 @@ public final class DroidLensInterceptor implements Interceptor {
             e = NetworkStore.get().begin(request.method(), redact.url(request.url().toString()));
         } catch (Throwable ignored) {
             return chain.proceed(request);
+        }
+        MockStore.Rule mock = null;
+        try {
+            mock = MockStore.get().match(request.method(), request.url().toString());
+            if (mock != null) e.mockId = mock.id;
+        } catch (Throwable ignored) {
+            // 목 확인에 실패하면 실제로 보낸다
         }
         TeeRequestBody tee = null;
         try {
@@ -90,7 +102,7 @@ public final class DroidLensInterceptor implements Interceptor {
         long t0 = System.nanoTime();
         Response response;
         try {
-            response = chain.proceed(request);
+            response = mock != null ? mocked(chain, request, mock) : chain.proceed(request);
         } catch (Throwable ex) {
             // IOException 뿐 아니라 RuntimeException 으로 끝나도 항목이 pending 으로 남지 않게 한다
             try {
@@ -128,6 +140,46 @@ public final class DroidLensInterceptor implements Interceptor {
         }
         NetworkStore.get().finish(e, tookMs);
         return response;
+    }
+
+    /** 목 규칙대로 늦추고, 실패시키거나 만든 응답을 돌려준다. 응답을 만들지 않는 규칙이면 늦춘 뒤 실제로 보낸다 */
+    private static Response mocked(Chain chain, Request request, MockStore.Rule mock) throws IOException {
+        long until = System.currentTimeMillis() + mock.delayMs;
+        while (System.currentTimeMillis() < until) {
+            if (isCanceled(chain)) throw new IOException("Canceled");
+            try {
+                Thread.sleep(Math.min(100, Math.max(1, until - System.currentTimeMillis())));
+            } catch (InterruptedException ie) {
+                Thread.currentThread().interrupt();
+                throw new IOException("interrupted", ie);
+            }
+        }
+        if (mock.fail) throw new IOException("DroidLens 네트워크 목: 연결 실패 (규칙 " + mock.id + ")");
+        if (mock.status == 0) return chain.proceed(request);
+        String type = mock.contentType != null ? mock.contentType : "application/json; charset=utf-8";
+        byte[] bytes = mock.body != null ? mock.body.getBytes(StandardCharsets.UTF_8) : new byte[0];
+        long now = System.currentTimeMillis();
+        Response.Builder b = new Response.Builder()
+                .request(request)
+                .protocol(Protocol.HTTP_1_1)
+                .code(mock.status)
+                .message("DroidLens Mock")
+                .sentRequestAtMillis(now)
+                .receivedResponseAtMillis(now)
+                .header("Content-Type", type)
+                .header("X-DroidLens-Mock", mock.id)
+                .body(ResponseBody.create(MediaType.parse(type), bytes));
+        for (Map.Entry<String, String> h : mock.headers.entrySet()) b.header(h.getKey(), h.getValue());
+        return b.build();
+    }
+
+    /** Chain.call 은 OkHttp 3.9 에 생겼다. 그보다 오래된 버전은 취소를 확인하지 못한다 */
+    private static boolean isCanceled(Chain chain) {
+        try {
+            return chain.call().isCanceled();
+        } catch (LinkageError e) {
+            return false;
+        }
     }
 
     /** 미리 써서 복사할 본문의 최대 크기. 이보다 크면 메모리에 한 번 더 올리지 않는다 */

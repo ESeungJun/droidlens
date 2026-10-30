@@ -70,7 +70,7 @@ Linux    sudo apt install adb
 | **뷰 계층** | 스크린샷 ↔ 트리 양방향 선택, 속성·셀렉터, 깊이별 노드 수, Compose 추정, **3D 깊이 분해도** |
 | **화면 흐름** | 앱별 **화면 지도** — 자동 탐색·직접 조작·시나리오 실행에서 지나간 화면과 연결이 한 지도에 계속 쌓임 (썸네일 + 동작 라벨). **자동 탐색**(결제·삭제·로그아웃·전송 버튼은 누르지 않음), 스크린샷에서 **버튼·길게 누르기·스와이프를 골라 그 동작으로 열리는 흐름만 탐색**, 화면별 눌러 본 버튼 수, 첫 화면에서의 경로 강조, 기록된 경로로 **그 화면까지 자동 이동**, 지도 내보내기·가져오기(합치기) |
 | **로그** | 실시간 logcat (앱 PID 필터, 레벨, 검색), 최근 크래시 |
-| **네트워크** ¹ | OkHttp 요청·응답 (헤더, 본문 JSON 정렬, 이미지 미리보기, 소요 시간), 실패 필터, cURL 복사 |
+| **네트워크** ¹ | OkHttp 요청·응답 (헤더, 본문 JSON 정렬, 이미지 미리보기, 소요 시간), 실패 필터, cURL 복사, **네트워크 목**(응답·실패·지연) |
 | **성능** | 실시간 CPU·메모리(PSS, 영역별)·초당 프레임 그래프, 버벅인 프레임 비율과 프레임 시간 백분위, 앱 시작 시간 측정(콜드·다시 열기, 여러 번 반복해 중앙값) |
 | **앱 데이터** ¹ | SharedPreferences 조회·편집, SQLite/Room DB 브라우저와 SQL 실행, 커스텀 이벤트 |
 | **라이브러리** | APK의 DEX·네이티브 lib로 100여 개 라이브러리·프레임워크 탐지, 난독화 추정 |
@@ -112,12 +112,13 @@ DroidLens.event("purchase_clicked", JSONObject().put("itemId", 42))
 - 요청·응답 본문은 각 256KB까지, 최근 500건을 메모리에만 보관합니다
 - 민감 정보는 **기기 안에서 저장하기 전에** 가립니다 — 헤더, URL 쿼리, `Location` 리다이렉트, JSON 본문(중첩 객체·배열, 문자열 안의 JSON 포함), GraphQL 인자, 폼·multipart·XML 본문, 오류 메시지, 커스텀 이벤트. 키는 대소문자·구분자와 상관없이 맞추고, 흔한 단어는 이름에 들어 있기만 해도 가립니다(`newPassword`, `fcmToken`, `X-Refresh-Token`). `jwt`·`otp`·`pin` 같은 짧은 이름은 정확히 같을 때만 가립니다. `DroidLens.redactHeaders("X-Session")`, `DroidLens.redactKeys("phone")` 로 추가하고, `DroidLens.clearDefaultRedaction()` 으로 기본 규칙을 끌 수 있습니다. 앱이 직접 압축을 요청한 본문(`Content-Encoding`)은 기록하지 않습니다
 - DB 쓰기 SQL은 명시적으로 허용했을 때만 실행됩니다
+- **네트워크 목**: URL에 정한 문자열이 들어 있는 요청을 서버에 보내지 않고 원하는 상태 코드·본문으로 응답하거나, 연결 실패로 끝내거나, 늦춰 보낼 수 있습니다(네트워크 탭의 **목 규칙**, 기록된 요청에서 **목 만들기**). 규칙은 앱 내부 저장소에 남아 앱을 다시 시작해도 적용되고, 켜져 있으면 logcat에 경고가 남습니다
 
 ## Claude Code 연동
 
 앱의 **설정·연동** 탭에서 버튼 두 개만 누르면 됩니다.
 
-1. **MCP 자동 등록** — 앱에 내장된 MCP 서버(도구 46개)를 `claude mcp add --scope user`로 등록합니다. Node를 따로 설치할 필요가 없습니다.
+1. **MCP 자동 등록** — 앱에 내장된 MCP 서버(도구 49개)를 `claude mcp add --scope user`로 등록합니다. Node를 따로 설치할 필요가 없습니다.
 2. **에이전트 설치** — 전용 에이전트를 `~/.claude/agents/`에 복사합니다.
 
 | 에이전트 | 하는 일 |
@@ -139,7 +140,7 @@ Claude Code를 재시작한 뒤 이렇게 요청하세요.
 ```yaml
 name: 상품 검색
 app: com.example.shop
-setup: { restart: true }          # clearData, prefs(SDK)로 초기 상태도 만들 수 있음
+setup: { restart: true }          # clearData, prefs(SDK)로 초기 상태도, mocks(SDK)로 실행 중에만 켤 네트워크 목도 만들 수 있음
 steps:
   - tap: { text: 검색 }
   - type: { text: 운동화, into: { className: EditText } }

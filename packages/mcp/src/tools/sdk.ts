@@ -42,7 +42,7 @@ export function register(server: McpServer): void {
       if (!list.length) return text('(요청 없음)');
       return text(
         list
-          .map((e) => `#${e.id} ${e.method} ${e.state === 'failed' ? 'FAIL' : e.status || '…'} ${e.durationMs >= 0 ? e.durationMs + 'ms' : ''} ${e.url}${e.error ? `  ✗ ${e.error}` : ''}`)
+          .map((e) => `#${e.id} ${e.method} ${e.state === 'failed' ? 'FAIL' : e.status || '…'} ${e.durationMs >= 0 ? e.durationMs + 'ms' : ''} ${e.url}${e.mockId ? `  [목 ${e.mockId}]` : ''}${e.error ? `  ✗ ${e.error}` : ''}`)
           .join('\n'),
       );
     },
@@ -141,6 +141,67 @@ export function register(server: McpServer): void {
     async ({ serial, packageName, since }) => {
       const ev = await (await dl.sdkFor(await device(serial), packageName)).events(since);
       return text(ev.map((e) => `#${e.id} ${new Date(e.at).toLocaleTimeString()} ${e.name} ${e.data ? JSON.stringify(e.data) : ''}`).join('\n') || '(이벤트 없음)');
+    },
+  );
+
+  // ---------- 네트워크 목 ----------
+
+  const mockLine = (m: dl.MockRule) =>
+    `${m.id} ${m.enabled === false ? '(꺼짐) ' : ''}${m.method ?? '*'} *${m.url}* → ${m.fail ? '연결 실패' : m.status ? `${m.status} 응답` : '실제 요청'}${m.delayMs ? ` · ${m.delayMs}ms 지연` : ''} · ${m.hits ?? 0}회 적용`;
+
+  server.registerTool(
+    'network_mock_set',
+    {
+      description:
+        '네트워크 목 규칙 추가·수정. 요청 URL 에 url 이 들어 있고 method 가 맞는 요청을 서버에 보내지 않고 status·body 응답으로 끝내거나(status), ' +
+        '연결 실패로 끝내거나(fail), 늦춰 보낸다(delayMs). 오류·빈 목록·느린 응답 화면 재현에 쓴다. ' +
+        '규칙은 앱 안에 저장돼 앱을 다시 시작해도 남으므로 검증이 끝나면 network_mock_remove 로 지운다',
+      inputSchema: {
+        ...serialArg,
+        ...pkgArg,
+        id: z.string().optional().describe('바꿀 규칙 id. 없으면 새로 추가'),
+        url: z.string().describe('요청 URL 에 들어 있는 문자열 (예: api.example.com/v1/orders)'),
+        method: z.string().optional().describe('없으면 모든 메서드'),
+        status: z.number().int().min(200).max(599).optional().describe('돌려줄 상태 코드'),
+        body: z.string().optional().describe('돌려줄 응답 본문'),
+        contentType: z.string().optional().describe('기본 application/json; charset=utf-8'),
+        headers: z.record(z.string()).optional(),
+        delayMs: z.number().int().min(0).max(60000).optional(),
+        fail: z.boolean().optional().describe('연결 실패(IOException)로 끝냄'),
+        enabled: z.boolean().optional(),
+      },
+      annotations: acts,
+    },
+    async ({ serial, packageName, ...rule }) => {
+      const c = await dl.sdkFor(await device(serial), packageName);
+      const saved = await c.setMock(rule);
+      return text(`저장했습니다: ${mockLine(saved)}`);
+    },
+  );
+
+  server.registerTool(
+    'network_mock_list',
+    { description: '앱에 저장된 네트워크 목 규칙과 적용 횟수', inputSchema: { ...serialArg, ...pkgArg }, annotations: readOnly },
+    async ({ serial, packageName }) => {
+      const list = await (await dl.sdkFor(await device(serial), packageName)).mocks();
+      return text(list.length ? list.map(mockLine).join('\n') : '(목 규칙 없음)');
+    },
+  );
+
+  server.registerTool(
+    'network_mock_remove',
+    {
+      description: '네트워크 목 규칙 삭제. id 를 주지 않으면 모두 지운다',
+      inputSchema: { ...serialArg, ...pkgArg, id: z.string().optional() },
+      annotations: acts,
+    },
+    async ({ serial, packageName, id }) => {
+      const c = await dl.sdkFor(await device(serial), packageName);
+      if (!id) {
+        await c.clearMocks();
+        return text('목 규칙을 모두 지웠습니다');
+      }
+      return text((await c.removeMock(id)) ? `${id} 를 지웠습니다` : `${id} 규칙이 없습니다`);
     },
   );
 }

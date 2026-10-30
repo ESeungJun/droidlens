@@ -35,7 +35,8 @@
   - [x] 네트워크 인스펙터 (OkHttp Interceptor): 요청/응답 헤더·본문, 타이밍, 실패
   - [x] DB 브라우저 (SQLite/Room) + SQL, SharedPreferences 조회·편집
   - [x] 커스텀 이벤트
-  - [ ] 네트워크 목킹/응답 조작, DataStore, Compose 트리 상세(recomposition)
+  - [x] 네트워크 목킹: URL·메서드로 맞춘 요청에 응답·연결 실패·지연 (데스크톱 목 규칙, MCP `network_mock_*`, 스크립트 `setup.mocks`)
+  - [ ] DataStore, Compose 트리 상세(recomposition)
 - [ ] 자동 탐색 개선: 스크롤 영역 탐색, 입력 폼 더미 값, 로그인 시나리오 프리셋 후 탐색
 - [x] 앱별 화면 지도: 직접 조작·시나리오 실행도 자동 수집, 화면별 눌러 본 버튼 수, 경로 강조·기록된 경로로 화면 이동, 지도 내보내기·가져오기(합치기)
 - [x] 탭 앱 대응: 깊은 곳의 선택 상태(하단 탭)로 탭 화면 구분, 다시 열 때 다른 탭이 떠도 같은 요소·선택된 탭을 실마리로 화면 이동
