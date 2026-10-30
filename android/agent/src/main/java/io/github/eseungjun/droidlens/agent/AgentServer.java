@@ -40,8 +40,15 @@ final class AgentServer {
      * adb를 거친 연결(shell 2000 / root 0)만 받는다.
      */
     void serveForever() throws Exception {
-        LocalServerSocket server = new LocalServerSocket(socketName);
-        Log.i(AgentInstrumentation.TAG, "listening on localabstract:" + socketName);
+        LocalServerSocket server;
+        try {
+            server = new LocalServerSocket(socketName);
+        } catch (java.io.IOException e) {
+            // 다른 에이전트 인스턴스나 다른 앱이 같은 이름을 먼저 열었다. 호스트가 원인을 알 수 있게 분명히 남긴다
+            throw new java.io.IOException("localabstract:" + socketName + " 을 열지 못했습니다 (이미 다른 프로세스가 사용 중일 수 있음, pid "
+                    + Process.myPid() + ")", e);
+        }
+        Log.i(AgentInstrumentation.TAG, "listening on localabstract:" + socketName + " (pid " + Process.myPid() + ")");
         while (true) {
             try (LocalSocket s = server.accept()) {
                 int uid = s.getPeerCredentials().getUid();
@@ -170,6 +177,8 @@ final class AgentServer {
         sb.append("<?xml version='1.0' encoding='UTF-8' standalone='yes' ?><hierarchy rotation=\"0\">");
         if (allWindows) {
             List<AccessibilityWindowInfo> windows = ui.getWindows();
+            // 빈 hierarchy 를 성공처럼 돌려주면 호스트가 "화면에 아무것도 없음"으로 오해한다
+            if (windows.isEmpty()) throw new IllegalStateException("창 목록을 가져오지 못했습니다 (getWindows 가 비어 있음)");
             for (int i = windows.size() - 1; i >= 0; i--) {
                 AccessibilityNodeInfo root = windows.get(i).getRoot();
                 if (root != null) appendNode(sb, root, 0);
@@ -288,7 +297,8 @@ final class AgentServer {
     private String waitIdle(long quietMs, long timeoutMs) {
         long t0 = System.currentTimeMillis();
         try {
-            ui.waitForIdle(quietMs, timeoutMs);
+            // quietMs 가 timeoutMs 보다 크면 waitForIdle 이 timeoutMs 를 지키지 않고 계속 막혀 다른 요청까지 밀리므로 줄인다
+            ui.waitForIdle(Math.min(quietMs, timeoutMs), timeoutMs);
             return "{\"ok\":true,\"idle\":true,\"ms\":" + (System.currentTimeMillis() - t0) + "}";
         } catch (TimeoutException e) {
             return "{\"ok\":true,\"idle\":false,\"ms\":" + (System.currentTimeMillis() - t0) + "}";

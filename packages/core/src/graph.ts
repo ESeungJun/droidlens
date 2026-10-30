@@ -1,11 +1,11 @@
 import { createHash } from 'node:crypto';
-import { readFile, rm, stat, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { basename, join } from 'node:path';
 import { DeviceAdb, sleep } from './adb.js';
 import { ensureAgent } from './agent.js';
 import { assertPackage, currentScreen, launchApp, topFragments, type CurrentScreen } from './app.js';
 import { z } from 'zod';
-import { getDeviceInfo, KEYCODES, longPress, PNG_MAGIC, pressKey, screenshot, swipe, swipeVector, tap, type SwipeDirection } from './device.js';
+import { KEYCODES, longPress, PNG_MAGIC, pressKey, screenshot, screenSize, swipe, swipeVector, tap, type SwipeDirection } from './device.js';
 import {
   actionKey,
   actionLabel,
@@ -30,7 +30,7 @@ import {
   type Hierarchy,
   type ViewNode,
 } from './hierarchy.js';
-import { droidlensHome, ensureDir, readJson, safeName, writeJson } from './workspace.js';
+import { droidlensHome, ensureDir, readJson, safeName, writeFileAtomic, writeJson } from './workspace.js';
 
 // ---------- 스냅샷 ----------
 
@@ -60,6 +60,7 @@ function orAbort<T>(p: Promise<T>, signal?: AbortSignal): Promise<T> {
 /**
  * 화면이 안정될 때까지 대기. uiautomator dump(1.5~2.5초)보다 훨씬 빠른 screencap 해시를 연속 비교하고,
  * 안정되면 뷰 계층·Activity를 한 번만 가져온다. 커서 깜빡임 등으로 계속 변하면 timeout에서 멈춘다.
+ * 에이전트가 있으면 덤프로 안정을 확인하고 스크린샷은 담지 않는다 (필요하면 addSnapshot 에 dev 를 주면 새 화면일 때만 찍는다).
  * signal 이 취소되면 기다리기를 그만두고 던진다 (더 이상 기기에 덤프·스크린샷을 요청하지 않게).
  */
 export async function waitForSettle(
@@ -89,8 +90,8 @@ export async function waitForSettle(
         since = Date.now();
       } else if (Date.now() - since >= (pageWebViews(next.root).length ? 1000 : 0)) break;
     }
-    const [screen, png] = await Promise.all([currentScreen(dev), screenshot(dev)]);
-    return fixPackage({ screen, hierarchy, signature: sig, png });
+    // 스크린샷은 찍지 않는다: 새 화면을 지도에 올릴 때만 addSnapshot 이 찍는다 (재방문·앱 밖 화면마다 PNG 를 받지 않게)
+    return fixPackage({ screen: await currentScreen(dev), hierarchy, signature: sig });
   }
   const deadline = Date.now() + (opts.timeoutMs ?? 5000);
   await orAbort(sleep(opts.intervalMs ?? 250), signal);
@@ -177,9 +178,23 @@ export class ScreenGraph {
   createdAt = Date.now();
   updatedAt = Date.now();
   launchScreen?: string;
-  /** 마지막으로 읽거나 쓴 graph.json 의 수정 시각 (다른 프로세스가 고쳤는지 확인) */
+  /** 마지막으로 읽거나 쓴 graph.json 의 수정 시각 (다른 프로세스가 고쳤는지 확인). 0 이면 아직 파일과 맞춘 적 없음 */
   private mtime = 0;
+  /**
+   * 초기화 표식. reset 은 폴더를 지운 뒤 빈 graph.json 에 그 시각(resetAt)을 적어 둔다.
+   * - resetAt: 마지막으로 본 디스크의 초기화 시각. 저장할 때 그대로 적는다 (0 = 초기화된 적 없음, 예전 파일 포함)
+   * - since: 메모리 내용이 가장 이르게는 언제부터 모인 것인지. 만들거나 비운 시각이고, 파일을 합치면 그 파일의 resetAt 까지 내려간다
+   * 규칙: 디스크 resetAt 이 since 보다 늦으면 내 메모리에 초기화 전 기록이 섞였을 수 있으므로 버린다.
+   * 그 밖에는(처음 만들기 경합으로 서로 덮어쓴 경우 등) 합집합으로 합친다
+   */
+  private resetAt = 0;
+  private since = Date.now();
+  /** 저장·초기화를 한 번에 하나씩 돌리는 체인 */
   private saving: Promise<unknown> = Promise.resolve();
+  /** saveSoon 으로 미뤄 둔 저장 */
+  private pending?: ReturnType<typeof setTimeout>;
+  /** 미뤄 둔 저장이 있거나 저장 중인 인스턴스. reset 으로 opened 에서 빠진 인스턴스도 flushAll 이 마저 쓰게 한다 */
+  private static unsaved = new Set<ScreenGraph>();
 
   /**
    * 한 프로세스 안에서는 앱마다 그래프 하나를 같이 쓴다. 기능마다 따로 열어 저장하면
@@ -197,8 +212,36 @@ export class ScreenGraph {
   static async reset(packageName: string): Promise<void> {
     assertPackage(packageName);
     const dir = ScreenGraph.dirOf(packageName);
+    const resetAt = Date.now();
+    const p = ScreenGraph.opened.get(dir);
     ScreenGraph.opened.delete(dir);
-    await rm(dir, { recursive: true, force: true });
+    // 지운 뒤 빈 graph.json 에 초기화 시각을 남긴다. 옛 내용을 쥔 다른 인스턴스·프로세스는 이 표식을 보고 메모리를 버린다
+    const wipe = async () => {
+      await rm(dir, { recursive: true, force: true });
+      await mkdir(dir, { recursive: true });
+      const empty: GraphData = { packageName, resetAt, createdAt: resetAt, updatedAt: resetAt, nodes: [], edges: [] };
+      await writeJson(join(dir, 'graph.json'), empty);
+    };
+    // 이미 열린 인스턴스(스크립트 실행 중인 흐름 수집 등)는 저장 체인 안에서 비우고 지운다.
+    // 진행 중인 저장이 끝난 뒤에 돌고, 그 뒤에 들어온 저장은 지운 다음에 돈다 (지우는 사이에 옛 내용을 쓰지 않게)
+    const g = await p?.catch(() => undefined);
+    if (!g) return wipe();
+    if (g.pending) clearTimeout(g.pending);
+    g.pending = undefined;
+    await g.serial(async () => {
+      g.clear();
+      await wipe();
+    });
+  }
+
+  /**
+   * 열린 그래프의 미뤄 둔 저장(saveSoon)을 모두 바로 쓰고 끝나길 기다린다.
+   * 프로세스를 끝내기 전에 불러 모아 둔 기록이 사라지지 않게 한다 (실패한 저장은 건너뛴다)
+   */
+  static async flushAll(): Promise<void> {
+    const opened = [...ScreenGraph.opened.values()].map((p) => p.then((g) => g.flush()));
+    const unsaved = [...ScreenGraph.unsaved].map((g) => g.flush());
+    await Promise.all([...opened, ...unsaved].map((p) => p.catch(() => undefined)));
   }
 
   static async open(packageName: string): Promise<ScreenGraph> {
@@ -217,19 +260,70 @@ export class ScreenGraph {
     return g;
   }
 
-  /** 다른 프로세스(MCP 서버 등)가 graph.json 을 고쳤으면 다시 읽는다 */
+  /**
+   * 다른 프로세스(MCP 서버·데스크톱 앱)가 graph.json 을 고쳤으면 다시 읽어 지금 것과 합친다.
+   * 화면·연결은 초기화 말고는 지우는 일이 없으므로 합집합으로 두면 어느 쪽 기록도 사라지지 않는다.
+   * 초기화됐으면(파일이 없어졌거나 내 내용보다 늦은 초기화 표식) 메모리 내용을 버린다
+   */
   private async refresh(): Promise<void> {
     const file = join(this.dir, 'graph.json');
     const m = await stat(file).then((st) => st.mtimeMs).catch(() => 0);
-    if (!m || m === this.mtime) return;
-    const data = await readJson<GraphData>(file);
-    this.mtime = m;
+    if (!m) {
+      // 맞춰 둔 파일이 없어졌으면 누가 폴더를 지운 것이다 (예전 버전의 초기화, 또는 초기화가 빈 파일을 쓰기 전).
+      // 어느 것이 초기화 뒤에 생긴 기록인지 알 수 없어 메모리 내용을 모두 버리고, 지금을 초기화 시각으로 적는다
+      if (this.mtime) {
+        this.clear();
+        this.resetAt = this.since;
+      }
+      return;
+    }
+    if (m === this.mtime) return;
+    // 예전 버전이 쓰는 도중이라 깨진 파일이면 이번엔 합치지 않는다 (다음 저장 때 다시 본다)
+    const data = await readJson<GraphData>(file).catch(() => undefined);
     if (!data) return;
-    this.createdAt = data.createdAt;
-    this.updatedAt = data.updatedAt;
-    this.launchScreen = data.launchScreen;
-    this.nodes = new Map(data.nodes.map((n) => [n.id, n]));
-    this.edges = new Map(data.edges.map((e) => [e.id, e]));
+    const resetAt = data.resetAt ?? 0;
+    if (resetAt > this.since) this.clear();
+    this.resetAt = Math.max(this.resetAt, resetAt);
+    this.since = Math.min(this.since, resetAt);
+    this.mtime = m;
+    this.merge(data);
+  }
+
+  /** 메모리 내용을 버리고 빈 그래프로 돌아간다 */
+  private clear(): void {
+    this.nodes.clear();
+    this.edges.clear();
+    this.launchScreen = undefined;
+    this.createdAt = this.updatedAt = this.since = Date.now();
+    this.mtime = 0;
+  }
+
+  private merge(data: GraphData): void {
+    this.createdAt = Math.min(this.createdAt, data.createdAt);
+    this.updatedAt = Math.max(this.updatedAt, data.updatedAt);
+    this.launchScreen ??= data.launchScreen;
+    for (const n of data.nodes) {
+      const cur = this.nodes.get(n.id);
+      if (!cur) {
+        this.nodes.set(n.id, n);
+        continue;
+      }
+      cur.visits = Math.max(cur.visits, n.visits);
+      cur.firstSeen = Math.min(cur.firstSeen, n.firstSeen);
+      cur.lastSeen = Math.max(cur.lastSeen ?? 0, n.lastSeen ?? 0) || undefined;
+      cur.screenshot ??= n.screenshot;
+      if (!cur.targets && n.targets) {
+        cur.targets = n.targets;
+        cur.actions = n.actions;
+        cur.selectedKeys = n.selectedKeys;
+      }
+      if (n.tried?.length) cur.tried = [...new Set([...(cur.tried ?? []), ...n.tried])];
+    }
+    for (const e of data.edges) {
+      const cur = this.edges.get(e.id);
+      if (cur) cur.count = Math.max(cur.count, e.count);
+      else this.edges.set(e.id, e);
+    }
   }
 
   /** 앱 실행 첫 화면. 실행 기록이 없던 예전 지도는 가장 먼저 기록된 화면 (표시용, 화면 이동에는 launchScreen 만 쓴다) */
@@ -253,6 +347,8 @@ export class ScreenGraph {
       let shot: string | undefined;
       if (png) {
         shot = `${safeName(id)}.png`;
+        // 다른 프로세스가 초기화하며 폴더를 지웠을 수 있다
+        await mkdir(this.dir, { recursive: true });
         await writeFile(join(this.dir, shot), png);
       }
       const frag = s.screen.fragments.length ? ` / ${s.screen.fragments.join(', ')}` : '';
@@ -313,6 +409,7 @@ export class ScreenGraph {
   toJSON(): GraphData {
     return {
       packageName: this.packageName,
+      resetAt: this.resetAt || undefined,
       createdAt: this.createdAt,
       updatedAt: this.updatedAt,
       launchScreen: this.launchScreen,
@@ -321,19 +418,54 @@ export class ScreenGraph {
     };
   }
 
-  /** 저장은 한 번에 하나씩 (동시에 쓰면 파일이 섞일 수 있다) */
+  /**
+   * 지금 바로 저장. 한 번에 하나씩 쓰고, 그사이 다른 프로세스가 고쳤으면 먼저 합친다 (마지막 저장이 앞선 기록을 지우지 않게).
+   * 임시 파일에 쓰고 이름을 바꿔 덮으므로 읽는 쪽이 반쯤 쓰인 파일을 보지 않는다
+   */
   save(): Promise<string> {
+    if (this.pending) clearTimeout(this.pending);
+    this.pending = undefined;
     const p = join(this.dir, 'graph.json');
-    const write = async () => {
-      const mermaid = this.toMermaid();
+    return this.serial(async () => {
+      await this.refresh();
+      await mkdir(this.dir, { recursive: true });
       await writeJson(p, this.toJSON());
-      await writeFile(join(this.dir, 'graph.mmd'), mermaid);
+      await writeFileAtomic(join(this.dir, 'graph.mmd'), this.toMermaid());
       this.mtime = await stat(p).then((st) => st.mtimeMs).catch(() => this.mtime);
       return p;
-    };
-    const next = this.saving.then(write, write);
-    this.saving = next.catch(() => undefined);
+    });
+  }
+
+  /** 저장·초기화를 앞의 작업이 끝난 뒤에 돌린다 (앞의 작업이 실패해도 돈다) */
+  private serial<T>(task: () => Promise<T>): Promise<T> {
+    ScreenGraph.unsaved.add(this);
+    const next = this.saving.then(task, task);
+    const tail = next.catch(() => undefined);
+    this.saving = tail;
+    // 마지막 작업이 끝났고 새로 미뤄 둔 저장이 없으면 목록에서 뺀다
+    void tail.then(() => {
+      if (this.saving === tail && !this.pending) ScreenGraph.unsaved.delete(this);
+    });
     return next;
+  }
+
+  /**
+   * 잦은 기록(탐색 한 걸음·흐름 수집)용: 모았다가 잠시 뒤 한 번에 저장한다.
+   * 작업이 끝나면 flush() 로 마저 쓴다 (타이머가 남아 있는 동안은 프로세스도 끝나지 않는다)
+   */
+  saveSoon(delayMs = 1000): void {
+    if (this.pending) return;
+    ScreenGraph.unsaved.add(this);
+    this.pending = setTimeout(() => {
+      this.pending = undefined;
+      this.save().catch(() => undefined);
+    }, delayMs);
+  }
+
+  /** 미뤄 둔 저장을 바로 쓰고 진행 중인 저장까지 끝나길 기다린다 */
+  async flush(): Promise<void> {
+    if (this.pending) await this.save();
+    else await this.saving;
   }
 
   toMermaid(): string {
@@ -613,7 +745,7 @@ export async function followPath(dev: DeviceAdb, pkg: string, start: Snapshot, p
       const { x, y } = center(c.node);
       await (a.type === 'tap' ? tap(dev, x, y) : longPress(dev, x, y));
     } else if (a.type === 'swipe') {
-      const [x1, y1, x2, y2] = swipeVector((await getDeviceInfo(dev)).screen, a.direction!);
+      const [x1, y1, x2, y2] = swipeVector(await screenSize(dev), a.direction!);
       await swipe(dev, x1, y1, x2, y2);
     } else await pressKey(dev, 'back');
     s = await waitForSettle(dev);
@@ -884,7 +1016,7 @@ export async function explore(dev: DeviceAdb, opts: ExploreOptions): Promise<Exp
       }
       let action: GraphAction;
       if (move.kind === 'swipe') {
-        const [x1, y1, x2, y2] = swipeVector((await getDeviceInfo(dev)).screen, move.direction!);
+        const [x1, y1, x2, y2] = swipeVector(await screenSize(dev), move.direction!);
         action = { type: 'swipe', x1, y1, x2, y2, direction: move.direction };
       } else {
         // 처음 본 좌표가 아니라 지금 화면에서 같은 버튼을 다시 찾는다 (돌아왔을 때 스크롤 위치가 바뀌었을 수 있다)
@@ -931,13 +1063,13 @@ export async function explore(dev: DeviceAdb, opts: ExploreOptions): Promise<Exp
         const edge = graph.addEdge(hereId, to.id, action);
         touched.nodes.add(to.id);
         touched.edges.add(edge.id);
-        await graph.save();
+        graph.saveSoon();
         log(`${name} → ${to.label}`, to.id);
         snap = after;
         if (depth + 1 < maxDepth && !entered.has(to.id)) await visit([...path, { action, to: to.id }], depth + 1);
         // 페이저처럼 스와이프로 넘긴 화면은 BACK 보다 반대로 스와이프하는 쪽이 원래 화면으로 돌아온다
         if (screenId(snap) !== hereId && action.type === 'swipe' && move.direction) {
-          const [x1, y1, x2, y2] = swipeVector((await getDeviceInfo(dev)).screen, REVERSE[move.direction]);
+          const [x1, y1, x2, y2] = swipeVector(await screenSize(dev), REVERSE[move.direction]);
           await swipe(dev, x1, y1, x2, y2);
           snap = await waitForSettle(dev);
         }
@@ -951,8 +1083,11 @@ export async function explore(dev: DeviceAdb, opts: ExploreOptions): Promise<Exp
     }
   };
 
-  await visit([], 0);
-  await graph.save();
+  try {
+    await visit([], 0);
+  } finally {
+    await graph.save();
+  }
   log(`탐색 완료: 화면 ${graph.nodes.size}개, 전이 ${graph.edges.size}개, ${steps}스텝`);
   return {
     graph: graph.toJSON(),
@@ -1002,14 +1137,15 @@ export class FlowCollector {
     this.last = undefined;
   }
 
-  async observe(): Promise<void> {
+  /** 지금 화면을 지도에 모은다. 확인한 스냅샷을 돌려줘 호출부가 같은 조회를 다시 하지 않게 한다 (실패하면 undefined) */
+  async observe(): Promise<Snapshot | undefined> {
     const noted = this.pending;
     this.pending = undefined;
     try {
       const s = await captureSnapshot(this.dev, { screenshot: false });
       if (s.screen.packageName !== this.graph.packageName) {
         this.last = undefined;
-        return;
+        return s;
       }
       const node = await this.graph.addSnapshot(s, this.dev);
       const prev = this.last && screenId(this.last);
@@ -1018,10 +1154,17 @@ export class FlowCollector {
         if (action) this.graph.addEdge(prev!, node.id, action);
       }
       this.last = s;
-      await this.graph.save();
+      this.graph.saveSoon();
+      return s;
     } catch {
       this.last = undefined;
+      return undefined;
     }
+  }
+
+  /** 모아 둔 기록을 파일에 마저 쓴다 (수집을 끝낼 때 부른다) */
+  flush(): Promise<void> {
+    return this.graph.flush();
   }
 
   private async toAction(a: NotedAction, before: Snapshot, from: string): Promise<GraphAction | undefined> {
@@ -1032,7 +1175,7 @@ export class FlowCollector {
       return { ...pressAction(a.type, c), x: a.x, y: a.y };
     }
     if (a.type === 'swipe') {
-      const [x1, y1, x2, y2] = swipeVector((await getDeviceInfo(this.dev)).screen, a.direction);
+      const [x1, y1, x2, y2] = swipeVector(await screenSize(this.dev), a.direction);
       return { type: 'swipe', x1, y1, x2, y2, direction: a.direction };
     }
     return a;

@@ -5,11 +5,16 @@ import { useT } from '../i18n';
 import { SdkGate } from './SdkGate';
 
 export function NetworkTab() {
-  return <SdkGate>{() => <NetworkInspector />}</SdkGate>;
+  const { serial, pkg } = useApp();
+  // 기기나 앱이 바뀌면 목록·마지막 id·선택을 모두 새로 시작한다 (이전 앱의 요청이 섞이지 않게)
+  return <SdkGate>{() => <NetworkInspector key={`${serial}|${pkg}`} />}</SdkGate>;
 }
 
 const statusColor = (e: NetworkEntry) =>
   e.state === 'failed' || e.status >= 500 ? 'var(--err)' : e.status >= 400 ? 'var(--warn)' : e.state === 'pending' ? 'var(--fg-faint)' : 'var(--accent)';
+
+/** POSIX 셸 홑따옴표 인용. 안의 ' 는 '\'' 로 끊어 넣어, 붙여 넣은 명령이 값 때문에 다른 명령으로 바뀌지 않게 한다 */
+const shq = (s: string) => `'${s.replace(/'/g, `'\\''`)}'`;
 
 const size = (n: number) => (n < 0 ? '-' : n < 1024 ? `${n}B` : n < 1048576 ? `${(n / 1024).toFixed(1)}KB` : `${(n / 1048576).toFixed(1)}MB`);
 
@@ -35,24 +40,31 @@ function NetworkInspector() {
   const lastId = useRef(0);
   const pollCount = useRef(0);
 
+  // 앞 요청이 끝나기 전에는 다시 묻지 않는다 (응답이 1.5초를 넘기면 요청이 쌓이고 순서가 뒤바뀐다)
+  const inFlight = useRef(false);
+
   const poll = useCallback(async () => {
-    if (!serial || !pkg) return;
-    // 진행 중(pending)인 가장 오래된 요청 직전부터 다시 받아, 새 요청 + 상태가 바뀐 요청만 반영한다
-    // 진행 중(pending)인 가장 오래된 요청 직전부터 다시 받아, 새 요청 + 상태가 바뀐 요청만 반영한다.
-    // 10번에 한 번은 전체를 받아 앱 재시작(id가 1부터 다시 시작)이나 SDK 쪽 삭제를 반영한다.
-    const full = ++pollCount.current % 10 === 0;
-    const pendingFrom = entriesRef.current.find((e) => e.state === 'pending')?.id;
-    const since = full ? 0 : pendingFrom !== undefined ? pendingFrom - 1 : lastId.current;
-    const fresh = await api.sdk<NetworkEntry[]>(serial, pkg, 'network', { since, limit: 500 }).catch(() => null);
-    if (!fresh) return;
-    if (full) {
-      setEntries(fresh);
-      lastId.current = fresh.at(-1)?.id ?? 0;
-      return;
+    if (!serial || !pkg || inFlight.current) return;
+    inFlight.current = true;
+    try {
+      // 진행 중(pending)인 가장 오래된 요청 직전부터 다시 받아, 새 요청 + 상태가 바뀐 요청만 반영한다.
+      // 10번에 한 번은 전체를 받아 앱 재시작(id가 1부터 다시 시작)이나 SDK 쪽 삭제를 반영한다.
+      const full = ++pollCount.current % 10 === 0;
+      const pendingFrom = entriesRef.current.find((e) => e.state === 'pending')?.id;
+      const since = full ? 0 : pendingFrom !== undefined ? pendingFrom - 1 : lastId.current;
+      const fresh = await api.sdk<NetworkEntry[]>(serial, pkg, 'network', { since, limit: 500 }).catch(() => null);
+      if (!fresh) return;
+      if (full) {
+        setEntries(fresh);
+        lastId.current = fresh.at(-1)?.id ?? 0;
+        return;
+      }
+      if (!fresh.length) return;
+      setEntries((cur) => [...cur.filter((e) => e.id <= since), ...fresh].slice(-500));
+      lastId.current = Math.max(lastId.current, fresh[fresh.length - 1].id);
+    } finally {
+      inFlight.current = false;
     }
-    if (!fresh.length) return;
-    setEntries((cur) => [...cur.filter((e) => e.id <= since), ...fresh].slice(-500));
-    lastId.current = Math.max(lastId.current, fresh[fresh.length - 1].id);
   }, [serial, pkg]);
   const entriesRef = useRef<NetworkEntry[]>([]);
   useEffect(() => {
@@ -68,7 +80,15 @@ function NetworkInspector() {
 
   useEffect(() => {
     if (sel == null || !serial || !pkg) return setDetail(null);
-    api.sdk<NetworkDetail>(serial, pkg, 'networkDetail', sel).then(setDetail).catch(() => setDetail(null));
+    // 다른 요청을 빠르게 연달아 고르면 늦게 온 이전 상세가 덮지 않게 한다
+    let alive = true;
+    api
+      .sdk<NetworkDetail>(serial, pkg, 'networkDetail', sel)
+      .then((d) => alive && setDetail(d))
+      .catch(() => alive && setDetail(null));
+    return () => {
+      alive = false;
+    };
   }, [sel, serial, pkg, entries.find((e) => e.id === sel)?.state]);
 
   const shown = useMemo(() => {
@@ -81,9 +101,12 @@ function NetworkInspector() {
 
   const copyCurl = () => {
     if (!detail) return;
-    const h = Object.entries(detail.requestHeaders).flatMap(([k, vs]) => vs.map((v) => `-H '${k}: ${v.replace(/'/g, "'\\''")}'`));
-    const body = detail.requestBody ? ` --data '${detail.requestBody.replace(/'/g, "'\\''")}'` : '';
-    api.copy(`curl -X ${detail.method} ${h.join(' ')}${body} '${detail.url}'`);
+    // 메서드·헤더·본문·URL 모두 앱이 보낸 값이라 그대로 셸에 붙이면 명령이 실행될 수 있다. 전부 같은 인용을 거친다.
+    // POSIX 셸 인용이라 cmd·PowerShell 에서는 안전하지 않다 (cmd 는 따옴표 안의 %VAR% 를 막을 방법이 없어 cmd 용은 만들지 않는다).
+    // 본문은 @ 로 시작해도 파일로 읽지 않게 --data-raw, URL 은 - 로 시작해도 옵션이 되지 않게 --url 로 넘긴다
+    const h = Object.entries(detail.requestHeaders).flatMap(([k, vs]) => vs.map((v) => `-H ${shq(`${k}: ${v}`)}`));
+    const body = detail.requestBody ? ` --data-raw ${shq(detail.requestBody)}` : '';
+    api.copy(`curl -X ${shq(detail.method)} ${h.join(' ')}${body} --url ${shq(detail.url)}`);
   };
 
   return (
@@ -123,7 +146,9 @@ function NetworkInspector() {
               <b style={{ color: statusColor(detail) }}>{detail.state === 'failed' ? 'FAIL' : `${detail.status} ${detail.message ?? ''}`}</b>
               <span className="faint">{detail.durationMs}ms · {detail.protocol}</span>
               <div className="spacer" />
-              <button className="btn sm" onClick={copyCurl}>{t('cURL 복사')}</button>
+              <button className="btn sm" onClick={copyCurl} title={t('bash·zsh 같은 POSIX 셸용 인용입니다. Windows cmd·PowerShell 에 붙이면 값 때문에 다른 명령이 실행될 수 있습니다')}>
+                {t('cURL 복사 (bash)')}
+              </button>
               <button className="btn sm" onClick={() => setSel(null)}>✕</button>
             </div>
             <div className="mono" style={{ fontSize: 11.5, wordBreak: 'break-all', marginBottom: 8 }}>{detail.method} {detail.url}</div>

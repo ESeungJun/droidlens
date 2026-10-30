@@ -97,6 +97,7 @@ dependencies {
 }
 
 // Network inspector (if you use OkHttp)
+// Add it last, after your other interceptors (common params, signing, ...) so added values are recorded and later interceptors see the original body type
 val client = OkHttpClient.Builder()
     .addInterceptor(DroidLensInterceptor())
     .build()

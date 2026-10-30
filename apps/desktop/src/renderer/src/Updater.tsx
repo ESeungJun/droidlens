@@ -31,7 +31,7 @@ export function useUpdater() {
   useEffect(() => api.onUpdateProgress(setProgress), []);
 
   const install = useCallback(async () => {
-    if (!info?.available) return;
+    if (!info?.available || progress) return; // 이미 받는 중이면 다시 시작하지 않는다
     if (!info.canInstall) {
       setError(info.reason ?? t('자동 설치를 할 수 없습니다'));
       return;
@@ -45,7 +45,7 @@ export function useUpdater() {
       setProgress(null);
       setError((e as Error).message);
     }
-  }, [info, t]);
+  }, [info, progress, t]);
 
   return { info, checking, error, progress, check, install };
 }
@@ -61,9 +61,11 @@ export function UpdateButton({ u }: { u: ReturnType<typeof useUpdater> }) {
     );
   }
   if (!u.info?.available) return null;
+  // 설치에 실패하면 설정 탭을 열지 않아도 알 수 있게 버튼에 표시하고 이유는 툴팁으로 보여 준다
+  const title = u.error ? t(u.error) : u.info.canInstall ? t('클릭하면 내려받아 설치하고 다시 시작합니다') : u.info.reason && t(u.info.reason);
   return (
-    <button className="btn sm primary" onClick={u.install} title={u.info.canInstall ? t('클릭하면 내려받아 설치하고 다시 시작합니다') : u.info.reason && t(u.info.reason)}>
-      ⬆ {t('업데이트 {version}', { version: u.info.latest })}
+    <button className="btn sm primary" onClick={u.install} title={title}>
+      {u.error ? '⚠' : '⬆'} {t('업데이트 {version}', { version: u.info.latest })}
     </button>
   );
 }
