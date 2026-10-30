@@ -124,7 +124,7 @@ export function register(server: McpServer): void {
       },
       annotations: acts,
     },
-    async ({ serial, packageName, maxSteps, maxDepth, avoid, relaunch, startScreen, only, allowDanger }) => {
+    async ({ serial, packageName, maxSteps, maxDepth, avoid, relaunch, startScreen, only, allowDanger }, extra) => {
       const dev = await device(serial);
       const log: string[] = [];
       const r = await dl.explore(dev, {
@@ -136,6 +136,8 @@ export function register(server: McpServer): void {
         only,
         allowDanger,
         avoid: avoid ? new RegExp(avoid, 'i') : undefined,
+        // 클라이언트가 도구 호출을 취소하면 탐색도 멈춘다
+        signal: extra.signal,
         onProgress: (e) => log.push(`#${e.step} ${e.message}`),
       });
       return text(

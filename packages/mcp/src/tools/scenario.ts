@@ -252,12 +252,13 @@ export function register(server: McpServer): void {
       inputSchema: { ...serialArg, script: z.string().describe('이름 또는 경로') },
       annotations: acts,
     },
-    async ({ serial, script }) => {
+    async ({ serial, script }, extra) => {
       const dev = await device(serial);
       const p = await scriptPath(script, true);
       const lines: string[] = [];
       const r = await dl.runScript(dev, await dl.loadScript(p), {
         sourcePath: p,
+        signal: extra.signal,
         onStep: (e) => {
           if (e.status !== 'running') lines.push(`${e.index + 1}/${e.total} ${e.status.toUpperCase()} ${e.title}${e.detail && e.status === 'fail' ? `\n    ${e.detail.replace(/\n/g, '\n    ')}` : ''}`);
         },
@@ -274,9 +275,9 @@ export function register(server: McpServer): void {
       inputSchema: { ...serialArg, path: z.string().optional() },
       annotations: acts,
     },
-    async ({ serial, path }) => {
+    async ({ serial, path }, extra) => {
       const dev = await device(serial);
-      const r = await dl.runSuite(dev, await suitePath(path));
+      const r = await dl.runSuite(dev, await suitePath(path), { signal: extra.signal });
       const rows = r.results.map((x) =>
         x.error
           ? `✗ ${x.name}: ${x.error.split('\n')[0]}`
