@@ -22,7 +22,7 @@ import okio.Okio;
  * <pre>
  * OkHttpClient.Builder().addInterceptor(DroidLensInterceptor()).build()
  * </pre>
- * 요청·응답 헤더와 본문(각 최대 {@link #maxBodyBytes}), 상태 코드, 소요 시간, 실패 원인을 기록한다.
+ * 요청·응답 헤더와 본문(각 최대 {@link #maxBodyBytes}, 바이너리는 더 작게), 상태 코드, 소요 시간, 실패 원인을 기록한다.
  * 요청 본문은 미리 써 보지 않고 실제 전송 때 흘러가는 바이트의 앞부분만 복사한다 (writeTo 는 한 번만 불린다).
  * 응답 본문도 앱이 읽는 만큼만 복사하고, 다 읽거나 닫을 때 기록을 마친다 (스트리밍·롱폴링 응답을 막지 않는다).
  * 인증 헤더·토큰 같은 민감 정보는 저장하기 전에 가린다 ({@link DroidLens#redactHeaders}, {@link DroidLens#redactKeys}).
@@ -53,7 +53,7 @@ public final class DroidLensInterceptor implements Interceptor {
                 e.requestSize = body.contentLength();
                 // duplex 본문은 응답과 동시에 계속 쓰이므로 기록하지 않는다
                 if (!body.isDuplex() && !compressed(request.header("Content-Encoding"))) {
-                    tee = new TeeRequestBody(body, maxBodyBytes);
+                    tee = new TeeRequestBody(body, NetworkStore.captureLimit(e.requestContentType, e.requestSize, maxBodyBytes));
                     request = request.newBuilder().method(request.method(), tee).build();
                 }
             } catch (Exception ignored) {
@@ -85,7 +85,8 @@ public final class DroidLensInterceptor implements Interceptor {
                 // 앱이 Accept-Encoding 을 직접 지정해 압축된 채 받은 본문은 가릴 수 없고,
                 // SSE 는 끝나지 않는 스트림이며 101 은 웹소켓 업그레이드라 본문을 감싸지 않는다
                 if (!compressed(response.header("Content-Encoding")) && !isEventStream(e.responseContentType) && response.code() != 101) {
-                    CapturingSource src = new CapturingSource(original.source(), e, maxBodyBytes, redact);
+                    long limit = NetworkStore.captureLimit(e.responseContentType, e.responseSize, maxBodyBytes);
+                    CapturingSource src = new CapturingSource(original.source(), e, limit, redact);
                     response = response.newBuilder()
                             .body(ResponseBody.create(ct, original.contentLength(), Okio.buffer(src)))
                             .build();
@@ -103,9 +104,7 @@ public final class DroidLensInterceptor implements Interceptor {
         if (tee == null || tee.written < 0) return;
         try {
             byte[] raw = tee.captured.readByteArray();
-            e.requestSize = tee.written;
-            e.requestBody = redact.body(raw, e.requestContentType);
-            e.requestTruncated = tee.written > raw.length;
+            NetworkStore.get().setRequestBody(e, redact.body(raw, e.requestContentType), tee.written, tee.written > raw.length);
         } catch (Exception ignored) {
             // 본문 기록 실패는 무시
         }
@@ -229,10 +228,9 @@ public final class DroidLensInterceptor implements Interceptor {
             try {
                 byte[] raw = captured.readByteArray();
                 // 길이를 모르는 응답은 실제로 읽은 만큼을 크기로 쓰고, 끝까지 읽지 않고 닫았으면 잘린 것으로 본다
-                boolean truncated = entry.responseSize >= 0 ? entry.responseSize > raw.length : !eof || read > raw.length;
-                if (entry.responseSize < 0) entry.responseSize = read;
-                entry.responseBody = redact.body(raw, entry.responseContentType);
-                entry.responseTruncated = truncated;
+                long size = entry.responseSize;
+                boolean truncated = size >= 0 ? size > raw.length : !eof || read > raw.length;
+                NetworkStore.get().setResponseBody(entry, redact.body(raw, entry.responseContentType), size >= 0 ? size : read, truncated);
             } catch (Throwable ignored) {
                 // 본문 기록 실패는 무시
             }
