@@ -4,7 +4,7 @@ import YAML from 'yaml';
 import { z } from 'zod';
 import { DeviceAdb, sleep } from './adb.js';
 import { ensureAgent } from './agent.js';
-import { clearAppData, currentScreen, openDeepLink, recentCrashes } from './app.js';
+import { clearAppData, currentScreen, deviceTime, openDeepLink, recentCrashes } from './app.js';
 import { KEYCODES, longPress, pressKey, replaceText, screenshot, swipeDirection, tap, typeText } from './device.js';
 import { FlowCollector, launchAndSettle } from './graph.js';
 import { center, dumpHierarchy, findNodes, type Selector, type ViewNode } from './hierarchy.js';
@@ -244,7 +244,7 @@ async function findWithin(dev: DeviceAdb, sel: Selector, timeoutMs: number): Pro
   }
 }
 
-/** 단일 assertion 평가. 통과하면 근거 문자열, 실패하면 StepFailure */
+/** 단일 assertion 평가. 통과하면 근거 문자열, 실패하면 StepFailure. ctx.since 는 기기 시계 기준 (deviceTime) */
 export async function evaluateAssertion(dev: DeviceAdb, app: string, a: Assertion, ctx: { since: number }): Promise<string> {
   const timeout = a.timeout ?? 3000;
   const evidence: string[] = [];
@@ -355,12 +355,7 @@ export async function evaluateAssertion(dev: DeviceAdb, app: string, a: Assertio
     );
   }
   if (a.noCrash) {
-    const crashes = (await recentCrashes(dev, app)).filter((c) => {
-      const m = /^(\d\d-\d\d \d\d:\d\d:\d\d)/m.exec(c);
-      if (!m) return true;
-      const t = new Date(`${new Date().getFullYear()}-${m[1].replace(' ', 'T')}`).getTime();
-      return t >= ctx.since - 1000;
-    });
+    const crashes = await recentCrashes(dev, app, { since: ctx.since - 1000 });
     if (crashes.length) throw new StepFailure(`크래시 발생:\n${crashes[crashes.length - 1].split('\n').slice(0, 8).join('\n')}`);
     evidence.push('크래시 없음');
   }
@@ -384,8 +379,9 @@ export async function runScript(dev: DeviceAdb, script: Script, opts: ScriptRunO
   let skipped = 0;
   const total = script.steps.length;
   const shotAll = script.screenshots === 'all';
-  // 네트워크/이벤트 assertion은 실행 시작 이후 것만 본다 (기기 시계와 호스트 시계 차이를 감안해 여유를 둔다)
-  const ctx = { since: Date.now() - 2000 };
+  // 네트워크·이벤트·크래시 assertion은 실행 시작 이후 것만 본다. 기기가 남긴 시각이라 기준도 기기 시계로 잡는다
+  // (읽지 못하면 호스트 시계). 초 단위라 여유를 둔다
+  const ctx = { since: (await deviceTime(dev).catch(() => Date.now())) - 2000 };
 
   const record = async (title: string, status: 'pass' | 'fail' | 'info' | 'skip', detail?: string, withShot = false) => {
     const png = withShot ? await screenshot(dev).catch(() => undefined) : undefined;
