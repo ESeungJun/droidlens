@@ -119,6 +119,7 @@ export const api = {
   avdStop: (s: string) => call<void>('avdStop', s),
   deviceInfo: (s: string) => call<DeviceInfo>('deviceInfo', s),
   screenshot: (s: string) => call<string>('screenshot', s),
+  screenshotPng: (s: string) => call<Uint8Array>('screenshotPng', s),
   saveScreenshot: (s: string, label?: string) => call<string>('saveScreenshot', s, label),
   snapshot: (s: string) => call<SnapshotDTO>('snapshot', s),
   currentScreen: (s: string) => call<CurrentScreen>('currentScreen', s),

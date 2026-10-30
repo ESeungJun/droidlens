@@ -83,6 +83,8 @@ handle('avdStart', (name: string) => dl.startAvd(adb, name, { onProgress: (messa
 handle('avdStop', (s: string) => dl.stopAvd(adb, s));
 handle('deviceInfo', (s: string) => dl.getDeviceInfo(dev(s)));
 handle('screenshot', async (s: string) => `data:image/png;base64,${(await dl.screenshot(dev(s))).toString('base64')}`);
+// 화면 탭 스냅샷 모드처럼 계속 받는 경우: base64 문자열로 바꾸지 않고 PNG 바이트 그대로 넘긴다 (구조화 복제로 Uint8Array 가 된다)
+handle('screenshotPng', (s: string) => dl.screenshot(dev(s)));
 handle('saveScreenshot', async (s: string, label?: string) => {
   const dir = await dl.ensureDir('screenshots');
   const p = join(dir, `${dl.timestamp()}_${dl.safeName(label ?? 'shot')}.png`);
