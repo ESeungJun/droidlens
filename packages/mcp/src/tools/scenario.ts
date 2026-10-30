@@ -1,15 +1,57 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
-import { readFile, writeFile } from 'node:fs/promises';
+import { readFile, realpath, stat, writeFile } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
-import { basename, join } from 'node:path';
+import { homedir } from 'node:os';
+import { basename, dirname, extname, isAbsolute, join, relative, resolve } from 'node:path';
 import { z } from 'zod';
 import * as dl from '@droidlens/core';
 import { device, text, serialArg, acts, readOnly, recorder } from '../common.js';
 
+const isYaml = (p: string) => ['.yaml', '.yml'].includes(extname(p).toLowerCase());
+
+/** p 가 root 안(같은 곳 포함)인지 */
+const within = (root: string, p: string) => {
+  const r = relative(root, p);
+  return r === '' || (!r.startsWith('..') && !isAbsolute(r));
+};
+
+/** 허용하는 폴더: scripts 폴더 + 실행이면 MCP 서버를 띄운 프로젝트 폴더(cwd). cwd 가 홈·루트 자체면 사실상 전부라 넣지 않는다 */
+async function allowedRoots(run: boolean): Promise<string[]> {
+  const dir = await realpath(await dl.scriptsDir());
+  if (!run) return [dir];
+  const cwd = await realpath(process.cwd()).catch(() => undefined);
+  const home = await realpath(homedir()).catch(() => homedir());
+  return cwd && cwd !== resolve('/') && cwd !== home ? [dir, cwd] : [dir];
+}
+
+/**
+ * 도구 인자 경로 → 허용된 폴더 안의 실제 경로 (심볼릭 링크를 따라간 것). 도구 인자는 화면·문서에 심어진 지시(프롬프트 인젝션)로
+ * 채워질 수 있으므로 scripts 폴더 밖 파일은 읽거나 쓰지 않는다. 상대 경로는 scripts 폴더 기준이고,
+ * 실행(script_run·suite_run)이면 cwd 안의 스크립트도 허용하며 cwd 기준으로 있는 파일을 먼저 쓴다 (CLI 처럼 프로젝트 상대 경로를 넘기는 경우)
+ */
+async function guardPath(input: string, run: boolean): Promise<string> {
+  const roots = await allowedRoots(run);
+  const p = run && existsSync(resolve(input)) ? resolve(input) : resolve(roots[0], input);
+  // 아직 없는 파일(새로 쓰는 스크립트)은 부모 폴더만 따라간다
+  const real = existsSync(p) ? await realpath(p) : join(await realpath(dirname(p)).catch(() => dirname(p)), basename(p));
+  if (!roots.some((r) => within(r, real))) throw new Error(`스크립트 폴더(${roots.join(', ')}) 밖의 경로는 쓸 수 없습니다: ${input}`);
+  return real;
+}
+
 /** 스크립트 이름 또는 경로 → 파일 경로 (이름이면 ~/.droidlens/scripts/<이름>.yaml) */
-async function scriptPath(nameOrPath: string): Promise<string> {
-  if (nameOrPath.includes('/') || nameOrPath.endsWith('.yaml') || nameOrPath.endsWith('.yml')) return nameOrPath;
-  return join(await dl.scriptsDir(), `${dl.safeName(nameOrPath)}.yaml`);
+async function scriptPath(nameOrPath: string, run = false): Promise<string> {
+  const asPath = /[/\\]/.test(nameOrPath) || isYaml(nameOrPath);
+  const p = await guardPath(asPath ? nameOrPath : join(await dl.scriptsDir(), `${dl.safeName(nameOrPath)}.yaml`), run);
+  if (!isYaml(p)) throw new Error(`스크립트는 .yaml/.yml 파일이어야 합니다: ${nameOrPath}`);
+  return p;
+}
+
+/** suite_run 경로 (폴더 또는 스크립트 파일). 생략하면 scripts 폴더 */
+async function suitePath(path: string | undefined): Promise<string> {
+  if (!path) return dl.scriptsDir();
+  const p = await guardPath(path, true);
+  if (!existsSync(p)) throw new Error(`경로를 찾을 수 없습니다: ${path}`);
+  return (await stat(p)).isDirectory() ? p : scriptPath(p, true);
 }
 
 const assertionSchema = z
@@ -206,7 +248,7 @@ export function register(server: McpServer): void {
     },
     async ({ serial, script }) => {
       const dev = await device(serial);
-      const p = await scriptPath(script);
+      const p = await scriptPath(script, true);
       const lines: string[] = [];
       const r = await dl.runScript(dev, await dl.loadScript(p), {
         sourcePath: p,
@@ -221,13 +263,14 @@ export function register(server: McpServer): void {
   server.registerTool(
     'suite_run',
     {
-      description: '폴더 안의 모든 스크립트(*.yaml)를 차례로 실행하는 회귀 테스트. path를 생략하면 ~/.droidlens/scripts',
+      description: '폴더 안의 모든 스크립트(*.yaml)를 차례로 실행하는 회귀 테스트. path를 생략하면 ~/.droidlens/scripts. ' +
+        '그 폴더나 MCP 서버를 띄운 프로젝트 폴더 안만 실행할 수 있다',
       inputSchema: { ...serialArg, path: z.string().optional() },
       annotations: acts,
     },
     async ({ serial, path }) => {
       const dev = await device(serial);
-      const r = await dl.runSuite(dev, path ?? (await dl.scriptsDir()));
+      const r = await dl.runSuite(dev, await suitePath(path));
       const rows = r.results.map((x) =>
         x.error
           ? `✗ ${x.name}: ${x.error.split('\n')[0]}`
