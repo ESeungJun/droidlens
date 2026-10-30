@@ -36,6 +36,7 @@ export const common: Record<string, string> = {
   진단: 'Diagnose',
   앱: 'App',
   테스트: 'Test',
+  설정: 'Settings',
   // App: 탭 (소분류)
   '기기 화면': 'Device screen',
   '뷰 계층': 'View hierarchy',

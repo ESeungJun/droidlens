@@ -51,7 +51,7 @@ curl -fsSL https://raw.githubusercontent.com/ESeungJun/droidlens/master/scripts/
 **macOS 첫 실행 (.dmg 로 받은 경우)**: Apple 서명·공증을 받은 앱이라 응용 프로그램 폴더로 옮긴 뒤 바로 열면 됩니다. (0.8.3 이하는 공증 전 버전이라 **시스템 설정 → 개인정보 보호 및 보안**의 **그래도 열기**나 `xattr -dr com.apple.quarantine /Applications/DroidLens.app` 이 필요합니다.)
 **Windows 첫 실행**: SmartScreen 경고가 뜨면 "추가 정보 → 실행"을 누르세요.
 
-**업데이트**: 새 버전이 나오면 상단 바에 **⬆ 업데이트** 버튼이 뜹니다. 누르면 내려받아 교체하고 다시 시작합니다 (오른쪽 위 ⚙ 설정·연동에서도 확인 가능, macOS 로그는 `~/.droidlens/update.log`).
+**업데이트**: 새 버전이 나오면 상단 바에 **⬆ 업데이트** 버튼이 뜹니다. 누르면 내려받아 교체하고 다시 시작합니다 (**설정** 탭에서도 확인 가능, macOS 로그는 `~/.droidlens/update.log`).
 
 ### 준비물: adb
 Android Studio가 설치되어 있으면 자동으로 찾습니다. 없다면 platform-tools만 설치하세요.
@@ -60,7 +60,7 @@ macOS    brew install --cask android-platform-tools
 Windows  winget install Google.PlatformTools
 Linux    sudo apt install adb
 ```
-그다음 기기에서 **개발자 옵션 → USB 디버깅**을 켜고 연결하거나 에뮬레이터를 실행하면 됩니다. 이 컴퓨터에 만들어 둔 가상 기기(AVD)는 상단 기기 목록에 함께 나오고, 고르면 DroidLens 가 띄워서 부팅이 끝나면 바로 선택합니다(끄기 버튼도 있음). 가상 기기가 없으면 **기기 연결 도우미**가 설치를 안내합니다. adb 경로는 앱 오른쪽 위 **⚙ 설정·연동**에서 직접 지정할 수도 있습니다.
+그다음 기기에서 **개발자 옵션 → USB 디버깅**을 켜고 연결하거나 에뮬레이터를 실행하면 됩니다. 이 컴퓨터에 만들어 둔 가상 기기(AVD)는 상단 기기 목록에 함께 나오고, 고르면 DroidLens 가 띄워서 부팅이 끝나면 바로 선택합니다(끄기 버튼도 있음). 가상 기기가 없으면 **기기 연결 도우미**가 설치를 안내합니다. adb 경로는 앱의 **설정** 탭에서 직접 지정할 수도 있습니다.
 
 ## 기능
 
@@ -76,7 +76,7 @@ Linux    sudo apt install adb
 |  | **앱 정보** | 버전·SDK·권한·Activity, 실행/재시작/종료, 딥링크 |
 |  | **라이브러리** | APK의 DEX·네이티브 lib로 100여 개 라이브러리·프레임워크 탐지, 난독화 추정 |
 | **테스트** | **시나리오** | 검증 리포트(단계별 스크린샷·판정), **YAML 스크립트** 작성·실행·전체 회귀 실행, 스크린샷 비교 실패 시 지금 화면을 새 기준으로 받아들이기 |
-| **⚙** | **설정·연동 (오른쪽 위)** | adb 경로, Claude Code MCP 원클릭 등록, 전용 에이전트 설치 |
+| **설정** | **설정·연동** | adb 경로, Claude Code MCP 원클릭 등록, 전용 에이전트 설치 |
 | | **💬 에이전트 대화** | 상단 버튼으로 여는 대화창. 미러링을 보면서 검증·분석 에이전트에게 바로 요청 (이 컴퓨터의 Claude Code 로그인 사용, API 키 불필요) |
 
 ¹ 앱 debug 빌드에 [DroidLens SDK](#앱-sdk-선택)가 필요합니다.
@@ -116,7 +116,7 @@ DroidLens.event("purchase_clicked", JSONObject().put("itemId", 42))
 
 ## Claude Code 연동
 
-앱 오른쪽 위 **⚙ 설정·연동**에서 버튼 두 개만 누르면 됩니다.
+앱의 **설정** 탭에서 버튼 두 개만 누르면 됩니다.
 
 1. **MCP 자동 등록** — 앱에 내장된 MCP 서버(도구 50개)를 `claude mcp add --scope user`로 등록합니다. Node를 따로 설치할 필요가 없습니다.
 2. **에이전트 설치** — 전용 에이전트를 `~/.claude/agents/`에 복사합니다.
