@@ -1,5 +1,6 @@
 package io.github.eseungjun.droidlens.agent;
 
+import android.accessibilityservice.AccessibilityServiceInfo;
 import android.app.Instrumentation;
 import android.app.UiAutomation;
 import android.os.Bundle;
@@ -28,6 +29,12 @@ public class AgentInstrumentation extends Instrumentation {
     public void onStart() {
         super.onStart();
         UiAutomation ui = getUiAutomation(UiAutomation.FLAG_DONT_SUPPRESS_ACCESSIBILITY_SERVICES);
+        // getWindows()(allWindows 뷰 계층)는 이 플래그를 켜야 창 목록을 돌려준다 (API 21+, minSdk 24)
+        AccessibilityServiceInfo info = ui.getServiceInfo();
+        if (info != null) {
+            info.flags |= AccessibilityServiceInfo.FLAG_RETRIEVE_INTERACTIVE_WINDOWS;
+            ui.setServiceInfo(info);
+        }
         ActivityTracker tracker = new ActivityTracker(getContext());
         ui.setOnAccessibilityEventListener(tracker);
         try {

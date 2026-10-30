@@ -170,6 +170,8 @@ final class AgentServer {
         sb.append("<?xml version='1.0' encoding='UTF-8' standalone='yes' ?><hierarchy rotation=\"0\">");
         if (allWindows) {
             List<AccessibilityWindowInfo> windows = ui.getWindows();
+            // 빈 hierarchy 를 성공처럼 돌려주면 호스트가 "화면에 아무것도 없음"으로 오해한다
+            if (windows.isEmpty()) throw new IllegalStateException("창 목록을 가져오지 못했습니다 (getWindows 가 비어 있음)");
             for (int i = windows.size() - 1; i >= 0; i--) {
                 AccessibilityNodeInfo root = windows.get(i).getRoot();
                 if (root != null) appendNode(sb, root, 0);
