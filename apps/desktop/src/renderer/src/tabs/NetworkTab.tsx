@@ -13,6 +13,9 @@ export function NetworkTab() {
 const statusColor = (e: NetworkEntry) =>
   e.state === 'failed' || e.status >= 500 ? 'var(--err)' : e.status >= 400 ? 'var(--warn)' : e.state === 'pending' ? 'var(--fg-faint)' : 'var(--accent)';
 
+/** POSIX 셸 홑따옴표 인용. 안의 ' 는 '\'' 로 끊어 넣어, 붙여 넣은 명령이 값 때문에 다른 명령으로 바뀌지 않게 한다 */
+const shq = (s: string) => `'${s.replace(/'/g, `'\\''`)}'`;
+
 const size = (n: number) => (n < 0 ? '-' : n < 1024 ? `${n}B` : n < 1048576 ? `${(n / 1024).toFixed(1)}KB` : `${(n / 1048576).toFixed(1)}MB`);
 
 function pretty(body?: string): string {
@@ -98,9 +101,11 @@ function NetworkInspector() {
 
   const copyCurl = () => {
     if (!detail) return;
-    const h = Object.entries(detail.requestHeaders).flatMap(([k, vs]) => vs.map((v) => `-H '${k}: ${v.replace(/'/g, "'\\''")}'`));
-    const body = detail.requestBody ? ` --data '${detail.requestBody.replace(/'/g, "'\\''")}'` : '';
-    api.copy(`curl -X ${detail.method} ${h.join(' ')}${body} '${detail.url}'`);
+    // 메서드·헤더·본문·URL 모두 앱이 보낸 값이라 그대로 셸에 붙이면 명령이 실행될 수 있다. 전부 같은 인용을 거친다.
+    // 본문은 @ 로 시작해도 파일로 읽지 않게 --data-raw, URL 은 - 로 시작해도 옵션이 되지 않게 --url 로 넘긴다
+    const h = Object.entries(detail.requestHeaders).flatMap(([k, vs]) => vs.map((v) => `-H ${shq(`${k}: ${v}`)}`));
+    const body = detail.requestBody ? ` --data-raw ${shq(detail.requestBody)}` : '';
+    api.copy(`curl -X ${shq(detail.method)} ${h.join(' ')}${body} --url ${shq(detail.url)}`);
   };
 
   return (
