@@ -51,6 +51,7 @@ public final class SdkServer {
         this.socketName = SOCKET_PREFIX + context.getPackageName();
         this.prefs = new PrefsPlugin(context);
         this.db = new DbPlugin(context);
+        MockStore.get().load(context);
     }
 
     public String socketName() {
@@ -171,7 +172,9 @@ public final class SdkServer {
                 }
             } catch (Throwable t) {
                 status = 500;
-                response = new JSONObject().put("error", String.valueOf(t)).toString();
+                // 잘못된 요청은 메시지만, 그 밖의 오류는 예외 종류까지 알린다
+                String msg = t instanceof IllegalArgumentException && t.getMessage() != null ? t.getMessage() : String.valueOf(t);
+                response = new JSONObject().put("error", msg).toString();
             }
             write(sock.getOutputStream(), status, response);
         } catch (Exception e) {
@@ -188,6 +191,15 @@ public final class SdkServer {
                 return NetworkStore.get().detail(num(q.get("id"), -1));
             case "POST /network/clear":
                 NetworkStore.get().clear();
+                return new JSONObject().put("ok", true);
+            case "GET /mocks":
+                return new JSONObject().put("mocks", MockStore.get().list());
+            case "POST /mocks/set":
+                return MockStore.get().set(new JSONObject(body));
+            case "POST /mocks/remove":
+                return new JSONObject().put("removed", MockStore.get().remove(req(q, "id")));
+            case "POST /mocks/clear":
+                MockStore.get().clear();
                 return new JSONObject().put("ok", true);
             case "GET /events":
                 return new JSONObject().put("events", EventStore.get().list(num(q.get("since"), 0)));
@@ -215,7 +227,7 @@ public final class SdkServer {
                 .put("versionName", pi.versionName)
                 .put("pid", Process.myPid())
                 .put("okhttp", okhttp)
-                .put("plugins", new JSONArray().put("network").put("prefs").put("db").put("events"));
+                .put("plugins", new JSONArray().put("network").put("mock").put("prefs").put("db").put("events"));
     }
 
     private static String req(Map<String, String> q, String key) {

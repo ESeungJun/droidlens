@@ -9,6 +9,7 @@ import { AppInfoTab } from './tabs/AppInfoTab';
 import { ScenariosTab } from './tabs/ScenariosTab';
 import { SettingsTab } from './tabs/SettingsTab';
 import { NetworkTab } from './tabs/NetworkTab';
+import { PerfTab } from './tabs/PerfTab';
 import { AppDataTab } from './tabs/AppDataTab';
 import { ChatPanel } from './ChatPanel';
 import { DeviceSetup } from './DeviceSetup';
@@ -34,6 +35,7 @@ const TABS = [
   ['flow', '화면 흐름'],
   ['logs', '로그'],
   ['network', '네트워크'],
+  ['perf', '성능'],
   ['data', '앱 데이터'],
   ['libs', '라이브러리'],
   ['info', '앱 정보'],
@@ -419,6 +421,7 @@ export function App() {
                   {tab === 'flow' && <FlowTab />}
                   {tab === 'logs' && <LogTab />}
                   {tab === 'network' && <NetworkTab />}
+                  {tab === 'perf' && <PerfTab />}
                   {tab === 'data' && <AppDataTab />}
                   {tab === 'libs' && <LibsTab />}
                   {tab === 'info' && <AppInfoTab />}

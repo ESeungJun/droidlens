@@ -10,7 +10,9 @@ import type {
   Interaction,
   LogLine,
   PackageSummary,
+  PerfSample,
   ScenarioData,
+  StartupResult,
   hierarchyStats,
 } from '@droidlens/core';
 
@@ -140,6 +142,10 @@ export const api = {
   deeplink: (s: string, uri: string, pkg?: string) => call<string>('deeplink', s, uri, pkg),
   analyzeLibraries: (s: string, pkg: string) => call<ApkAnalysis>('analyzeLibraries', s, pkg),
   crashes: (s: string, pkg?: string) => call<string[]>('crashes', s, pkg),
+  /** 앱이 떠 있지 않으면 null */
+  perfSample: (s: string, pkg: string) => call<PerfSample | null>('perfSample', s, pkg),
+  perfStartup: (s: string, pkg: string, cold: boolean, runs: number) => call<StartupResult>('perfStartup', s, pkg, cold, runs),
+  perfResetFrames: (s: string, pkg: string) => call<void>('perfResetFrames', s, pkg),
   /** id: 이 스트림을 가리키는 번호 (로그·종료 이벤트에 그대로 실려 와 이전 스트림 것과 구분한다) */
   logcatStart: (s: string, pkg: string | undefined, id: number) => call<number | null>('logcatStart', s, pkg, id),
   logcatStop: (id?: number) => call<void>('logcatStop', id),
@@ -167,6 +173,8 @@ export const api = {
   home: () => call<string>('home'),
   scenarios: () => call<ScenarioData[]>('scenarios'),
   scenarioImage: (dir: string, file: string) => call<string>('scenarioImage', dir, file),
+  /** 스크린샷 비교 단계의 지금 화면(file)을 앱·이름의 기준 이미지로 저장하고 그 경로를 돌려준다 */
+  baselineAccept: (dir: string, file: string, app: string, name: string) => call<string>('baselineAccept', dir, file, app, name),
   scenarioDelete: (ids: string[]) => call<void>('scenarioDelete', ids),
   agentStatus: (s: string) => call<AgentStatus>('agentStatus', s),
   agentStart: (s: string) => call<AgentStatus>('agentStart', s),
@@ -210,4 +218,4 @@ export const api = {
 };
 
 export type { ApkAnalysis, AppInfo, CurrentScreen, DeviceInfo, DeviceSummary, GraphAction, GraphData, Hierarchy, Interaction, LogLine, PackageSummary, ScenarioData };
-export type { ViewNode, ScreenNode, NetworkEntry, NetworkDetail, PrefsFile, DbInfo, QueryResult, SdkEvent, SdkInfo } from '@droidlens/core';
+export type { ViewNode, ScreenNode, NetworkEntry, NetworkDetail, MockRule, PrefsFile, DbInfo, QueryResult, SdkEvent, SdkInfo, PerfSample, StartupResult } from '@droidlens/core';

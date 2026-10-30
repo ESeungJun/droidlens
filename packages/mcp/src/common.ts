@@ -85,7 +85,13 @@ export async function resolveNode(dev: dl.DeviceAdb, sel: dl.Selector, root?: dl
  * scenario_start ~ scenario_finish 사이에 에이전트가 한 조작을 스크립트 단계로 기록한다.
  * 성공한 경로를 YAML 스크립트로 저장해 회귀 테스트로 재사용하기 위함.
  */
-export const recorder: { active: boolean; app?: string; steps: dl.ScriptStep[] } = { active: false, steps: [] };
+export const recorder: {
+  active: boolean;
+  app?: string;
+  steps: dl.ScriptStep[];
+  /** 녹화 중 켠 네트워크 목 (규칙 id → 규칙). 저장하는 스크립트의 setup.mocks 가 된다 */
+  mocks: Map<string, dl.MockRule>;
+} = { active: false, steps: [], mocks: new Map() };
 
 export function recordStep(step: dl.ScriptStep): void {
   if (recorder.active) recorder.steps.push(step);

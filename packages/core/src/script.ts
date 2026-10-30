@@ -10,6 +10,8 @@ import { FlowCollector, launchAndSettle } from './graph.js';
 import { center, dumpHierarchy, findNodes, type Selector, type ViewNode } from './hierarchy.js';
 import { Scenario, type ScenarioData } from './scenario.js';
 import { sdkFor } from './sdk.js';
+import { kbToMb, measureStartup, MAX_STARTUP_RUNS, perfSample, resetFrameStats } from './perf.js';
+import { DEFAULT_MAX_DIFF_PERCENT, matchScreenshot } from './visual.js';
 import { ensureDir, safeName } from './workspace.js';
 
 /**
@@ -25,7 +27,12 @@ import { ensureDir, safeName } from './workspace.js';
  *   - tap: { id: save }
  *   - assert: { visible: { textContains: 장보기 } }
  *   - assert: { network: { url: /api/notes, method: POST, status: 201 } }
+ *   - assert: { perf: { maxMemoryMb: 300, maxJankPercent: 10 } }
+ *   - startup: { cold: true, runs: 3, maxMs: 1500 }
  * ```
+ * matchScreenshot 단계는 화면을 기준 이미지와 비교한다 (처음 실행하면 지금 화면이 기준이 된다):
+ *   - matchScreenshot: { name: 상품 상세, maxDiffPercent: 0.5, ignore: [{ id: banner }] }
+ * setup.mocks 로 실행하는 동안만 네트워크 목을 켤 수 있다 (예: 주문 API 를 500 으로 만들어 오류 화면 확인)
  */
 
 // ---------- 스키마 ----------
@@ -69,6 +76,12 @@ const assertion = z
     pref: z.object({ file: z.string(), key: z.string(), equals: z.union([z.string(), z.number(), z.boolean()]) }).optional(),
     db: z.object({ db: z.string(), sql: z.string(), equals: z.union([z.string(), z.number(), z.null()]) }).optional(),
     event: z.string().optional(),
+    /** 지금 메모리(PSS)와 스크립트 시작 이후 버벅인 프레임 비율의 상한 */
+    perf: z
+      .object({ maxMemoryMb: z.number().positive().optional(), maxJankPercent: z.number().min(0).max(100).optional() })
+      .strict()
+      .refine((p) => p.maxMemoryMb !== undefined || p.maxJankPercent !== undefined, 'maxMemoryMb 나 maxJankPercent 가 필요합니다')
+      .optional(),
     noCrash: z.boolean().optional(),
     timeout: z.number().int().optional(),
   })
@@ -108,6 +121,32 @@ const stepUnion = z.union([
   z.object({ launch: z.object({ restart: z.boolean().optional() }).strict().optional().nullable() }).strict(),
   z.object({ deeplink: z.string() }).strict(),
   z.object({ screenshot: z.string().optional().nullable() }).strict(),
+  /** 화면을 기준 이미지와 비교. 다른 픽셀 비율이 maxDiffPercent(기본 0.5)를 넘으면 실패 */
+  z
+    .object({
+      matchScreenshot: z.union([
+        z.string().min(1),
+        z
+          .object({
+            name: z.string().min(1),
+            maxDiffPercent: z.number().min(0).max(100).optional(),
+            ignore: z.array(selector).optional(),
+            tolerance: z.number().int().min(0).max(255).optional(),
+          })
+          .strict(),
+      ]),
+    })
+    .strict(),
+  /** 앱 시작 시간을 재고 중앙값이 maxMs 를 넘으면 실패. 앱이 다시 시작된다 */
+  z
+    .object({
+      startup: z
+        .object({ cold: z.boolean().optional(), runs: z.number().int().min(1).max(MAX_STARTUP_RUNS).optional(), maxMs: z.number().int().positive().optional() })
+        .strict()
+        .optional()
+        .nullable(),
+    })
+    .strict(),
   z.object({ assert: assertion }).strict(),
 ]);
 
@@ -125,6 +164,34 @@ export const scriptSchema = z
         clearData: z.boolean().optional(),
         prefs: z
           .array(z.object({ file: z.string(), key: z.string(), type: z.enum(['string', 'int', 'long', 'float', 'boolean', 'stringSet']), value: z.string() }))
+          .optional(),
+        /** 실행하는 동안만 켜 둘 네트워크 목 규칙 (SDK). 끝나면 지운다 */
+        mocks: z
+          .array(
+            z
+              .object({
+                url: z.string().min(1),
+                method: z.string().optional(),
+                status: z.number().int().min(200).max(599).optional(),
+                // 아래 상한·형식은 SDK(MockStore)와 같다
+                body: z.string().max(256 * 1024, '본문은 262144자까지입니다').optional(),
+                contentType: z
+                  .string()
+                  .regex(/^[\w.+-]+\/[\w.+-]+\s*(;[\t\x20-\x7e]*)?$/, '형식이 아닙니다 (예: application/json; charset=utf-8)')
+                  .optional(),
+                headers: z
+                  .record(z.string().regex(/^[\t\x20-\x7e]*$/, 'ASCII 로만 쓸 수 있습니다 (한글·줄바꿈 불가)'))
+                  .refine((h) => Object.keys(h).length <= 50, '헤더는 50개까지입니다')
+                  .refine((h) => Object.keys(h).every((k) => /^[\x21-\x7e]+$/.test(k)), '헤더 이름은 공백 없는 ASCII 로만 씁니다')
+                  .optional(),
+                delayMs: z.number().int().min(0).max(60_000).optional(),
+                fail: z.boolean().optional(),
+              })
+              .strict()
+              // SDK 가 저장할 때 거절하는 조합을 스크립트를 읽을 때 미리 알린다
+              .refine((m) => m.status !== undefined || m.fail || m.delayMs, { message: 'status, fail, delayMs 중 하나는 필요합니다' })
+              .refine((m) => !(m.fail && m.status !== undefined), { message: 'fail 과 status 는 함께 쓸 수 없습니다' }),
+          )
           .optional(),
       })
       .strict()
@@ -235,6 +302,11 @@ export interface RunResult {
 }
 
 class StepFailure extends Error {}
+
+interface StepOutput {
+  png?: Buffer;
+  baseline?: { app: string; name: string; actualPng: Buffer };
+}
 
 async function findWithin(dev: DeviceAdb, sel: Selector, timeoutMs: number): Promise<ViewNode | undefined> {
   const deadline = Date.now() + timeoutMs;
@@ -357,6 +429,23 @@ export async function evaluateAssertion(dev: DeviceAdb, app: string, a: Assertio
       () => `기대: 이벤트 ${a.event} / 실제: 기록 없음`,
     );
   }
+  if (a.perf) {
+    const p = a.perf;
+    const s = await perfSample(dev, app, { memory: p.maxMemoryMb !== undefined, frames: p.maxJankPercent !== undefined });
+    if (!s) throw new StepFailure(`${app} 이(가) 실행 중이 아니라 성능을 잴 수 없습니다`);
+    if (p.maxMemoryMb !== undefined) {
+      const used = kbToMb(s.memory?.totalPssKb);
+      if (used === undefined) throw new StepFailure('메모리를 읽지 못했습니다');
+      if (used > p.maxMemoryMb) throw new StepFailure(`기대: 메모리 ${p.maxMemoryMb}MB 이하 / 실제: ${used}MB`);
+      evidence.push(`메모리 ${used}MB`);
+    }
+    if (p.maxJankPercent !== undefined) {
+      const f = s.frames;
+      if (!f) throw new StepFailure('프레임 통계를 읽지 못했습니다');
+      if (f.jankPercent > p.maxJankPercent) throw new StepFailure(`기대: 버벅인 프레임 ${p.maxJankPercent}% 이하 / 실제: ${f.jankPercent}% (${f.jankyFrames}/${f.totalFrames})`);
+      evidence.push(`버벅인 프레임 ${f.jankPercent}% (${f.jankyFrames}/${f.totalFrames})`);
+    }
+  }
   if (a.noCrash) {
     const crashes = await recentCrashes(dev, app, { since: ctx.since - 1000 });
     if (crashes.length) throw new StepFailure(`크래시 발생:\n${crashes[crashes.length - 1].split('\n').slice(0, 8).join('\n')}`);
@@ -386,29 +475,64 @@ export async function runScript(dev: DeviceAdb, script: Script, opts: ScriptRunO
   // (읽지 못하면 호스트 시계). 초 단위라 여유를 둔다
   const ctx = { since: (await deviceTime(dev).catch(() => Date.now())) - 2000 };
 
+  /** 단계가 직접 만든 이미지 (스크린샷 비교의 차이 이미지). 있으면 새로 찍지 않고 이것을 남긴다 */
+  const out: StepOutput = {};
   /** seen: 흐름 수집이 방금 확인한 화면 (있으면 다시 조회하지 않는다) */
   const record = async (title: string, status: 'pass' | 'fail' | 'info' | 'skip', detail?: string, withShot = false, seen?: CurrentScreen) => {
-    const png = withShot ? await screenshot(dev).catch(() => undefined) : undefined;
+    const png = out.png ?? (withShot ? await screenshot(dev).catch(() => undefined) : undefined);
     const scr = seen ?? (await currentScreen(dev).catch(() => undefined));
-    await scenario.step(title, status, { detail, png, screen: scr ? `${scr.packageName} ${scr.activity}` : undefined });
+    await scenario.step(title, status, { detail, png, screen: scr ? `${scr.packageName} ${scr.activity}` : undefined, baseline: out.baseline });
+    out.png = undefined;
+    out.baseline = undefined;
   };
+
+  // 이 실행이 켠 목 규칙. 끝나면(실패·중단 포함) 지워 다음 실행이나 수동 사용에 남지 않게 한다
+  const addedMocks: string[] = [];
+  /** 지우지 못한 목 규칙 수. 앱에 남아 이후 실행·수동 사용에 영향을 주므로 결과 요약에 적는다 */
+  const removeMocks = async (): Promise<number> => {
+    if (!addedMocks.length) return 0;
+    const attempt = async () => {
+      const c = await sdkFor(dev, app);
+      for (const id of [...addedMocks]) {
+        await c.removeMock(id);
+        addedMocks.splice(addedMocks.indexOf(id), 1);
+      }
+    };
+    // 단계에서 앱이 죽었거나 닫혔으면 SDK 에 닿지 못하니 앱을 띄워 한 번 더 시도한다
+    await attempt().catch(async () => {
+      await launchAndSettle(dev, app).catch(() => undefined);
+      await attempt().catch(() => undefined);
+    });
+    if (addedMocks.length) {
+      await record('정리: 목 규칙 지우기', 'info', `목 규칙 ${addedMocks.length}개(${addedMocks.join(', ')})를 지우지 못했습니다. 앱 안에 남아 있으니 network_mock_remove 나 데스크톱 네트워크 탭에서 지우세요`);
+    }
+    return addedMocks.length;
+  };
+  const leftover = (n: number) => (n ? ` · 목 규칙 ${n}개를 지우지 못했습니다` : '');
 
   // setup
   try {
     if (script.setup?.clearData) await clearAppData(dev, app);
-    if (script.setup?.prefs?.length) {
-      // Prefs는 앱 프로세스가 떠 있어야 SDK로 쓸 수 있다
+    if (script.setup?.prefs?.length || script.setup?.mocks?.length) {
+      // Prefs·목은 앱 프로세스가 떠 있어야 SDK로 쓸 수 있다. 목은 앱 안에 저장돼 아래 재시작 뒤에도 적용된다
       await launchAndSettle(dev, app);
       const c = await sdkFor(dev, app);
-      for (const p of script.setup.prefs) await c.setPref(p.file, p.key, p.type, p.value);
+      for (const p of script.setup.prefs ?? []) await c.setPref(p.file, p.key, p.type, p.value);
+      for (const m of script.setup.mocks ?? []) {
+        const saved = await c.setMock(m);
+        if (saved.id) addedMocks.push(saved.id);
+      }
     }
     if (script.setup?.restart !== false) await launchAndSettle(dev, app, { restart: true });
+    // 버벅인 프레임 비율 assert 가 준비 단계를 빼고 스크립트 단계만 보게 한다
+    await resetFrameStats(dev, app).catch(() => undefined);
     const seen = await flow?.observe();
     await record('준비: 앱 실행', 'info', script.setup ? JSON.stringify(script.setup) : undefined, shotAll, seen?.screen);
   } catch (e) {
     await record('준비 실패', 'fail', (e as Error).message, true);
+    const left = await removeMocks();
     await flow?.flush().catch(() => undefined);
-    const report = await scenario.finish('blocked', `준비 단계 실패: ${(e as Error).message}`);
+    const report = await scenario.finish('blocked', `준비 단계 실패: ${(e as Error).message}${leftover(left)}`);
     return { verdict: 'blocked', passed, failed: 1, skipped, durationMs: Date.now() - t0, report, scenario: scenario.data };
   }
 
@@ -422,7 +546,7 @@ export async function runScript(dev: DeviceAdb, script: Script, opts: ScriptRunO
     }
     opts.onStep?.({ index: i, total, title, status: 'running' });
     try {
-      const detail = await runStep(dev, app, step, defaultTimeout, ctx, flow, opts.signal);
+      const detail = await runStep(dev, app, step, defaultTimeout, ctx, flow, opts.signal, out);
       const seen = (await flow?.observe())?.screen;
       if (detail === 'skip') {
         skipped++;
@@ -448,9 +572,10 @@ export async function runScript(dev: DeviceAdb, script: Script, opts: ScriptRunO
     }
   }
 
+  const left = await removeMocks();
   await flow?.flush().catch(() => undefined);
   const verdict = failed ? 'fail' : 'pass';
-  const summary = `${passed} 통과 · ${failed} 실패 · ${skipped} 건너뜀 (${((Date.now() - t0) / 1000).toFixed(1)}초)`;
+  const summary = `${passed} 통과 · ${failed} 실패 · ${skipped} 건너뜀 (${((Date.now() - t0) / 1000).toFixed(1)}초)${leftover(left)}`;
   const report = await scenario.finish(verdict, summary);
   return { verdict, passed, failed, skipped, durationMs: Date.now() - t0, report, scenario: scenario.data };
 }
@@ -463,6 +588,7 @@ async function runStep(
   ctx: { since: number },
   flow?: FlowCollector,
   signal?: AbortSignal,
+  out: StepOutput = {},
 ): Promise<string> {
   if ('tap' in step || 'longPress' in step) {
     const t = 'tap' in step ? step.tap : step.longPress;
@@ -565,6 +691,35 @@ async function runStep(
     return '';
   }
   if ('screenshot' in step) return step.screenshot ?? '';
+  if ('matchScreenshot' in step) {
+    const o = typeof step.matchScreenshot === 'string' ? { name: step.matchScreenshot } : step.matchScreenshot;
+    const r = await matchScreenshot(dev, app, o.name, { ignore: o.ignore, tolerance: o.tolerance });
+    if (r.saved) {
+      out.png = r.actual;
+      return `기준 이미지가 없어 지금 화면을 기준으로 저장했습니다 (${r.baseline})`;
+    }
+    const d = r.diff!;
+    const max = o.maxDiffPercent ?? DEFAULT_MAX_DIFF_PERCENT;
+    const detail = `다른 픽셀 ${d.diffPercent}% (${d.diffPixels}/${d.comparedPixels}, 허용 ${max}%)${d.diffBounds ? ` · 영역 [${d.diffBounds.join(',')}]` : ''}`;
+    out.png = d.diffPng;
+    if (d.diffPercent > max) {
+      // 바뀐 화면이 맞으면 리포트에서 지금 화면을 새 기준으로 받아들일 수 있게 남긴다
+      out.baseline = { app, name: o.name, actualPng: r.actual };
+      throw new StepFailure(`기준 이미지와 다릅니다: ${detail}`);
+    }
+    return detail;
+  }
+  if ('startup' in step) {
+    const o = step.startup ?? {};
+    // 측정하며 앱을 여러 번 다시 시작하므로 흐름 수집은 다음 관찰부터 새로 잇는다
+    flow?.forget();
+    const r = await measureStartup(dev, app, { cold: o.cold, runs: o.runs, signal });
+    const detail = `${r.cold ? '콜드' : '다시 열기'} 시작 중앙값 ${r.medianMs}ms (${r.runs.map((x) => x.ms).join(', ')})`;
+    if (o.maxMs !== undefined && r.medianMs > o.maxMs) throw new StepFailure(`기대: ${o.maxMs}ms 이하 / 실제: ${detail}`);
+    // 다시 열기 측정은 프로세스가 그대로라 측정 중 그린 프레임이 이후 버벅임 assert 에 섞이지 않게 한다
+    await resetFrameStats(dev, app).catch(() => undefined);
+    return detail;
+  }
   if ('assert' in step) return evaluateAssertion(dev, app, step.assert, ctx);
   throw new StepFailure('알 수 없는 단계');
 }
