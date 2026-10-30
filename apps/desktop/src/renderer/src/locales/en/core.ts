@@ -126,4 +126,6 @@ export const core: Record<string, string> = {
   'DroidLens 데이터 폴더 밖의 경로는 열 수 없습니다': 'Cannot open paths outside the DroidLens data folder',
   '열 수 없는 파일 형식입니다': 'Unsupported file type',
   '설치할 업데이트가 없습니다': 'No update to install',
+  '잘못된 대화 세션 id 입니다': 'Invalid chat session id',
+  'adb 실행 파일의 전체 경로를 입력하세요 (파일 이름이 adb 또는 adb.exe)': 'Enter the full path to the adb executable (file name adb or adb.exe)',
 };
