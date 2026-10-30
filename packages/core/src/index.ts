@@ -13,3 +13,5 @@ export * from './scrcpy.js';
 export * from './http.js';
 export * from './script.js';
 export * from './emulator.js';
+export * from './perf.js';
+export * from './visual.js';

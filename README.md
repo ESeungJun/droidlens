@@ -70,11 +70,12 @@ Then enable **Developer options → USB debugging** on your device and connect i
 | **View hierarchy** | Two-way selection between screenshot and tree, attributes and selectors, node count by depth, Compose detection, **3D exploded view** |
 | **Screen flow** | A per-app **screen map** — screens and transitions from auto-exploration, manual use, and scenario runs keep adding up in one map (thumbnails + action labels). **Auto-exploration** (never taps payment, delete, logout, or send buttons), **pick buttons, long presses, or swipes on a screenshot and explore only the flows they open**, tapped-button coverage per screen, path from the first screen, **auto-navigate to a screen** along the recorded path, map export/import (merge) |
 | **Logs** | Live logcat (app PID filter, level, search), recent crashes |
-| **Network** ¹ | OkHttp requests and responses (headers, pretty-printed JSON bodies, image preview, timing), failure filter, copy as cURL |
+| **Network** ¹ | OkHttp requests and responses (headers, pretty-printed JSON bodies, image preview, timing), failure filter, copy as cURL, **network mocking** (response, failure, delay) |
+| **Performance** | Live CPU, memory (PSS, by region) and frames-per-second graphs, janky-frame ratio and frame-time percentiles, app startup time (cold or reopen, repeated runs with the median) |
 | **App data** ¹ | View and edit SharedPreferences, SQLite/Room DB browser with SQL execution, custom events |
 | **Libraries** | Detects 100+ libraries and frameworks from the APK's DEX and native libs, estimates obfuscation |
 | **App info** | Version, SDK, permissions, activities; launch / restart / kill; deep links |
-| **Scenarios** | Verification reports (per-step screenshots and verdicts), write and run **YAML scripts**, run the full regression suite |
+| **Scenarios** | Verification reports (per-step screenshots and verdicts), write and run **YAML scripts**, run the full regression suite, accept the current screen as the new baseline when a screenshot comparison fails |
 | **Settings & Integrations** | adb path, one-click Claude Code MCP registration, install bundled agents |
 | **💬 Agent chat** | Chat panel opened from the top bar. Ask the verifier or analyst agent while watching the mirror (uses this computer's Claude Code login — no API key needed) |
 
@@ -111,12 +112,13 @@ DroidLens.event("purchase_clicked", JSONObject().put("itemId", 42))
 - Request and response bodies are capped at 256KB each; the latest 500 entries are kept in memory only
 - Sensitive values are masked **on the device, before they are stored** — in headers, URL queries, `Location` redirects, JSON bodies (including nested objects/arrays and JSON inside strings), GraphQL arguments, form, multipart and XML bodies, error messages and custom events. Keys match regardless of case and separators, and common words match anywhere in the name (`newPassword`, `fcmToken`, `X-Refresh-Token`); short ones like `jwt`, `otp`, `pin` match exactly. Add your own with `DroidLens.redactHeaders("X-Session")` / `DroidLens.redactKeys("phone")`, or call `DroidLens.clearDefaultRedaction()` to use only your list. Compressed bodies the app requested itself (`Content-Encoding`) are not recorded
 - DB write SQL runs only when explicitly allowed
+- **Network mocking**: requests whose URL contains a given string can be answered with any status code and body without reaching the server, failed as a connection error, or delayed (**Mock rules** in the Network tab, or **Mock this** on a recorded request). Rules are kept in the app's private storage and survive restarts; while any are on, a warning is written to logcat
 
 ## Claude Code integration
 
 Just press two buttons in the app's **Settings & Integrations** tab.
 
-1. **Register MCP** — registers the app's built-in MCP server (44 tools) with `claude mcp add --scope user`. No separate Node install needed.
+1. **Register MCP** — registers the app's built-in MCP server (50 tools) with `claude mcp add --scope user`. No separate Node install needed.
 2. **Install agents** — copies the bundled agents to `~/.claude/agents/`.
 
 | Agent | What it does |
@@ -138,7 +140,7 @@ Save verified flows as YAML and replay them anytime. When an agent **passes** a 
 ```yaml
 name: Product search
 app: com.example.shop
-setup: { restart: true }          # clearData and prefs (SDK) can also set up the initial state
+setup: { restart: true }          # clearData and prefs (SDK) can also set up the initial state, and mocks (SDK) for network mocks that stay on only during the run
 steps:
   - tap: { text: Search }
   - type: { text: sneakers, into: { className: EditText } }
@@ -149,6 +151,8 @@ steps:
   - assert: { activity: ProductDetailActivity }
   - assert: { network: { url: /api/products, method: GET, status: 200 } }   # SDK
   - assert: { event: product_viewed }                                        # SDK
+  - matchScreenshot: { name: product-detail, ignore: [ { id: ad_banner } ] }  # compare with a baseline image
+  - assert: { perf: { maxMemoryMb: 300, maxJankPercent: 10 } }           # memory / janky-frame limits
   - assert: { noCrash: true }
 ```
 
@@ -158,7 +162,9 @@ steps:
 | `type` | Text input (`into` targets an input field, `clear` replaces). Supports non-ASCII text (e.g. Korean) when the agent is running |
 | `swipe` | `up/down/left/right`; with `until`, scrolls until the element appears |
 | `wait` | Until an element appears (with `gone: true`, until it disappears) |
-| `assert` | `visible` · `notVisible` · `text` · `activity` · `package` · `network` · `pref` · `db` · `event` · `noCrash` |
+| `startup` | Measures app startup time (`cold`, `runs`); fails if the median exceeds `maxMs` |
+| `matchScreenshot` | Pixel-compares the screen with a baseline image (`name`, `maxDiffPercent` default 0.5, `ignore` selectors, `tolerance` per-channel color tolerance, default 16). The first run saves the current screen as the baseline; the status bar is never compared. On failure the report shows the differences highlighted and a **Use as baseline** button |
+| `assert` | `visible` · `notVisible` · `text` · `activity` · `package` · `network` · `pref` · `db` · `event` · `perf` · `noCrash` |
 | Other | `key`, `tapAt`, `sleep`, `launch`, `deeplink`, `screenshot` |
 
 How to run:
