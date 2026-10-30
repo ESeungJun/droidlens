@@ -1,7 +1,7 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import * as dl from '@droidlens/core';
-import { device, text, json, serialArg, readOnly, acts } from '../common.js';
+import { device, text, json, serialArg, readOnly, acts, recorder } from '../common.js';
 
 export function register(server: McpServer): void {
   // ---------- 앱 SDK (네트워크 · 저장소 · 이벤트) ----------
@@ -155,12 +155,13 @@ export function register(server: McpServer): void {
       description:
         '네트워크 목 규칙 추가·수정. 요청 URL 에 url 이 들어 있고 method 가 맞는 요청을 서버에 보내지 않고 status·body 응답으로 끝내거나(status), ' +
         '연결 실패로 끝내거나(fail), 늦춰 보낸다(delayMs). 오류·빈 목록·느린 응답 화면 재현에 쓴다. ' +
-        '규칙은 앱 안에 저장돼 앱을 다시 시작해도 남으므로 검증이 끝나면 network_mock_remove 로 지운다',
+        '규칙은 앱 안에 저장돼 앱을 다시 시작해도 남으므로 검증이 끝나면 network_mock_remove 로 지운다. ' +
+        'id 로 고치면 준 항목만 바뀐다. 시나리오 녹화 중 켠 규칙은 저장하는 스크립트의 setup.mocks 에 들어간다',
       inputSchema: {
         ...serialArg,
         ...pkgArg,
         id: z.string().optional().describe('바꿀 규칙 id. 없으면 새로 추가'),
-        url: z.string().describe('요청 URL 에 들어 있는 문자열 (예: api.example.com/v1/orders)'),
+        url: z.string().min(1).optional().describe('요청 URL 에 들어 있는 문자열 (예: api.example.com/v1/orders). 새로 추가할 때 필요'),
         method: z.string().optional().describe('없으면 모든 메서드'),
         status: z.number().int().min(200).max(599).optional().describe('돌려줄 상태 코드'),
         body: z.string().optional().describe('돌려줄 응답 본문'),
@@ -172,9 +173,26 @@ export function register(server: McpServer): void {
       },
       annotations: acts,
     },
-    async ({ serial, packageName, ...rule }) => {
+    async ({ serial, packageName, ...input }) => {
       const c = await dl.sdkFor(await device(serial), packageName);
+      let rule: dl.MockRule;
+      if (input.id) {
+        // 준 항목만 바꾼다. 응답 방식(status·fail)은 한쪽을 주면 다른 쪽을 끈다
+        const cur = (await c.mocks()).find((m) => m.id === input.id);
+        if (!cur) throw new Error(`목 규칙 ${input.id} 이 없습니다`);
+        const { hits: _hits, ...base } = cur;
+        rule = { ...base, ...input, url: input.url ?? cur.url };
+        if (input.fail) delete rule.status;
+        if (input.status !== undefined) rule.fail = false;
+      } else {
+        if (!input.url) throw new Error('새 규칙에는 url 이 필요합니다');
+        rule = { ...input, url: input.url };
+      }
       const saved = await c.setMock(rule);
+      if (recorder.active && recorder.app === packageName && saved.id) {
+        if (saved.enabled === false) recorder.mocks.delete(saved.id);
+        else recorder.mocks.set(saved.id, saved);
+      }
       return text(`저장했습니다: ${mockLine(saved)}`);
     },
   );
@@ -197,6 +215,10 @@ export function register(server: McpServer): void {
     },
     async ({ serial, packageName, id }) => {
       const c = await dl.sdkFor(await device(serial), packageName);
+      if (recorder.app === packageName) {
+        if (id) recorder.mocks.delete(id);
+        else recorder.mocks.clear();
+      }
       if (!id) {
         await c.clearMocks();
         return text('목 규칙을 모두 지웠습니다');

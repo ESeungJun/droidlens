@@ -179,7 +179,13 @@ export const scriptSchema = z
                 delayMs: z.number().int().min(0).max(60_000).optional(),
                 fail: z.boolean().optional(),
               })
-              .strict(),
+              .strict()
+              // SDK 가 저장할 때 거절하는 조합을 스크립트를 읽을 때 미리 알린다
+              .refine((m) => m.status !== undefined || m.fail || m.delayMs, { message: 'status, fail, delayMs 중 하나는 필요합니다' })
+              .refine((m) => !(m.fail && m.status !== undefined), { message: 'fail 과 status 는 함께 쓸 수 없습니다' })
+              .refine((m) => [m.contentType ?? '', ...Object.entries(m.headers ?? {}).flat()].every((s) => /^[\t\x20-\x7e]*$/.test(s)), {
+                message: 'contentType·headers 는 ASCII 로만 쓸 수 있습니다 (한글·줄바꿈 불가)',
+              }),
           )
           .optional(),
       })
@@ -477,11 +483,27 @@ export async function runScript(dev: DeviceAdb, script: Script, opts: ScriptRunO
 
   // 이 실행이 켠 목 규칙. 끝나면(실패·중단 포함) 지워 다음 실행이나 수동 사용에 남지 않게 한다
   const addedMocks: string[] = [];
-  const removeMocks = async () => {
-    if (!addedMocks.length) return;
-    const c = await sdkFor(dev, app).catch(() => undefined);
-    for (const id of addedMocks) await c?.removeMock(id).catch(() => undefined);
+  /** 지우지 못한 목 규칙 수. 앱에 남아 이후 실행·수동 사용에 영향을 주므로 결과 요약에 적는다 */
+  const removeMocks = async (): Promise<number> => {
+    if (!addedMocks.length) return 0;
+    const attempt = async () => {
+      const c = await sdkFor(dev, app);
+      for (const id of [...addedMocks]) {
+        await c.removeMock(id);
+        addedMocks.splice(addedMocks.indexOf(id), 1);
+      }
+    };
+    // 단계에서 앱이 죽었거나 닫혔으면 SDK 에 닿지 못하니 앱을 띄워 한 번 더 시도한다
+    await attempt().catch(async () => {
+      await launchAndSettle(dev, app).catch(() => undefined);
+      await attempt().catch(() => undefined);
+    });
+    if (addedMocks.length) {
+      await record('정리: 목 규칙 지우기', 'info', `목 규칙 ${addedMocks.length}개(${addedMocks.join(', ')})를 지우지 못했습니다. 앱 안에 남아 있으니 network_mock_remove 나 데스크톱 네트워크 탭에서 지우세요`);
+    }
+    return addedMocks.length;
   };
+  const leftover = (n: number) => (n ? ` · 목 규칙 ${n}개를 지우지 못했습니다` : '');
 
   // setup
   try {
@@ -503,9 +525,9 @@ export async function runScript(dev: DeviceAdb, script: Script, opts: ScriptRunO
     await record('준비: 앱 실행', 'info', script.setup ? JSON.stringify(script.setup) : undefined, shotAll, seen?.screen);
   } catch (e) {
     await record('준비 실패', 'fail', (e as Error).message, true);
-    await removeMocks();
+    const left = await removeMocks();
     await flow?.flush().catch(() => undefined);
-    const report = await scenario.finish('blocked', `준비 단계 실패: ${(e as Error).message}`);
+    const report = await scenario.finish('blocked', `준비 단계 실패: ${(e as Error).message}${leftover(left)}`);
     return { verdict: 'blocked', passed, failed: 1, skipped, durationMs: Date.now() - t0, report, scenario: scenario.data };
   }
 
@@ -545,10 +567,10 @@ export async function runScript(dev: DeviceAdb, script: Script, opts: ScriptRunO
     }
   }
 
-  await removeMocks();
+  const left = await removeMocks();
   await flow?.flush().catch(() => undefined);
   const verdict = failed ? 'fail' : 'pass';
-  const summary = `${passed} 통과 · ${failed} 실패 · ${skipped} 건너뜀 (${((Date.now() - t0) / 1000).toFixed(1)}초)`;
+  const summary = `${passed} 통과 · ${failed} 실패 · ${skipped} 건너뜀 (${((Date.now() - t0) / 1000).toFixed(1)}초)${leftover(left)}`;
   const report = await scenario.finish(verdict, summary);
   return { verdict, passed, failed, skipped, durationMs: Date.now() - t0, report, scenario: scenario.data };
 }

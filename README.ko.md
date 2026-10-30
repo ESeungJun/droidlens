@@ -163,7 +163,7 @@ steps:
 | `swipe` | `up/down/left/right`, `until`이면 요소가 보일 때까지 스크롤 |
 | `wait` | 요소가 나타날 때까지 (`gone: true`면 사라질 때까지) |
 | `startup` | 앱 시작 시간 측정 (`cold`, `runs`), 중앙값이 `maxMs`를 넘으면 실패 |
-| `matchScreenshot` | 화면을 기준 이미지와 픽셀 비교 (`name`, `maxDiffPercent` 기본 0.5, `ignore` 셀렉터). 처음 실행하면 지금 화면이 기준이 되고, 상태바는 비교하지 않습니다. 실패하면 리포트에 달라진 곳을 칠한 이미지와 **지금 화면을 기준으로** 버튼이 붙습니다 |
+| `matchScreenshot` | 화면을 기준 이미지와 픽셀 비교 (`name`, `maxDiffPercent` 기본 0.5, `ignore` 셀렉터, `tolerance` 색 차이 허용치 기본 16). 처음 실행하면 지금 화면이 기준이 되고, 상태바는 비교하지 않습니다. 실패하면 리포트에 달라진 곳을 칠한 이미지와 **지금 화면을 기준으로** 버튼이 붙습니다 |
 | `assert` | `visible` · `notVisible` · `text` · `activity` · `package` · `network` · `pref` · `db` · `event` · `perf` · `noCrash` |
 | 기타 | `key`, `tapAt`, `sleep`, `launch`, `deeplink`, `screenshot` |
 

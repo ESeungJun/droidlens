@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
@@ -111,8 +112,14 @@ export function pngSize(png: Buffer): { width: number; height: number } {
   return { width: png.readUInt32BE(16), height: png.readUInt32BE(20) };
 }
 
+/** 파일 이름으로 쓸 수 없는 글자를 바꾼 이름은 짧은 해시를 붙여 '주문/목록' 과 '주문_목록' 이 같은 파일을 쓰지 않게 한다 */
+function baselineStem(name: string): string {
+  const safe = safeName(name);
+  return safe === name ? safe : `${safe}-${createHash('sha1').update(name).digest('hex').slice(0, 8)}`;
+}
+
 async function baselineFile(app: string, name: string, size: { width: number; height: number }): Promise<string> {
-  return join(await ensureDir('baselines', safeName(app)), `${safeName(name)}@${size.width}x${size.height}.png`);
+  return join(await ensureDir('baselines', safeName(app)), `${baselineStem(name)}@${size.width}x${size.height}.png`);
 }
 
 /** 기준 이미지를 저장(덮어쓰기)한다. 크기는 이미지에서 읽는다 */
@@ -127,7 +134,8 @@ export async function saveBaseline(app: string, name: string, png: Buffer): Prom
  * Android 11+ 는 dumpsys window 의 statusBars 영역, 그 전은 24dp 로 잡는다
  */
 export async function statusBarBounds(dev: DeviceAdb, width: number): Promise<Bounds> {
-  const out = await dev.shell('dumpsys window | grep -m1 -E "type=statusBars frame=.*visible=true"').catch(() => '');
+  // Android 14+ 는 type=statusBars, 11~13 은 type=ITYPE_STATUS_BAR 로 적힌다
+  const out = await dev.shell('dumpsys window | grep -m1 -E "type=(statusBars|ITYPE_STATUS_BAR) frame=.*visible=true"').catch(() => '');
   const m = /frame=\[(\d+),(\d+)\]\[(\d+),(\d+)\]/.exec(out);
   if (m && Number(m[4]) > 0) return [0, 0, width, Number(m[4])];
   const density = Number(/(\d+)\s*$/.exec((await dev.shell('wm density').catch(() => '')).trim())?.[1]) || 420;

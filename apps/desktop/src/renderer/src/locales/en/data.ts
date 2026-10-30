@@ -81,6 +81,8 @@ export const data: Record<string, string> = {
   '상태 코드는 200~599 입니다': 'Status code must be 200–599',
   '헤더는 한 줄에 "이름: 값" 으로 적어 주세요': 'Write one header per line as "Name: value"',
   '지연만 하려면 지연 시간이 필요합니다': 'Delay-only rules need a delay',
+  '기록된 응답 본문이 잘렸거나 바이너리라 가져오지 않았습니다. 돌려줄 본문을 직접 적어 주세요.':
+    'The recorded response body was truncated or binary, so it was not copied. Enter the body to return.',
   '연결 실패': 'Connection failure',
   '{status} 응답': '{status} response',
   '실제 요청': 'Real request',

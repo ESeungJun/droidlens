@@ -65,16 +65,24 @@ export function register(server: McpServer): void {
         name: z.string().describe('기준 이미지 이름 (예: 홈, 상품 상세)'),
         maxDiffPercent: z.number().min(0).max(100).optional().describe(`허용할 다른 픽셀 비율 (기본 ${dl.DEFAULT_MAX_DIFF_PERCENT})`),
         ignore: z.array(z.object(selectorShape)).optional().describe('비교에서 뺄 요소 셀렉터'),
+        tolerance: z.number().int().min(0).max(255).optional().describe(`색 채널 차이가 이 값 이하면 같은 픽셀로 본다 (기본 ${dl.DEFAULT_TOLERANCE})`),
         update: z.boolean().optional().describe('비교하지 않고 지금 화면을 새 기준으로 저장'),
       },
       annotations: acts,
     },
-    async ({ serial, packageName, name, maxDiffPercent, ignore, update }) => {
+    async ({ serial, packageName, name, maxDiffPercent, ignore, tolerance, update }) => {
       const sels = ignore?.map(pickSelector);
-      const r = await dl.matchScreenshot(await device(serial), packageName, name, { ignore: sels, update });
+      const r = await dl.matchScreenshot(await device(serial), packageName, name, { ignore: sels, tolerance, update });
       // 기준을 처음 만든 경우도 녹화해, 저장된 스크립트를 다시 돌리면 그 기준과 비교한다
       if (!update) {
-        recordStep({ matchScreenshot: { name, ...(maxDiffPercent !== undefined ? { maxDiffPercent } : {}), ...(sels?.length ? { ignore: sels.map(cleanSelector) } : {}) } });
+        recordStep({
+          matchScreenshot: {
+            name,
+            ...(maxDiffPercent !== undefined ? { maxDiffPercent } : {}),
+            ...(sels?.length ? { ignore: sels.map(cleanSelector) } : {}),
+            ...(tolerance !== undefined ? { tolerance } : {}),
+          },
+        });
       }
       if (r.saved) return text(`${update ? '기준 이미지를 바꿨습니다' : '기준 이미지가 없어 지금 화면을 기준으로 저장했습니다'}: ${r.baseline}`);
       const d = r.diff!;

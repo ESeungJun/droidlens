@@ -1,4 +1,4 @@
-import { DeviceAdb, quoteShell, sleep } from './adb.js';
+import { DeviceAdb, isPackageProcess, quoteShell, sleep } from './adb.js';
 import { assertPackage, launcherComponent } from './app.js';
 import { pressKey } from './device.js';
 
@@ -214,6 +214,11 @@ export interface PerfSample {
   at: number;
   pid: number;
   cpu?: CpuTicks;
+  /**
+   * 덤프를 마친 뒤 다시 읽은 CPU. dumpsys 가 앱 프로세스를 깨워 CPU 를 쓰게 하므로,
+   * 다음 표본과 비교할 때는 이것을 시작점으로 삼아 덤프 구간을 빼고 잰다
+   */
+  cpuAfter?: CpuTicks;
   memory?: MemoryInfo;
   frames?: FrameStats;
 }
@@ -224,30 +229,42 @@ const MARK = '__DROIDLENS_PERF__';
  * 앱 프로세스의 CPU·메모리·프레임을 셸 명령 한 번으로 읽는다. 앱이 떠 있지 않으면 undefined.
  * CPU 사용률은 표본 하나로는 낼 수 없어 이전 표본과 cpuPercent 로 비교한다
  */
-export async function perfSample(dev: DeviceAdb, pkg: string, opts: { memory?: boolean; frames?: boolean } = {}): Promise<PerfSample | undefined> {
+export async function perfSample(
+  dev: DeviceAdb,
+  pkg: string,
+  opts: { memory?: boolean; frames?: boolean; pid?: number } = {},
+): Promise<PerfSample | undefined> {
   assertPackage(pkg);
   const memory = opts.memory ?? true;
   const frames = opts.frames ?? true;
+  const dumps = memory || frames;
+  const cpu = ['cat /proc/$1/stat', `echo ${MARK}`, 'head -1 /proc/stat', `echo ${MARK}`];
   const cmd = [
-    `set -- $(pidof ${pkg})`,
-    '[ -n "$1" ] || exit 0',
-    `echo "pid $1"`,
-    'cat /proc/$1/stat',
-    `echo ${MARK}`,
-    'head -1 /proc/stat',
-    `echo ${MARK}`,
+    opts.pid ? `set -- ${Math.trunc(opts.pid)}` : `set -- $(pidof ${pkg})`,
+    '[ -n "$1" ] && [ -e /proc/$1 ] || exit 0',
+    'echo "pids $*"',
+    ...cpu,
     memory ? 'dumpsys meminfo $1' : 'true',
     `echo ${MARK}`,
     frames ? `dumpsys gfxinfo ${pkg}` : 'true',
+    `echo ${MARK}`,
+    ...(dumps ? cpu : []),
   ].join('; ');
   const out = await dev.shell(cmd, { timeoutMs: 15_000 });
-  const pid = Number(/^pid (\d+)/m.exec(out)?.[1]);
-  if (!pid) return undefined;
-  const [procStat = '', sysStat = '', mem = '', gfx = ''] = out.slice(out.indexOf('\n') + 1).split(MARK);
+  const pids = (/^pids (.*)$/m.exec(out)?.[1] ?? '').trim().split(/\s+/).map(Number).filter((n) => n > 0);
+  if (!pids.length) return undefined;
+  if (pids.length > 1 && !opts.pid) {
+    // 같은 이름의 프로세스가 여럿이면(재시작 중이거나 다른 앱이 같은 이름을 쓴 경우) 그 패키지 uid 로 도는 것을 고른다
+    for (const p of pids) if (await isPackageProcess(dev, pkg, p)) return perfSample(dev, pkg, { ...opts, pid: p });
+    return undefined;
+  }
+  const pid = pids[0];
+  const [procStat = '', sysStat = '', mem = '', gfx = '', procAfter = '', sysAfter = ''] = out.slice(out.indexOf('\n') + 1).split(MARK);
   return {
     at: Date.now(),
     pid,
     cpu: parseCpuTicks(procStat, sysStat),
+    cpuAfter: dumps ? parseCpuTicks(procAfter, sysAfter) : undefined,
     memory: memory ? parseMeminfo(mem) : undefined,
     frames: frames ? parseGfxinfo(gfx, pid) : undefined,
   };
@@ -269,7 +286,7 @@ export async function perfStats(dev: DeviceAdb, pkg: string, opts: { intervalMs?
   return {
     pid: first.pid,
     // 그 사이 앱이 다시 시작됐으면 다른 프로세스라 비교하지 않는다
-    cpuPercent: second?.pid === first.pid ? cpuPercent(first.cpu, second.cpu) : undefined,
+    cpuPercent: second?.pid === first.pid ? cpuPercent(first.cpuAfter ?? first.cpu, second.cpu) : undefined,
     memory: first.memory,
     frames: first.frames,
   };

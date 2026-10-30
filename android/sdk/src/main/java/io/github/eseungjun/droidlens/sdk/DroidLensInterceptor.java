@@ -1,6 +1,9 @@
 package io.github.eseungjun.droidlens.sdk;
 
+import android.util.Log;
+
 import java.io.IOException;
+import java.net.SocketTimeoutException;
 import java.nio.charset.StandardCharsets;
 import java.util.Map;
 
@@ -142,9 +145,19 @@ public final class DroidLensInterceptor implements Interceptor {
         return response;
     }
 
-    /** 목 규칙대로 늦추고, 실패시키거나 만든 응답을 돌려준다. 응답을 만들지 않는 규칙이면 늦춘 뒤 실제로 보낸다 */
+    /**
+     * 목 규칙대로 늦추고, 실패시키거나 만든 응답을 돌려준다. 응답을 만들지 않는 규칙이면 늦춘 뒤 실제로 보낸다.
+     * 지연이 앱의 readTimeout 보다 길면 실제 서버가 느릴 때처럼 그 시간 뒤 SocketTimeoutException 으로 끝낸다
+     */
     private static Response mocked(Chain chain, Request request, MockStore.Rule mock) throws IOException {
-        long until = System.currentTimeMillis() + mock.delayMs;
+        // addNetworkInterceptor 로 달린 경우 proceed 를 꼭 한 번 불러야 해서(안 부르면 OkHttp 가 예외) 응답 목은 할 수 없다
+        if (mock.status != 0 && isNetworkInterceptor(chain)) {
+            Log.w(DroidLens.TAG, "DroidLensInterceptor 가 addNetworkInterceptor 로 달려 있어 응답 목을 건너뜁니다. addInterceptor 로 다세요");
+            return chain.proceed(request);
+        }
+        long timeout = readTimeoutMillis(chain);
+        boolean timesOut = timeout > 0 && mock.delayMs > timeout;
+        long until = System.currentTimeMillis() + (timesOut ? timeout : mock.delayMs);
         while (System.currentTimeMillis() < until) {
             if (isCanceled(chain)) throw new IOException("Canceled");
             try {
@@ -154,8 +167,18 @@ public final class DroidLensInterceptor implements Interceptor {
                 throw new IOException("interrupted", ie);
             }
         }
+        if (timesOut) throw new SocketTimeoutException("timeout (DroidLens 네트워크 목: 지연 " + mock.delayMs + "ms > readTimeout " + timeout + "ms)");
         if (mock.fail) throw new IOException("DroidLens 네트워크 목: 연결 실패 (규칙 " + mock.id + ")");
         if (mock.status == 0) return chain.proceed(request);
+        try {
+            return mockResponse(request, mock);
+        } catch (RuntimeException e) {
+            // 저장할 때 검사하지만, 응답을 만들다 실패해도 앱이 죽지 않고 요청 실패로 처리하게 한다
+            throw new IOException("DroidLens 네트워크 목: 응답을 만들지 못했습니다 (규칙 " + mock.id + ")", e);
+        }
+    }
+
+    private static Response mockResponse(Request request, MockStore.Rule mock) {
         String type = mock.contentType != null ? mock.contentType : "application/json; charset=utf-8";
         byte[] bytes = mock.body != null ? mock.body.getBytes(StandardCharsets.UTF_8) : new byte[0];
         long now = System.currentTimeMillis();
@@ -171,6 +194,24 @@ public final class DroidLensInterceptor implements Interceptor {
                 .body(ResponseBody.create(MediaType.parse(type), bytes));
         for (Map.Entry<String, String> h : mock.headers.entrySet()) b.header(h.getKey(), h.getValue());
         return b.build();
+    }
+
+    /** 네트워크 인터셉터에는 연결이 있다 (애플리케이션 인터셉터는 null) */
+    private static boolean isNetworkInterceptor(Chain chain) {
+        try {
+            return chain.connection() != null;
+        } catch (LinkageError e) {
+            return false;
+        }
+    }
+
+    /** Chain.readTimeoutMillis 는 OkHttp 3.9 에 생겼다. 모르면 0 (타임아웃을 흉내 내지 않음) */
+    private static long readTimeoutMillis(Chain chain) {
+        try {
+            return chain.readTimeoutMillis();
+        } catch (LinkageError e) {
+            return 0;
+        }
     }
 
     /** Chain.call 은 OkHttp 3.9 에 생겼다. 그보다 오래된 버전은 취소를 확인하지 못한다 */
