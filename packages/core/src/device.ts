@@ -192,7 +192,7 @@ export interface Recording {
   stop(localPath: string): Promise<string>;
 }
 
-/** screenrecord는 최대 180초. stop 시 기기 쪽 프로세스에 SIGINT를 보내 mp4를 정상 종료시킨 뒤 pull */
+/** screenrecord는 최대 180초. stop 시 이 녹화의 기기 쪽 프로세스에만 SIGINT를 보내 mp4를 정상 종료시킨 뒤 pull */
 export function startRecording(
   dev: DeviceAdb,
   opts: { maxSeconds?: number; bitRateMbps?: number; size?: string } = {},
@@ -212,7 +212,10 @@ export function startRecording(
     remotePath,
     startedAt: Date.now(),
     async stop(localPath: string) {
-      await dev.shell('pkill -INT screenrecord').catch(() => undefined);
+      // 이 녹화의 screenrecord 만 끈다 (다른 프로세스의 녹화까지 끊지 않게). -INT 대신 -l INT 를 쓰는 건 toybox pkill 이
+      // 맞는 게 없을 때 자기 셸까지 끊기 때문이고, 패턴 앞을 ^screenrecord 로 묶는 건 이 명령을 실행하는 셸의 명령줄에도 경로가 들어 있어서다
+      const pattern = `^screenrecord .*${remotePath.replace(/\./g, '\\.')}$`;
+      await dev.shell(`pkill -l INT -f ${quoteShell(pattern)}`).catch(() => undefined);
       await Promise.race([exited, sleep(5000)]);
       proc.kill();
       await sleep(500); // mp4 moov atom 기록 대기
