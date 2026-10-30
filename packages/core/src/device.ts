@@ -153,7 +153,8 @@ export async function swipe(
  * 에이전트가 있으면 ACTION_SET_TEXT(유니코드 지원), 없으면 adb input text(ASCII만, 공백은 %s).
  */
 export async function typeText(dev: DeviceAdb, text: string): Promise<void> {
-  if (await withAgent(dev, (a) => a.setText(text, true))) return;
+  // 이어 붙이기는 두 번 실행되면 글자가 겹치므로 연결이 끊겨도 다시 보내지 않는다
+  if (await withAgent(dev, (a) => a.setText(text, true), { retry: false })) return;
   if (/[^\x20-\x7e]/.test(text)) {
     throw new Error('온디바이스 에이전트 없이는 ASCII만 입력할 수 있습니다 (adb input text 제약).');
   }
