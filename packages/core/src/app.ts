@@ -195,7 +195,7 @@ export async function bringToFront(dev: DeviceAdb, pkg: string): Promise<void> {
   if (/No activities found/.test(out)) throw new Error(`${pkg}: 실행 가능한 런처 액티비티가 없습니다`);
 }
 
-async function launcherComponent(dev: DeviceAdb, pkg: string): Promise<string | undefined> {
+export async function launcherComponent(dev: DeviceAdb, pkg: string): Promise<string | undefined> {
   const out = await dev
     .shell(`cmd package resolve-activity --brief -a android.intent.action.MAIN -c android.intent.category.LAUNCHER ${pkg}`)
     .catch(() => '');

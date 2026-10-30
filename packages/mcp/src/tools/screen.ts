@@ -1,7 +1,7 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import * as dl from '@droidlens/core';
-import { device, text, json, serialArg, selectorShape, pickSelector, describeNode, readOnly } from '../common.js';
+import { device, text, json, serialArg, selectorShape, pickSelector, describeNode, readOnly, acts, imageContent, recordStep, cleanSelector } from '../common.js';
 
 export function register(server: McpServer): void {
   // ---------- 화면 / 뷰 계층 ----------
@@ -49,6 +49,54 @@ export function register(server: McpServer): void {
       const h = await dl.dumpHierarchy(await device(a.serial));
       const found = dl.findNodes(h.root, pickSelector(a));
       return text(found.length ? found.map(describeNode).join('\n') : '매칭되는 노드가 없습니다.');
+    },
+  );
+
+  server.registerTool(
+    'screenshot_compare',
+    {
+      description:
+        '지금 화면을 기준 이미지와 픽셀 비교 (시각적 회귀). 기준이 없으면 지금 화면을 기준으로 저장한다. 기준은 앱·이름·해상도별로 ~/.droidlens/baselines 에 남는다. ' +
+        '상태바와 ignore 셀렉터에 맞는 요소(시계·광고·애니메이션)는 비교하지 않는다. 결과에 달라진 곳을 빨갛게 칠한 이미지를 붙인다. ' +
+        '화면이 의도대로 바뀐 것이면 update=true 로 기준을 바꾼다',
+      inputSchema: {
+        ...serialArg,
+        packageName: z.string().describe('기준 이미지를 묶을 앱'),
+        name: z.string().describe('기준 이미지 이름 (예: 홈, 상품 상세)'),
+        maxDiffPercent: z.number().min(0).max(100).optional().describe(`허용할 다른 픽셀 비율 (기본 ${dl.DEFAULT_MAX_DIFF_PERCENT})`),
+        ignore: z.array(z.object(selectorShape)).optional().describe('비교에서 뺄 요소 셀렉터'),
+        tolerance: z.number().int().min(0).max(255).optional().describe(`색 채널 차이가 이 값 이하면 같은 픽셀로 본다 (기본 ${dl.DEFAULT_TOLERANCE})`),
+        update: z.boolean().optional().describe('비교하지 않고 지금 화면을 새 기준으로 저장'),
+      },
+      annotations: acts,
+    },
+    async ({ serial, packageName, name, maxDiffPercent, ignore, tolerance, update }) => {
+      const sels = ignore?.map(pickSelector);
+      const r = await dl.matchScreenshot(await device(serial), packageName, name, { ignore: sels, tolerance, update });
+      // 기준을 처음 만든 경우도 녹화해, 저장된 스크립트를 다시 돌리면 그 기준과 비교한다
+      if (!update) {
+        recordStep({
+          matchScreenshot: {
+            name,
+            ...(maxDiffPercent !== undefined ? { maxDiffPercent } : {}),
+            ...(sels?.length ? { ignore: sels.map(cleanSelector) } : {}),
+            ...(tolerance !== undefined ? { tolerance } : {}),
+          },
+        });
+      }
+      if (r.saved) return text(`${update ? '기준 이미지를 바꿨습니다' : '기준 이미지가 없어 지금 화면을 기준으로 저장했습니다'}: ${r.baseline}`);
+      const d = r.diff!;
+      const max = maxDiffPercent ?? dl.DEFAULT_MAX_DIFF_PERCENT;
+      const pass = d.diffPercent <= max;
+      return {
+        content: [
+          {
+            type: 'text' as const,
+            text: `${pass ? '통과' : '실패'}: 다른 픽셀 ${d.diffPercent}% (허용 ${max}%)${d.diffBounds ? `, 달라진 영역 [${d.diffBounds.join(',')}]` : ''}\n기준: ${r.baseline}`,
+          },
+          ...(d.diffPixels ? [await imageContent(d.diffPng)] : []),
+        ],
+      };
     },
   );
 }

@@ -11,6 +11,7 @@ model: inherit
 
 - **DroidLens (`mcp__droidlens__*`)**: 실행 중인 앱의 화면·뷰 계층·전환 경로·로그, APK 라이브러리 탐지. 먼저 쓴다.
 - **앱 SDK 도구** (`sdk_apps`, `network_requests`, `db_list`, `prefs_get`, `app_events`): 대상 앱 debug 빌드에 DroidLens SDK가 있을 때 API 호출 흐름·로컬 저장 구조·분석 이벤트까지 분석한다.
+- **성능 도구** (`perf_startup`, `perf_stats`): 시작 시간·CPU·메모리·버벅인 프레임을 물으면 쓴다. `perf_startup`은 앱을 여러 번 다시 시작하므로 사용자가 성능을 물었을 때만 부른다.
 - **REA (`mcp__rea__*`)**: 특정 기능의 코드 구현을 확인해야 할 때만. 예: `inspect_android_package`, `search_android_classes`, `inspect_android_class`, `trace_android_references`. APK는 `analyze_libraries`가 `~/.droidlens/apks/<패키지>/`에 내려받아 두므로 그 경로를 쓴다.
 
 ## 분석 절차 (요청 범위에 맞게 필요한 것만)
