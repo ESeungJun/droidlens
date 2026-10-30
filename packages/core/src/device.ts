@@ -61,6 +61,32 @@ export async function getDeviceInfo(dev: DeviceAdb): Promise<DeviceInfo> {
   };
 }
 
+const sizeCache = new Map<string, { at: number; size: { width: number; height: number } }>();
+
+/**
+ * 지금 화면 크기 (회전 반영). getDeviceInfo 의 wm size 는 회전과 무관한 자연 크기라 가로 화면에서 스와이프 좌표가 화면 밖이 된다.
+ * 논리 디스플레이 0 의 현재 크기(dumpsys window displays 의 cur=WxH)를 읽고, 스와이프마다 조회하지 않게 2초 캐시한다.
+ * 읽지 못하면 자연 크기를 쓴다
+ */
+export async function screenSize(dev: DeviceAdb): Promise<{ width: number; height: number }> {
+  const hit = sizeCache.get(dev.serial);
+  if (hit && Date.now() - hit.at < 2000) return hit.size;
+  const out = await dev.shell('dumpsys window displays | grep -E "mDisplayId=|cur="').catch(() => '');
+  let display: string | undefined;
+  let size: { width: number; height: number } | undefined;
+  for (const line of out.split('\n')) {
+    display = /mDisplayId=(\d+)/.exec(line)?.[1] ?? display;
+    const m = display === '0' ? /\bcur=(\d+)x(\d+)/.exec(line) : null;
+    if (m) {
+      size = { width: Number(m[1]), height: Number(m[2]) };
+      break;
+    }
+  }
+  size ??= (await getDeviceInfo(dev)).screen;
+  sizeCache.set(dev.serial, { at: Date.now(), size });
+  return size;
+}
+
 export const PNG_MAGIC = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
 
 /** screencap 이 다중 디스플레이 경고를 낸 기기 serial */
@@ -208,7 +234,6 @@ export function swipeVector(screen: { width: number; height: number }, direction
 }
 
 export async function swipeDirection(dev: DeviceAdb, direction: SwipeDirection, durationMs?: number): Promise<void> {
-  const { screen } = await getDeviceInfo(dev);
-  const [x1, y1, x2, y2] = swipeVector(screen, direction);
+  const [x1, y1, x2, y2] = swipeVector(await screenSize(dev), direction);
   await swipe(dev, x1, y1, x2, y2, durationMs);
 }
