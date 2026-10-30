@@ -44,6 +44,10 @@ export function ChatPanel({ onClose }: { onClose(): void }) {
 
   useEffect(() => {
     api.chatStatus().then((c) => setClaude({ version: c.version })).catch((e) => setClaude({ error: (e as Error).message }));
+    // 패널을 닫으면 보이지 않는 곳에서 에이전트가 기기를 계속 조작하지 않게 진행 중인 실행을 멈춘다
+    return () => {
+      if (busyRef.current) api.chatStop().catch(() => undefined);
+    };
   }, []);
 
   useEffect(
