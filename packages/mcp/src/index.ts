@@ -12,7 +12,7 @@ import * as screen from './tools/screen.js';
 import * as perf from './tools/perf.js';
 import * as sdk from './tools/sdk.js';
 
-export const VERSION = '0.10.0';
+export const VERSION = '0.10.1';
 
 export function createServer(): McpServer {
   const server = new McpServer({ name: 'droidlens', version: VERSION });
