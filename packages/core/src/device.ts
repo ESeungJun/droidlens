@@ -191,7 +191,11 @@ export function startRecording(
   const remotePath = `/sdcard/droidlens_${Date.now()}.mp4`;
   const args = ['shell', 'screenrecord', '--time-limit', String(Math.min(opts.maxSeconds ?? 180, 180))];
   if (opts.bitRateMbps) args.push('--bit-rate', String(opts.bitRateMbps * 1_000_000));
-  if (opts.size) args.push('--size', opts.size);
+  if (opts.size) {
+    // 기기 sh 가 다시 해석하는 인자라 형식을 확인한다
+    if (!/^\d+x\d+$/.test(opts.size)) throw new Error(`잘못된 녹화 크기: ${opts.size} (예: 1280x720)`);
+    args.push('--size', opts.size);
+  }
   args.push(remotePath);
   const proc = dev.spawn(args);
   const exited = new Promise<void>((r) => proc.once('exit', () => r()));
