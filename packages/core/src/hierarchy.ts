@@ -107,6 +107,9 @@ const agentDumpFailures = new Map<string, number>();
 /** 에이전트가 응답은 하는데 이만큼 연달아 덤프에 실패하면 내리고 잠시 uiautomator 로 대체한다 */
 const MAX_AGENT_DUMP_FAILURES = 3;
 
+/** uiautomator dump 출력과 덤프 파일 내용 사이 구분 줄 */
+const XML_MARK = '__DROIDLENS_XML__';
+
 const dumpByAgent = (dev: DeviceAdb) => withAgent(dev, async (a) => parseHierarchyXml(await a.hierarchyXml()));
 /** 에이전트가 죽었거나 멈춘 실패 (응답이 온 오류와 달리 다시 보내도 나아지지 않는다) */
 const agentBroken = (e: unknown) => isConnectionError(e) || isTimeoutError(e);
@@ -138,23 +141,22 @@ export async function dumpHierarchy(dev: DeviceAdb, retries = 3): Promise<Hierar
     agentDumpFailures.delete(dev.serial);
     await stopAgent(dev, `뷰 계층 조회 실패: ${(e as Error).message}`);
   }
-  // 덤프 파일은 호출마다 다른 이름으로 쓰고 지운다 (동시에 덤프하는 다른 호출·프로세스와 파일을 겹쳐 쓰지 않게)
+  // 덤프 파일은 호출마다 다른 이름으로 쓰고 지운다 (동시에 덤프하는 다른 호출·프로세스와 파일을 겹쳐 쓰지 않게).
+  // 덤프·읽기·지우기를 셸 명령 한 번에 묶어 왕복을 줄이고, 덤프가 실패해도 지우기는 실행된다
   const remote = `/data/local/tmp/droidlens_ui_${randomBytes(6).toString('hex')}.xml`;
+  const cmd = `uiautomator dump --compressed ${remote} 2>&1; echo ${XML_MARK}; cat ${remote} 2>/dev/null; rm -f ${remote}`;
   let lastErr: unknown;
-  try {
-    for (let i = 0; i < retries; i++) {
-      try {
-        const out = await dev.shell(`uiautomator dump --compressed ${remote}`, { timeoutMs: 20_000 });
-        if (!out.includes('dumped')) throw new Error(out.trim() || 'uiautomator dump 실패');
-        const xml = (await dev.execOut(`cat ${remote}`)).toString('utf8');
-        return parseHierarchyXml(xml);
-      } catch (e) {
-        lastErr = e;
-        await sleep(400);
-      }
+  for (let i = 0; i < retries; i++) {
+    try {
+      const out = (await dev.execOut(cmd, { timeoutMs: 20_000 })).toString('utf8');
+      const at = out.indexOf(XML_MARK);
+      const status = at < 0 ? out : out.slice(0, at);
+      if (!status.includes('dumped')) throw new Error(status.trim() || 'uiautomator dump 실패');
+      return parseHierarchyXml(out.slice(at + XML_MARK.length).trimStart());
+    } catch (e) {
+      lastErr = e;
+      await sleep(400);
     }
-  } finally {
-    await dev.shell(`rm -f ${remote}`).catch(() => undefined);
   }
   throw lastErr;
 }
