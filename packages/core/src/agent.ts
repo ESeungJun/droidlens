@@ -38,6 +38,9 @@ export function agentDisabled(): boolean {
 
 export class AgentClient {
   private readonly http: LocalHttpClient;
+  /** 에이전트 패키지 프로세스로 확인한 pid 와 마지막으로 확인한 시각 */
+  pid = 0;
+  checkedAt = 0;
 
   constructor(readonly serial: string, readonly port: number) {
     this.http = new LocalHttpClient(port, 'agent');
@@ -127,8 +130,28 @@ const forward = (dev: DeviceAdb) => dev.forward(AGENT_REMOTE);
  * forward 로 붙은 상대가 진짜 에이전트인지. abstract 소켓 이름은 어느 앱이나 먼저 열 수 있으므로
  * ping 이 알려 준 pid 가 에이전트 패키지 uid 로 도는 프로세스인지 확인한다 (다른 앱이 덤프·입력 텍스트를 가로채지 못하게)
  */
-function isAgentProcess(dev: DeviceAdb, pid: number): Promise<boolean> {
-  return isPackageProcess(dev, AGENT_PACKAGE, pid);
+async function verifyAgent(dev: DeviceAdb, client: AgentClient, pid: number): Promise<boolean> {
+  if (!(await isPackageProcess(dev, AGENT_PACKAGE, pid))) return false;
+  // 확인한 pid 를 남겨 두고 캐시를 쓸 때 ping 의 pid 와 비교한다
+  client.pid = pid;
+  client.checkedAt = Date.now();
+  return true;
+}
+
+/** 확인한 지 이만큼 지난 캐시는 쓰기 전에 다시 본다 (에이전트가 죽은 자리를 다른 앱이 차지했을 수 있다) */
+const RECHECK_MS = 5000;
+
+/** 캐시된 연결이 아직 확인한 에이전트인지. 요청마다 왕복을 늘리지 않게 RECHECK_MS 마다만 ping 의 pid 를 비교한다 */
+async function stillAgent(c: AgentClient): Promise<boolean> {
+  if (Date.now() - c.checkedAt < RECHECK_MS) return true;
+  const r = await c.ping().catch(() => undefined);
+  if (r?.pid === c.pid) {
+    c.checkedAt = Date.now();
+    return true;
+  }
+  // pid 가 바뀌었으면(다른 DroidLens 프로세스가 다시 띄웠거나 소켓 주인이 바뀜) 처음부터 다시 확인한다
+  if (clients.get(c.serial) === c) clients.delete(c.serial);
+  return false;
 }
 const IMPOSTOR = '에이전트 소켓을 에이전트가 아닌 프로세스가 열고 있어 연결하지 않습니다';
 
@@ -139,7 +162,7 @@ const IMPOSTOR = '에이전트 소켓을 에이전트가 아닌 프로세스가 
 export async function ensureAgent(dev: DeviceAdb, opts: { force?: boolean } = {}): Promise<AgentClient | undefined> {
   if (agentDisabled()) return undefined;
   const cached = clients.get(dev.serial);
-  if (cached) return cached;
+  if (cached && (await stillAgent(cached))) return cached;
   const lastFail = failed.get(dev.serial);
   if (!opts.force && lastFail && Date.now() - lastFail < 60_000) return undefined;
   const inflight = starting.get(dev.serial);
@@ -152,7 +175,7 @@ export async function ensureAgent(dev: DeviceAdb, opts: { force?: boolean } = {}
       // 이미 떠 있으면 바로 사용 (다른 DroidLens 프로세스가 띄웠을 수 있음)
       const alive = await client.ping().catch(() => undefined);
       if (alive && alive.version === AGENT_VERSION) {
-        if (!(await isAgentProcess(dev, alive.pid))) throw new Error(IMPOSTOR);
+        if (!(await verifyAgent(dev, client, alive.pid))) throw new Error(IMPOSTOR);
         clients.set(dev.serial, client);
         return client;
       }
@@ -169,7 +192,7 @@ export async function ensureAgent(dev: DeviceAdb, opts: { force?: boolean } = {}
         await sleep(500);
         const r = await client.ping().catch(() => undefined);
         if (r?.ok && r.version === AGENT_VERSION) {
-          if (!(await isAgentProcess(dev, r.pid))) throw new Error(IMPOSTOR);
+          if (!(await verifyAgent(dev, client, r.pid))) throw new Error(IMPOSTOR);
           clients.set(dev.serial, client);
           failed.delete(dev.serial);
           lastError.delete(dev.serial);
@@ -228,7 +251,7 @@ export async function agentStatus(
     if (port) c = new AgentClient(dev.serial, port);
   }
   const alive = c ? await c.ping().catch(() => undefined) : undefined;
-  const running = !!alive && alive.version === AGENT_VERSION && (await isAgentProcess(dev, alive.pid));
+  const running = !!alive && !!c && alive.version === AGENT_VERSION && (await verifyAgent(dev, c, alive.pid));
   if (running && c) clients.set(dev.serial, c);
   return {
     installed: await installedVersion(dev),
