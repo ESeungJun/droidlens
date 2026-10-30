@@ -422,7 +422,7 @@ export async function runScript(dev: DeviceAdb, script: Script, opts: ScriptRunO
     }
     opts.onStep?.({ index: i, total, title, status: 'running' });
     try {
-      const detail = await runStep(dev, app, step, defaultTimeout, ctx, flow);
+      const detail = await runStep(dev, app, step, defaultTimeout, ctx, flow, opts.signal);
       await flow?.observe();
       if (detail === 'skip') {
         skipped++;
@@ -455,6 +455,9 @@ export async function runScript(dev: DeviceAdb, script: Script, opts: ScriptRunO
   return { verdict, passed, failed, skipped, durationMs: Date.now() - t0, report, scenario: scenario.data };
 }
 
+/** sleep 단계의 상한 */
+const MAX_SLEEP_MS = 60_000;
+
 async function runStep(
   dev: DeviceAdb,
   app: string,
@@ -462,6 +465,7 @@ async function runStep(
   defaultTimeout: number,
   ctx: { since: number },
   flow?: FlowCollector,
+  signal?: AbortSignal,
 ): Promise<string> {
   if ('tap' in step || 'longPress' in step) {
     const t = 'tap' in step ? step.tap : step.longPress;
@@ -540,8 +544,18 @@ async function runStep(
     return `발견: ${n.text || n.contentDesc || n.resourceId}`;
   }
   if ('sleep' in step) {
-    await sleep(step.sleep);
-    return '';
+    // 잘못 적은 값(예: 600000)으로 오래 멈추지 않게 상한을 두고, 중단하면 바로 깬다
+    const ms = Math.min(Math.max(step.sleep, 0), MAX_SLEEP_MS);
+    await new Promise<void>((resolve) => {
+      const done = () => {
+        clearTimeout(timer);
+        signal?.removeEventListener('abort', done);
+        resolve();
+      };
+      const timer = setTimeout(done, ms);
+      signal?.addEventListener('abort', done, { once: true });
+    });
+    return ms < step.sleep ? `${MAX_SLEEP_MS / 1000}초로 줄여 기다림` : '';
   }
   if ('launch' in step) {
     const s = await launchAndSettle(dev, app, { restart: step.launch?.restart });
