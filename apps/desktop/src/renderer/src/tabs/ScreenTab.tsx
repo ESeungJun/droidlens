@@ -61,10 +61,17 @@ export function ScreenTab() {
     };
   }, [serial, live, mode]);
 
+  // 기기를 바꾸면 이전 기기의 해상도·화면으로 좌표를 계산하지 않게 비운 뒤 새로 받는다
   useEffect(() => {
+    setInfo(null);
+    setImg('');
     if (!serial) return;
-    api.deviceInfo(serial).then(setInfo).catch(() => undefined);
-  }, [serial]);
+    let alive = true;
+    run(api.deviceInfo(serial)).then((i) => alive && i && setInfo(i));
+    return () => {
+      alive = false;
+    };
+  }, [serial, run]);
 
   // 녹화 상태는 메인이 기준이다. 탭을 다시 열거나 기기를 바꾸면 그 기기의 녹화 상태를 다시 읽는다
   useEffect(() => {
@@ -83,9 +90,13 @@ export function ScreenTab() {
     return () => clearInterval(t);
   }, [recAt]);
 
-  /** 화면 요소 좌표 → 기기 좌표. 스트림은 축소된 영상이라 기기 해상도 비율을 곱한다 */
+  /**
+   * 화면 요소 좌표 → 기기 좌표. 스트림은 축소된 영상이라 기기 해상도 비율을 곱한다.
+   * 기기 해상도를 아직 모르면 엉뚱한 곳을 누르지 않게 null (스냅샷은 원본 해상도라 필요 없다)
+   */
   const toDevice = (clientX: number, clientY: number) => {
-    const el = (mode === 'stream' ? canvasRef.current : imgRef.current)!;
+    const el = mode === 'stream' ? canvasRef.current : imgRef.current;
+    if (!el || (el instanceof HTMLCanvasElement && !info)) return null;
     const r = el.getBoundingClientRect();
     const w = el instanceof HTMLCanvasElement ? el.width : el.naturalWidth;
     const h = el instanceof HTMLCanvasElement ? el.height : el.naturalHeight;
@@ -99,13 +110,20 @@ export function ScreenTab() {
   const log = (s: string) => setHistory((h) => [`${new Date().toLocaleTimeString()} ${s}`, ...h].slice(0, 50));
 
   const onDown = (e: React.MouseEvent) => {
-    drag.current = { ...toDevice(e.clientX, e.clientY), t: Date.now() };
+    const p = toDevice(e.clientX, e.clientY);
+    if (!p) {
+      drag.current = null;
+      toast(t('기기 정보를 받지 못해 조작할 수 없습니다'), true);
+      return;
+    }
+    drag.current = { ...p, t: Date.now() };
   };
   const onUp = async (e: React.MouseEvent) => {
     if (!serial || !drag.current) return;
     const start = drag.current;
     drag.current = null;
     const end = toDevice(e.clientX, e.clientY);
+    if (!end) return;
     const dist = Math.hypot(end.x - start.x, end.y - start.y);
     const held = Date.now() - start.t;
     const action: GraphAction =
