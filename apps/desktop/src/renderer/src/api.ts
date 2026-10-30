@@ -81,6 +81,8 @@ export type ChatEvent =
   | { kind: 'toolResult'; id: string; text: string; isError: boolean }
   | { kind: 'done'; sessionId?: string; costUsd?: number; durationMs?: number; error?: string }
   | { kind: 'stderr'; text: string };
+/** 메인이 보내는 대화 이벤트. run 은 보낼 때 준 실행 번호 */
+export type ChatMessage = ChatEvent & { run: number };
 
 export interface ScriptEntry {
   file: string;
@@ -180,9 +182,9 @@ export const api = {
   scriptStop: () => call<void>('scriptStop'),
   onScriptProgress: (fn: (p: ScriptProgress) => void) => window.dl.on('script:progress', (p) => fn(p as ScriptProgress)),
   chatStatus: () => call<{ version: string }>('chatStatus'),
-  chatSend: (req: { message: string; agent: string; sessionId?: string; serial?: string; packageName?: string }) => call<boolean>('chatSend', req),
+  chatSend: (req: { runId: number; message: string; agent: string; sessionId?: string; serial?: string; packageName?: string }) => call<boolean>('chatSend', req),
   chatStop: () => call<void>('chatStop'),
-  onChatEvent: (fn: (e: ChatEvent) => void) => window.dl.on('chat:event', (p) => fn(p as ChatEvent)),
+  onChatEvent: (fn: (e: ChatMessage) => void) => window.dl.on('chat:event', (p) => fn(p as ChatMessage)),
   sdkApps: (s: string) => call<string[]>('sdkApps', s),
   sdk: <T,>(s: string, pkg: string, method: string, ...args: unknown[]) => call<T>('sdk', s, pkg, method, ...args),
   updateCheck: () => call<UpdateInfo>('updateCheck'),

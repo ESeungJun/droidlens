@@ -78,6 +78,8 @@ export type ChatEvent =
   | { kind: 'stderr'; text: string };
 
 export interface ChatRequest {
+  /** 렌더러가 정한 실행 번호. 이 실행의 모든 이벤트에 실어 보내 이전 실행의 늦은 이벤트와 구분하게 한다 */
+  runId: number;
   message: string;
   agent: string;
   sessionId?: string;
@@ -98,8 +100,9 @@ export function stopChat(): void {
 export async function sendChat(
   req: ChatRequest,
   ctx: { execPath: string; mcpScript: string; agentsDir: string },
-  emit: (e: ChatEvent) => void,
+  emitRaw: (e: ChatEvent & { run: number }) => void,
 ): Promise<void> {
+  const emit = (e: ChatEvent) => emitRaw({ ...e, run: req.runId });
   stopChat();
   const mine = ++generation;
   const claude = await resolveClaude();
