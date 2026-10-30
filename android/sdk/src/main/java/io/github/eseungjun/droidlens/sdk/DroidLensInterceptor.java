@@ -12,7 +12,9 @@ import okhttp3.Response;
 import okhttp3.ResponseBody;
 import okio.Buffer;
 import okio.BufferedSink;
+import okio.BufferedSource;
 import okio.ForwardingSink;
+import okio.ForwardingSource;
 import okio.Okio;
 
 /**
@@ -22,7 +24,7 @@ import okio.Okio;
  * </pre>
  * 요청·응답 헤더와 본문(각 최대 {@link #maxBodyBytes}), 상태 코드, 소요 시간, 실패 원인을 기록한다.
  * 요청 본문은 미리 써 보지 않고 실제 전송 때 흘러가는 바이트의 앞부분만 복사한다 (writeTo 는 한 번만 불린다).
- * 응답 본문은 peekBody로 읽어 앱의 원래 스트림을 소비하지 않는다.
+ * 응답 본문도 앱이 읽는 만큼만 복사하고, 다 읽거나 닫을 때 기록을 마친다 (스트리밍·롱폴링 응답을 막지 않는다).
  * 인증 헤더·토큰 같은 민감 정보는 저장하기 전에 가린다 ({@link DroidLens#redactHeaders}, {@link DroidLens#redactKeys}).
  */
 public final class DroidLensInterceptor implements Interceptor {
@@ -75,16 +77,20 @@ public final class DroidLensInterceptor implements Interceptor {
             e.message = response.message();
             e.protocol = response.protocol().toString();
             e.responseHeaders = redact.headers(response.headers().toMultimap());
-            ResponseBody peek = response.peekBody(maxBodyBytes);
-            MediaType ct = peek.contentType();
-            e.responseContentType = ct != null ? ct.toString() : null;
-            // 앱이 Accept-Encoding 을 직접 지정해 압축된 채 받은 본문은 가릴 수 없으니 기록하지 않는다
-            byte[] raw = compressed(response.header("Content-Encoding")) ? new byte[0] : peek.bytes();
             ResponseBody original = response.body();
-            long len = original != null ? original.contentLength() : -1;
-            e.responseSize = len >= 0 ? len : raw.length;
-            e.responseBody = redact.body(raw, e.responseContentType);
-            e.responseTruncated = e.responseSize > maxBodyBytes;
+            if (original != null) {
+                MediaType ct = original.contentType();
+                e.responseContentType = ct != null ? ct.toString() : null;
+                e.responseSize = original.contentLength();
+                // 앱이 Accept-Encoding 을 직접 지정해 압축된 채 받은 본문은 가릴 수 없고,
+                // SSE 는 끝나지 않는 스트림이며 101 은 웹소켓 업그레이드라 본문을 감싸지 않는다
+                if (!compressed(response.header("Content-Encoding")) && !isEventStream(e.responseContentType) && response.code() != 101) {
+                    CapturingSource src = new CapturingSource(original.source(), e, maxBodyBytes, redact);
+                    response = response.newBuilder()
+                            .body(ResponseBody.create(ct, original.contentLength(), Okio.buffer(src)))
+                            .build();
+                }
+            }
         } catch (Exception ignored) {
             // 본문 기록 실패는 무시
         }
@@ -103,6 +109,10 @@ public final class DroidLensInterceptor implements Interceptor {
         } catch (Exception ignored) {
             // 본문 기록 실패는 무시
         }
+    }
+
+    private static boolean isEventStream(String contentType) {
+        return contentType != null && contentType.toLowerCase().startsWith("text/event-stream");
     }
 
     private static boolean compressed(String encoding) {
@@ -165,6 +175,67 @@ public final class DroidLensInterceptor implements Interceptor {
             delegate.writeTo(out);
             // 닫지 않고 남은 바이트만 원래 sink 로 넘긴다 (닫기는 OkHttp 가 원래 sink 에 한다)
             out.emit();
+        }
+    }
+
+    /**
+     * 앱이 응답 본문을 읽을 때 지나가는 바이트 중 앞 limit 바이트만 복사한다.
+     * 끝(EOF)에 닿거나 닫히면 그때까지 읽은 만큼으로 기록을 마친다.
+     */
+    private static final class CapturingSource extends ForwardingSource {
+        private final NetworkStore.Entry entry;
+        private final long limit;
+        private final Redactor redact;
+        private final Buffer captured = new Buffer();
+        private long read;
+        private boolean done;
+
+        CapturingSource(BufferedSource delegate, NetworkStore.Entry entry, long limit, Redactor redact) {
+            super(delegate);
+            this.entry = entry;
+            this.limit = limit;
+            this.redact = redact;
+        }
+
+        @Override
+        public long read(Buffer sink, long byteCount) throws IOException {
+            long n = super.read(sink, byteCount);
+            if (n < 0) {
+                complete(true);
+                return n;
+            }
+            try {
+                long copy = Math.min(n, limit - captured.size());
+                if (copy > 0) sink.copyTo(captured, sink.size() - n, copy);
+                read += n;
+            } catch (Throwable ignored) {
+                // 복사 실패가 앱의 읽기를 막지 않도록 무시
+            }
+            return n;
+        }
+
+        @Override
+        public void close() throws IOException {
+            try {
+                super.close();
+            } finally {
+                complete(false);
+            }
+        }
+
+        private void complete(boolean eof) {
+            if (done) return;
+            done = true;
+            try {
+                byte[] raw = captured.readByteArray();
+                // 길이를 모르는 응답은 실제로 읽은 만큼을 크기로 쓰고, 끝까지 읽지 않고 닫았으면 잘린 것으로 본다
+                boolean truncated = entry.responseSize >= 0 ? entry.responseSize > raw.length : !eof || read > raw.length;
+                if (entry.responseSize < 0) entry.responseSize = read;
+                entry.responseBody = redact.body(raw, entry.responseContentType);
+                entry.responseTruncated = truncated;
+            } catch (Throwable ignored) {
+                // 본문 기록 실패는 무시
+            }
         }
     }
 }
