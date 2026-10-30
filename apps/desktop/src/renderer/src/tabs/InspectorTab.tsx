@@ -153,13 +153,16 @@ export function InspectorTab() {
   // 캡처하는 사이 기기가 바뀌면 이전 기기의 스냅샷이 새 기기 화면을 덮지 않게 지금 기기를 ref 로 들고 있는다
   const serialRef = useRef(serial);
   serialRef.current = serial;
+  // 로딩 표시는 마지막으로 시작한 캡처만 끈다 (기기가 빠져 결과를 버려도 로딩은 끄되, 새 기기의 캡처가 돌고 있으면 그대로 둔다)
+  const loadId = useRef(0);
   const load = async () => {
     if (!serial) return;
     const target = serial;
+    const id = ++loadId.current;
     setLoading(true);
     const s = await run(api.snapshot(target));
+    if (loadId.current === id) setLoading(false);
     if (serialRef.current !== target) return;
-    setLoading(false);
     if (s) {
       setSnap(s);
       setSel(null);
