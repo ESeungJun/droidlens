@@ -5,6 +5,7 @@ import { MirrorCanvas } from '../MirrorCanvas';
 import { useT } from '../i18n';
 
 const GRAPH_MODE_KEY = 'droidlens.graphMode';
+const REC_LIMIT = 180;
 
 export function ScreenTab() {
   const { serial, pkg, screen, toast, run } = useApp();
@@ -63,6 +64,17 @@ export function ScreenTab() {
   useEffect(() => {
     if (!serial) return;
     api.deviceInfo(serial).then(setInfo).catch(() => undefined);
+  }, [serial]);
+
+  // 녹화 상태는 메인이 기준이다. 탭을 다시 열거나 기기를 바꾸면 그 기기의 녹화 상태를 다시 읽는다
+  useEffect(() => {
+    setRecAt(null);
+    if (!serial) return;
+    let alive = true;
+    api.recordStatus(serial).then((at) => alive && setRecAt(at)).catch(() => undefined);
+    return () => {
+      alive = false;
+    };
   }, [serial]);
 
   useEffect(() => {
@@ -155,7 +167,8 @@ export function ScreenTab() {
     }
   };
 
-  const recSec = recAt ? Math.floor((now - recAt) / 1000) : 0;
+  // screenrecord 는 180초에서 스스로 끝난다. 그 뒤에는 중지를 눌러 녹화된 파일을 받아 오면 된다
+  const recSec = recAt ? Math.min(Math.floor((now - recAt) / 1000), REC_LIMIT) : 0;
 
   return (
     <div className="mirror-wrap">
@@ -217,7 +230,11 @@ export function ScreenTab() {
           <div className="keys">
             <button className="btn sm" onClick={shot}>📷 {t('스크린샷')}</button>
             <button className={`btn sm ${recAt ? 'on' : ''}`} onClick={toggleRec}>
-              {recAt ? `⏹ ${t('녹화 중 {sec}s / 180s', { sec: recSec })}` : `⏺ ${t('녹화')}`}
+              {!recAt
+                ? `⏺ ${t('녹화')}`
+                : recSec >= REC_LIMIT
+                  ? `⏹ ${t('녹화 끝남 (180s) · 저장')}`
+                  : `⏹ ${t('녹화 중 {sec}s / 180s', { sec: recSec })}`}
             </button>
           </div>
         </div>

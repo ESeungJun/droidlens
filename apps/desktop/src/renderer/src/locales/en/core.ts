@@ -90,6 +90,7 @@ export const core: Record<string, string> = {
   '캡처': 'Capture',
   '스크린샷': 'Screenshot',
   '녹화 중 {sec}s / 180s': 'Recording {sec}s / 180s',
+  '녹화 끝남 (180s) · 저장': 'Recording ended (180s) · Save',
   '녹화': 'Record',
   '텍스트 입력': 'Text input',
   '포커스된 입력창에 입력 (에이전트 실행 시 한글 가능)': 'Types into the focused field (non-ASCII needs the agent)',
