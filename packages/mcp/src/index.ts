@@ -9,13 +9,14 @@ import * as graph from './tools/graph.js';
 import * as input from './tools/input.js';
 import * as scenario from './tools/scenario.js';
 import * as screen from './tools/screen.js';
+import * as perf from './tools/perf.js';
 import * as sdk from './tools/sdk.js';
 
 export const VERSION = '0.9.0';
 
 export function createServer(): McpServer {
   const server = new McpServer({ name: 'droidlens', version: VERSION });
-  for (const m of [deviceTools, screen, input, app, graph, sdk, scenario]) m.register(server);
+  for (const m of [deviceTools, screen, input, app, perf, graph, sdk, scenario]) m.register(server);
   return server;
 }
 

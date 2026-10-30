@@ -79,7 +79,8 @@ const assertionSchema = z
   .describe(
     '검사 조건 (스크립트 assert와 같은 형식). 예: {"visible":{"text":"완료"}}, {"activity":"MainActivity"}, ' +
       '{"network":{"url":"/api/orders","method":"POST","status":201}}, {"pref":{"file":"settings","key":"onboarded","equals":true}}, ' +
-      '{"db":{"db":"app.db","sql":"SELECT COUNT(*) FROM cart","equals":1}}, {"event":"purchase"}, {"noCrash":true}',
+      '{"db":{"db":"app.db","sql":"SELECT COUNT(*) FROM cart","equals":1}}, {"event":"purchase"}, {"noCrash":true}, ' +
+      '{"perf":{"maxMemoryMb":300,"maxJankPercent":10}}',
   );
 
 export function register(server: McpServer): void {
@@ -90,7 +91,7 @@ export function register(server: McpServer): void {
     'scenario_start',
     {
       description:
-        '시나리오 검증 기록 시작. 이후 조작(tap/type_text/swipe/press_key/wait_for/launch_app/open_deeplink)이 자동으로 스크립트 단계로 녹화되고, ' +
+        '시나리오 검증 기록 시작. 이후 조작(tap/type_text/swipe/press_key/wait_for/launch_app/open_deeplink/perf_startup)이 자동으로 스크립트 단계로 녹화되고, ' +
         'scenario_step의 assert도 함께 녹화된다. scenario_finish에서 통과하면 재실행 가능한 YAML 스크립트로 저장된다.',
       inputSchema: {
         ...serialArg,

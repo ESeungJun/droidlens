@@ -203,6 +203,9 @@ handle('analyzeLibraries', async (s: string, pkg: string) => {
   return dl.analyzeApk(apks, pkg);
 });
 handle('crashes', (s: string, pkg?: string) => dl.recentCrashes(dev(s), pkg));
+handle('perfSample', async (s: string, pkg: string) => (await dl.perfSample(dev(s), pkg)) ?? null);
+handle('perfStartup', (s: string, pkg: string, cold: boolean, runs: number) => dl.measureStartup(dev(s), pkg, { cold, runs }));
+handle('perfResetFrames', (s: string, pkg: string) => dl.resetFrameStats(dev(s), pkg));
 
 // ---------- logcat ----------
 let logStream: { stop(): void } | null = null;

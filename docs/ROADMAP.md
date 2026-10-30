@@ -50,4 +50,4 @@
 - [ ] 결과 대시보드 (실행 이력·성공률 추이), 스크립트 매개변수(계정 등) 주입
 - [ ] 스크린샷 비교(시각적 회귀)
 - [ ] 버전 간 비교: 라이브러리 diff, 화면 그래프 diff, REA `compare_application_versions` 연동
-- [ ] 성능: 앱 시작 시간, 프레임(gfxinfo), 메모리(meminfo) 수집
+- [x] 성능: 앱 시작 시간, 프레임(gfxinfo), 메모리(meminfo), CPU 수집 — 데스크톱 성능 탭, MCP `perf_startup`·`perf_stats`, 스크립트 `startup` 단계·`perf` assert

@@ -71,6 +71,7 @@ Then enable **Developer options → USB debugging** on your device and connect i
 | **Screen flow** | A per-app **screen map** — screens and transitions from auto-exploration, manual use, and scenario runs keep adding up in one map (thumbnails + action labels). **Auto-exploration** (never taps payment, delete, logout, or send buttons), **pick buttons, long presses, or swipes on a screenshot and explore only the flows they open**, tapped-button coverage per screen, path from the first screen, **auto-navigate to a screen** along the recorded path, map export/import (merge) |
 | **Logs** | Live logcat (app PID filter, level, search), recent crashes |
 | **Network** ¹ | OkHttp requests and responses (headers, pretty-printed JSON bodies, image preview, timing), failure filter, copy as cURL |
+| **Performance** | Live CPU, memory (PSS, by region) and frames-per-second graphs, janky-frame ratio and frame-time percentiles, app startup time (cold or reopen, repeated runs with the median) |
 | **App data** ¹ | View and edit SharedPreferences, SQLite/Room DB browser with SQL execution, custom events |
 | **Libraries** | Detects 100+ libraries and frameworks from the APK's DEX and native libs, estimates obfuscation |
 | **App info** | Version, SDK, permissions, activities; launch / restart / kill; deep links |
@@ -116,7 +117,7 @@ DroidLens.event("purchase_clicked", JSONObject().put("itemId", 42))
 
 Just press two buttons in the app's **Settings & Integrations** tab.
 
-1. **Register MCP** — registers the app's built-in MCP server (44 tools) with `claude mcp add --scope user`. No separate Node install needed.
+1. **Register MCP** — registers the app's built-in MCP server (46 tools) with `claude mcp add --scope user`. No separate Node install needed.
 2. **Install agents** — copies the bundled agents to `~/.claude/agents/`.
 
 | Agent | What it does |
@@ -149,6 +150,7 @@ steps:
   - assert: { activity: ProductDetailActivity }
   - assert: { network: { url: /api/products, method: GET, status: 200 } }   # SDK
   - assert: { event: product_viewed }                                        # SDK
+  - assert: { perf: { maxMemoryMb: 300, maxJankPercent: 10 } }           # memory / janky-frame limits
   - assert: { noCrash: true }
 ```
 
@@ -158,7 +160,8 @@ steps:
 | `type` | Text input (`into` targets an input field, `clear` replaces). Supports non-ASCII text (e.g. Korean) when the agent is running |
 | `swipe` | `up/down/left/right`; with `until`, scrolls until the element appears |
 | `wait` | Until an element appears (with `gone: true`, until it disappears) |
-| `assert` | `visible` · `notVisible` · `text` · `activity` · `package` · `network` · `pref` · `db` · `event` · `noCrash` |
+| `startup` | Measures app startup time (`cold`, `runs`); fails if the median exceeds `maxMs` |
+| `assert` | `visible` · `notVisible` · `text` · `activity` · `package` · `network` · `pref` · `db` · `event` · `perf` · `noCrash` |
 | Other | `key`, `tapAt`, `sleep`, `launch`, `deeplink`, `screenshot` |
 
 How to run:
