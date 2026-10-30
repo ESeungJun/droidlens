@@ -93,8 +93,17 @@ let generation = 0;
 
 export function stopChat(): void {
   generation++;
-  current?.kill('SIGINT');
+  if (current) killTree(current);
   current = null;
+}
+
+/**
+ * Windows 에서는 claude.cmd 를 셸(cmd.exe)로 띄우므로 kill() 은 cmd.exe 만 죽이고 실제 claude 는 남는다.
+ * 그래서 프로세스 트리째 끝낸다. 그 밖에서는 SIGINT 로 정상 종료를 요청한다
+ */
+function killTree(child: ChildProcess): void {
+  if (process.platform === 'win32' && child.pid) execFile('taskkill', ['/T', '/F', '/PID', String(child.pid)], () => undefined);
+  else child.kill('SIGINT');
 }
 
 export async function sendChat(

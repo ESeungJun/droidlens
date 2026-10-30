@@ -607,9 +607,20 @@ app.whenReady().then(async () => {
   }
   createWindow();
 });
-app.on('window-all-closed', () => {
+/**
+ * 앱이 끝날 때 띄워 둔 외부 프로세스(claude·adb logcat·scrcpy·screenrecord)를 모두 정리한다.
+ * 창을 닫을 때뿐 아니라 Cmd+Q·업데이트 설치(app.quit)로 끝날 때도 거치도록 will-quit 에서 한다
+ */
+function stopAll(): void {
   stopChat();
   logStream?.stop();
+  logStream = null;
+  mirrorWant = null;
   mirror?.m.stop();
-  app.quit();
-});
+  mirror = null;
+  // 녹화는 기기 쪽 screenrecord 를 멈추고, 받아 올 수 없게 된 파일은 기기에서 지운다 (adb 셸은 앱이 끝나도 마저 돈다)
+  for (const [s, r] of recs) dev(s).spawn(['shell', `pkill -INT screenrecord; sleep 1; rm -f ${r.remotePath}`]).on('error', () => undefined);
+  recs.clear();
+}
+app.on('will-quit', stopAll);
+app.on('window-all-closed', () => app.quit());
