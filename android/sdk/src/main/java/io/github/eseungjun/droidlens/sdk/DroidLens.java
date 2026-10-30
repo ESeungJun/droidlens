@@ -25,7 +25,7 @@ public final class DroidLens {
 
     /** 수동 초기화. 자동 초기화를 끈 경우(매니페스트에서 provider 제거)에만 호출하면 된다. 여러 번 불러도 안전하다. */
     public static synchronized void init(Context context) {
-        if (server != null) return;
+        if (server != null && server.isRunning()) return;
         try {
             server = new SdkServer(context.getApplicationContext());
             server.start();
@@ -37,7 +37,8 @@ public final class DroidLens {
     }
 
     public static boolean isRunning() {
-        return server != null;
+        SdkServer s = server;
+        return s != null && s.isRunning();
     }
 
     /** DroidLens 이벤트 탭에 표시할 커스텀 이벤트 (분석 이벤트, 상태 변화 등) */

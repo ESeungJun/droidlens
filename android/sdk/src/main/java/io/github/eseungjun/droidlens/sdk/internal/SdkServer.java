@@ -5,6 +5,7 @@ import android.content.pm.PackageInfo;
 import android.net.LocalServerSocket;
 import android.net.LocalSocket;
 import android.os.Process;
+import android.os.SystemClock;
 import android.util.Log;
 
 import org.json.JSONArray;
@@ -30,6 +31,10 @@ import io.github.eseungjun.droidlens.sdk.BuildConfig;
 public final class SdkServer {
     public static final String SOCKET_PREFIX = "droidlens_sdk_";
     private static final String TAG = "DroidLens";
+    /** 헤더를 보내지 않는 연결이 작업 스레드를 붙잡지 않도록 (에이전트와 같은 값) */
+    private static final int SO_TIMEOUT_MS = 15_000;
+    /** accept 가 이만큼 연달아 실패하면 서버 소켓이 망가진 것으로 보고 멈춘다 */
+    private static final int MAX_ACCEPT_FAILURES = 10;
 
     private final Context context;
     private final String socketName;
@@ -52,28 +57,71 @@ public final class SdkServer {
         return socketName;
     }
 
+    private volatile boolean running;
+
+    /** accept 루프가 살아 있는지. 서버 소켓이 망가져 멈추면 false */
+    public boolean isRunning() {
+        return running;
+    }
+
     public void start() throws Exception {
         final LocalServerSocket server = new LocalServerSocket(socketName);
+        running = true;
         Thread t = new Thread(() -> {
+            int failures = 0;
             while (true) {
+                LocalSocket s;
                 try {
-                    final LocalSocket s = server.accept();
+                    s = server.accept();
+                    failures = 0;
+                } catch (Exception e) {
+                    // 일시적인 실패로 루프 전체가 끝나지 않게 한다. 연달아 실패할 때만 멈춘다
+                    failures++;
+                    Log.w(TAG, "accept failed (" + failures + "/" + MAX_ACCEPT_FAILURES + ")", e);
+                    if (failures >= MAX_ACCEPT_FAILURES) {
+                        Log.e(TAG, "DroidLens SDK 서버를 멈춥니다: accept 가 계속 실패합니다");
+                        running = false;
+                        closeQuietly(server);
+                        return;
+                    }
+                    SystemClock.sleep(200);
+                    continue;
+                }
+                try {
                     // 같은 기기의 다른 앱도 abstract 소켓에 연결할 수 있으므로 adb(shell)·root·자기 자신만 허용
                     int uid = s.getPeerCredentials().getUid();
                     if (uid != 0 && uid != 2000 && uid != Process.myUid()) {
                         Log.w(TAG, "rejected connection from uid " + uid);
-                        s.close();
+                        closeQuietly(s);
                         continue;
                     }
+                    s.setSoTimeout(SO_TIMEOUT_MS);
                     pool.execute(() -> handle(s));
                 } catch (Exception e) {
-                    Log.w(TAG, "accept failed", e);
-                    return;
+                    Log.w(TAG, "connection setup failed", e);
+                    closeQuietly(s);
                 }
             }
         }, "droidlens-sdk-accept");
         t.setDaemon(true);
         t.start();
+    }
+
+    // LocalServerSocket 은 오래된 API 레벨에서 Closeable 이 아니라 타입별로 둔다
+    private static void closeQuietly(LocalSocket s) {
+        try {
+            s.close();
+        } catch (Exception ignored) {
+            // 닫기 실패는 무시
+        }
+    }
+
+    private static void closeQuietly(LocalServerSocket s) {
+        try {
+            s.close();
+        } catch (Exception ignored) {
+            // 닫기 실패는 무시
+        }
     }
 
     private void handle(LocalSocket s) {
