@@ -51,7 +51,7 @@ Or download **just one installer** for your OS from [Releases](https://github.co
 **First launch on macOS (downloaded .dmg)**: the app is signed and notarized by Apple, so just move it to Applications and open it. (0.8.3 and older weren't notarized and need **Open Anyway** in **System Settings → Privacy & Security** or `xattr -dr com.apple.quarantine /Applications/DroidLens.app`.)
 **First launch on Windows**: if SmartScreen warns you, click "More info → Run anyway".
 
-**Updates**: when a new version is out, an **⬆ Update** button appears in the top bar. Click it to download, replace, and restart (you can also check from the Settings & Integrations tab; the macOS log is at `~/.droidlens/update.log`).
+**Updates**: when a new version is out, an **⬆ Update** button appears in the top bar. Click it to download, replace, and restart (you can also check from **⚙ Settings & Integrations** at the top right; the macOS log is at `~/.droidlens/update.log`).
 
 ### Prerequisite: adb
 If Android Studio is installed, adb is found automatically. Otherwise, install just the platform-tools:
@@ -60,24 +60,24 @@ macOS    brew install --cask android-platform-tools
 Windows  winget install Google.PlatformTools
 Linux    sudo apt install adb
 ```
-Then enable **Developer options → USB debugging** on your device and connect it, or start an emulator. Virtual devices (AVDs) on this computer appear in the device list at the top; pick one and DroidLens starts it and selects it once it has booted (there is a stop button too). If you have none, the **device setup helper** walks you through installing one. You can also set the adb path manually in the app's **Settings & Integrations** tab.
+Then enable **Developer options → USB debugging** on your device and connect it, or start an emulator. Virtual devices (AVDs) on this computer appear in the device list at the top; pick one and DroidLens starts it and selects it once it has booted (there is a stop button too). If you have none, the **device setup helper** walks you through installing one. You can also set the adb path manually under **⚙ Settings & Integrations** at the top right of the app.
 
 ## Features
 
-| Tab | What it does |
-| --- | --- |
-| **Screen** | High-frame-rate mirroring (scrcpy stream + WebCodecs, up to 60fps) or snapshot mode; click = tap · drag = swipe · hold = long press; hardware keys, text input, screenshots, recording (up to 180s) |
-| **View hierarchy** | Two-way selection between screenshot and tree, attributes and selectors, node count by depth, Compose detection, **3D exploded view** |
-| **Screen flow** | A per-app **screen map** — screens and transitions from auto-exploration, manual use, and scenario runs keep adding up in one map (thumbnails + action labels). **Auto-exploration** (never taps payment, delete, logout, or send buttons), **pick buttons, long presses, or swipes on a screenshot and explore only the flows they open**, tapped-button coverage per screen, path from the first screen, **auto-navigate to a screen** along the recorded path, map export/import (merge) |
-| **Logs** | Live logcat (app PID filter, level, search), recent crashes |
-| **Network** ¹ | OkHttp requests and responses (headers, pretty-printed JSON bodies, image preview, timing), failure filter, copy as cURL, **network mocking** (response, failure, delay) |
-| **Performance** | Live CPU, memory (PSS, by region) and frames-per-second graphs, janky-frame ratio and frame-time percentiles, app startup time (cold or reopen, repeated runs with the median) |
-| **App data** ¹ | View and edit SharedPreferences, SQLite/Room DB browser with SQL execution, custom events |
-| **Libraries** | Detects 100+ libraries and frameworks from the APK's DEX and native libs, estimates obfuscation |
-| **App info** | Version, SDK, permissions, activities; launch / restart / kill; deep links |
-| **Scenarios** | Verification reports (per-step screenshots and verdicts), write and run **YAML scripts**, run the full regression suite, accept the current screen as the new baseline when a screenshot comparison fails |
-| **Settings & Integrations** | adb path, one-click Claude Code MCP registration, install bundled agents |
-| **💬 Agent chat** | Chat panel opened from the top bar. Ask the verifier or analyst agent while watching the mirror (uses this computer's Claude Code login — no API key needed) |
+| Group | Tab | What it does |
+| --- | --- | --- |
+| **Screen** | **Device screen** | High-frame-rate mirroring (scrcpy stream + WebCodecs, up to 60fps) or snapshot mode; click = tap · drag = swipe · hold = long press; hardware keys, text input, screenshots, recording (up to 180s) |
+|  | **View hierarchy** | Two-way selection between screenshot and tree, attributes and selectors, node count by depth, Compose detection, **3D exploded view** |
+|  | **Screen flow** | A per-app **screen map** — screens and transitions from auto-exploration, manual use, and scenario runs keep adding up in one map (thumbnails + action labels). **Auto-exploration** (never taps payment, delete, logout, or send buttons), **pick buttons, long presses, or swipes on a screenshot and explore only the flows they open**, tapped-button coverage per screen, path from the first screen, **auto-navigate to a screen** along the recorded path, map export/import (merge) |
+| **Diagnose** | **Logs** | Live logcat (app PID filter, level, search), recent crashes |
+|  | **Network** ¹ | OkHttp requests and responses (headers, pretty-printed JSON bodies, image preview, timing), failure filter, copy as cURL, **network mocking** (response, failure, delay) |
+|  | **Performance** | Live CPU, memory (PSS, by region) and frames-per-second graphs, janky-frame ratio and frame-time percentiles, app startup time (cold or reopen, repeated runs with the median) |
+| **App** | **App data** ¹ | View and edit SharedPreferences, SQLite/Room DB browser with SQL execution, custom events |
+|  | **App info** | Version, SDK, permissions, activities; launch / restart / kill; deep links |
+|  | **Libraries** | Detects 100+ libraries and frameworks from the APK's DEX and native libs, estimates obfuscation |
+| **Test** | **Scenarios** | Verification reports (per-step screenshots and verdicts), write and run **YAML scripts**, run the full regression suite, accept the current screen as the new baseline when a screenshot comparison fails |
+| **⚙** | **Settings & Integrations (top right)** | adb path, one-click Claude Code MCP registration, install bundled agents |
+| | **💬 Agent chat** | Chat panel opened from the top bar. Ask the verifier or analyst agent while watching the mirror (uses this computer's Claude Code login — no API key needed) |
 
 ¹ Requires the [DroidLens SDK](#app-sdk-optional) in your app's debug build.
 
@@ -116,7 +116,7 @@ DroidLens.event("purchase_clicked", JSONObject().put("itemId", 42))
 
 ## Claude Code integration
 
-Just press two buttons in the app's **Settings & Integrations** tab.
+Just press two buttons under **⚙ Settings & Integrations** at the top right of the app.
 
 1. **Register MCP** — registers the app's built-in MCP server (50 tools) with `claude mcp add --scope user`. No separate Node install needed.
 2. **Install agents** — copies the bundled agents to `~/.claude/agents/`.
