@@ -78,6 +78,7 @@ export const core: Record<string, string> = {
   '녹화 저장 중…': 'Saving recording…',
   '저장됨: {path}': 'Saved: {path}',
   '스냅샷 모드로 전환합니다': 'switching to snapshot mode',
+  '기기 정보를 받지 못해 조작할 수 없습니다': "Can't control the device: device info is not available",
   '화면 불러오는 중…': 'Loading screen…',
   '조작': 'Controls',
   '뒤로': 'Back',
