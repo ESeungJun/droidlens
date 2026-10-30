@@ -4,8 +4,10 @@ import java.io.IOException;
 
 import io.github.eseungjun.droidlens.sdk.internal.NetworkStore;
 import io.github.eseungjun.droidlens.sdk.internal.Redactor;
+import okhttp3.FormBody;
 import okhttp3.Interceptor;
 import okhttp3.MediaType;
+import okhttp3.MultipartBody;
 import okhttp3.Request;
 import okhttp3.RequestBody;
 import okhttp3.Response;
@@ -20,10 +22,15 @@ import okio.Okio;
 /**
  * OkHttp 네트워크 인스펙터.
  * <pre>
- * OkHttpClient.Builder().addInterceptor(DroidLensInterceptor()).build()
+ * OkHttpClient.Builder()
+ *     .addInterceptor(공통파라미터Interceptor())   // 앱 인터셉터를 먼저
+ *     .addInterceptor(DroidLensInterceptor())      // 마지막에 두기를 권장
+ *     .build()
  * </pre>
  * 요청·응답 헤더와 본문(각 최대 {@link #maxBodyBytes}, 바이너리는 더 작게), 상태 코드, 소요 시간, 실패 원인을 기록한다.
- * 요청 본문은 미리 써 보지 않고 실제 전송 때 흘러가는 바이트의 앞부분만 복사한다 (writeTo 는 한 번만 불린다).
+ * 요청 본문은 다시 써도 부작용이 없는 것만 미리 복사하고, 나머지는 실제 전송 때 흘러가는 바이트의 앞부분만 복사한다
+ * (기준은 {@link #isReplayable}). 뒤쪽 인터셉터는 대부분 원래 요청을 그대로 받지만, 감싸는 경우에는 본문 타입이 바뀌므로
+ * 마지막에 addInterceptor 하는 것을 권장한다.
  * 응답 본문도 앱이 읽는 만큼만 복사하고, 다 읽거나 닫을 때 기록을 마친다 (스트리밍·롱폴링 응답을 막지 않는다).
  * 인증 헤더·토큰 같은 민감 정보는 저장하기 전에 가린다 ({@link DroidLens#redactHeaders}, {@link DroidLens#redactKeys}).
  */
@@ -61,9 +68,19 @@ public final class DroidLensInterceptor implements Interceptor {
                 e.requestSize = body.contentLength();
                 // duplex 본문은 응답과 동시에 계속 쓰이므로 기록하지 않는다
                 if (!isDuplex(body) && !compressed(request.header("Content-Encoding"))) {
-                    TeeRequestBody t = new TeeRequestBody(body, NetworkStore.captureLimit(e.requestContentType, e.requestSize, maxBodyBytes));
-                    request = request.newBuilder().method(request.method(), t).build();
-                    tee = t;
+                    long limit = NetworkStore.captureLimit(e.requestContentType, e.requestSize, maxBodyBytes);
+                    if (isReplayable(body)) {
+                        // 요청 객체는 그대로 넘긴다. 뒤 인터셉터가 FormBody·MultipartBody 로 형변환해도 깨지지 않는다
+                        copyRequestBody(e, body, limit, redact);
+                    } else if (!(body instanceof MultipartBody)) {
+                        // 한 번만 쓸 수 있거나 크기를 모르는 본문은 전송 때 흐르는 바이트를 복사한다.
+                        // 이때 뒤 인터셉터에는 TeeRequestBody 가 보이므로 원래 타입으로 instanceof·형변환할 수 없다
+                        TeeRequestBody t = new TeeRequestBody(body, limit);
+                        request = request.newBuilder().method(request.method(), t).build();
+                        tee = t;
+                    }
+                    // 파일·스트림 part 가 섞인 multipart 는 미리 쓰지도 감싸지도 않는다 (형변환하는 인터셉터가 흔하다).
+                    // 형식·크기만 기록하고 본문은 비워 둔다
                 }
             }
         } catch (Throwable ignored) {
@@ -111,6 +128,51 @@ public final class DroidLensInterceptor implements Interceptor {
         }
         NetworkStore.get().finish(e, tookMs);
         return response;
+    }
+
+    /** 미리 써서 복사할 본문의 최대 크기. 이보다 크면 메모리에 한 번 더 올리지 않는다 */
+    private static final long PRECOPY_MAX = 1024 * 1024;
+
+    /**
+     * 요청을 보내기 전에 Buffer 에 한 번 더 써도 되는 본문인지.
+     * <ul>
+     * <li>FormBody: 필드가 이미 메모리에 있다</li>
+     * <li>OkHttp 의 RequestBody.create(String·byte[]·ByteString·File) 로 만든 본문: 몇 번을 써도 같은 바이트가 나온다.
+     *     클래스가 okhttp3.RequestBody 안에 있는 것으로 구분한다. 앱이 만든 본문은 크기를 알아도 진행률 콜백·스트림일 수 있어 제외</li>
+     * <li>MultipartBody: 모든 part 가 위 조건을 만족할 때만</li>
+     * </ul>
+     * 크기를 모르거나 {@link #PRECOPY_MAX} 를 넘거나 oneShot 이면 미리 쓰지 않는다 (스트림 소비·큰 파일 OOM 방지).
+     * 앱이 OkHttp 를 난독화해 클래스 이름이 바뀌었으면 안전한 쪽(감싸기)으로 떨어진다.
+     */
+    private static boolean isReplayable(RequestBody body) throws IOException {
+        if (body instanceof FormBody) return true;
+        long length = body.contentLength();
+        if (length < 0 || length > PRECOPY_MAX || isOneShot(body)) return false;
+        if (body instanceof MultipartBody) {
+            for (MultipartBody.Part part : ((MultipartBody) body).parts()) {
+                if (!isReplayable(part.body())) return false;
+            }
+            return true;
+        }
+        return body.getClass().getName().startsWith("okhttp3.RequestBody$");
+    }
+
+    /** 다시 써도 되는 본문을 Buffer 에 써서 앞 limit 바이트를 기록한다 */
+    private static void copyRequestBody(NetworkStore.Entry e, RequestBody body, long limit, Redactor redact) throws IOException {
+        Buffer buf = new Buffer();
+        body.writeTo(buf);
+        long size = buf.size();
+        byte[] raw = buf.readByteArray(Math.min(size, Math.max(0, limit)));
+        NetworkStore.get().setRequestBody(e, redact.body(raw, e.requestContentType), size, size > raw.length);
+    }
+
+    /** RequestBody.isOneShot 은 OkHttp 3.14 에 생겼다. 그보다 오래된 버전은 false */
+    private static boolean isOneShot(RequestBody body) {
+        try {
+            return body.isOneShot();
+        } catch (LinkageError e) {
+            return false;
+        }
     }
 
     /** RequestBody.isDuplex 는 OkHttp 3.14 에 생겼다. 그보다 오래된 버전에는 duplex 가 없으니 false */
