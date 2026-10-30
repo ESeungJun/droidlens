@@ -111,10 +111,15 @@ export function InspectorTab() {
     propsOpen ? `5px ${propsW}px` : '28px',
   ].join(' ');
 
+  // 캡처하는 사이 기기가 바뀌면 이전 기기의 스냅샷이 새 기기 화면을 덮지 않게 지금 기기를 ref 로 들고 있는다
+  const serialRef = useRef(serial);
+  serialRef.current = serial;
   const load = async () => {
     if (!serial) return;
+    const target = serial;
     setLoading(true);
-    const s = await run(api.snapshot(serial));
+    const s = await run(api.snapshot(target));
+    if (serialRef.current !== target) return;
     setLoading(false);
     if (s) {
       setSnap(s);
@@ -124,6 +129,9 @@ export function InspectorTab() {
   };
 
   useEffect(() => {
+    setSnap(null);
+    setSel(null);
+    setHover(null);
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [serial]);

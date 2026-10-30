@@ -212,16 +212,43 @@ function Db() {
   );
 }
 
+/** SDK 가 기기에 들고 있는 최대 개수와 같게 둔다 */
+const MAX_EVENTS = 1000;
+
 function Events() {
   const { serial, pkg } = useApp();
   const t = useT();
   const [events, setEvents] = useState<SdkEvent[]>([]);
   useEffect(() => {
+    setEvents([]);
     if (!serial || !pkg) return;
-    const tick = () => api.sdk<SdkEvent[]>(serial, pkg, 'events', 0).then(setEvents).catch(() => undefined);
+    // 마지막으로 받은 id 다음부터만 받는다. 10번에 한 번은 전체를 받아 앱 재시작(id 가 1부터 다시 시작)을 반영한다
+    let alive = true;
+    let inFlight = false;
+    let lastId = 0;
+    let count = 0;
+    const tick = async () => {
+      if (inFlight) return;
+      inFlight = true;
+      try {
+        const full = count++ % 10 === 0;
+        const fresh = await api.sdk<SdkEvent[]>(serial, pkg, 'events', full ? 0 : lastId);
+        if (!alive) return;
+        if (full) setEvents(fresh.slice(-MAX_EVENTS));
+        else if (fresh.length) setEvents((cur) => [...cur, ...fresh].slice(-MAX_EVENTS));
+        if (full || fresh.length) lastId = fresh.at(-1)?.id ?? (full ? 0 : lastId);
+      } catch {
+        /* 앱이 잠깐 응답하지 않으면 다음에 다시 받는다 */
+      } finally {
+        inFlight = false;
+      }
+    };
     tick();
     const timer = setInterval(tick, 1500);
-    return () => clearInterval(timer);
+    return () => {
+      alive = false;
+      clearInterval(timer);
+    };
   }, [serial, pkg]);
   return (
     <div className="logs">
