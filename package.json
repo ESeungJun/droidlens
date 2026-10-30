@@ -1,7 +1,7 @@
 {
   "name": "droidlens",
   "private": true,
-  "version": "0.10.0",
+  "version": "0.10.1",
   "description": "Android 앱 분석·디버깅·시나리오 검증 툴 (adb 기반 + 선택형 SDK)",
   "scripts": {
     "prepare": "git config core.hooksPath .githooks || true",
