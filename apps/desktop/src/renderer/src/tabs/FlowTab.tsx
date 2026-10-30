@@ -21,7 +21,23 @@ import { NeedPkg, useApp } from '../App';
 import { useT } from '../i18n';
 import { useTheme } from '../theme';
 
+/** 화면 스크린샷(data URL) 캐시. 큰 지도를 오래 보면 메모리가 끝없이 늘지 않게 최근에 쓴 것만 남긴다 */
+const IMG_CACHE_MAX = 60;
 const imgCache = new Map<string, string>();
+/** 꺼낸 항목을 가장 최근으로 옮긴다 (Map 은 넣은 순서를 지키므로 맨 앞이 가장 오래 안 쓴 것) */
+const cacheGet = (key: string) => {
+  const v = imgCache.get(key);
+  if (v !== undefined) {
+    imgCache.delete(key);
+    imgCache.set(key, v);
+  }
+  return v;
+};
+const cachePut = (key: string, v: string) => {
+  imgCache.delete(key);
+  imgCache.set(key, v);
+  while (imgCache.size > IMG_CACHE_MAX) imgCache.delete(imgCache.keys().next().value!);
+};
 
 function useShot(pkg: string, file?: string) {
   const key = file ? pkg + file : '';
@@ -30,7 +46,7 @@ function useShot(pkg: string, file?: string) {
     if (!file || imgCache.has(key)) return;
     let alive = true;
     api.graphImage(pkg, file).then((d) => {
-      imgCache.set(key, d);
+      cachePut(key, d);
       if (alive) setLoaded({ key, src: d });
     }).catch(() => undefined);
     return () => {
@@ -39,7 +55,7 @@ function useShot(pkg: string, file?: string) {
   }, [pkg, file, key]);
   // 다른 화면을 고르면 그 화면의 이미지로 (이전 화면의 이미지를 붙들고 있지 않게)
   if (!file) return undefined;
-  return imgCache.get(key) ?? (loaded?.key === key ? loaded.src : undefined);
+  return cacheGet(key) ?? (loaded?.key === key ? loaded.src : undefined);
 }
 
 type SNodeData = { screen: ScreenNode; pkg: string; selected: boolean; start: boolean; dim: boolean; done: number };

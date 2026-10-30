@@ -97,6 +97,7 @@ dependencies {
 }
 
 // 네트워크 인스펙터 (OkHttp를 쓰는 경우)
+// 앱의 다른 인터셉터(공통 파라미터·서명 등) 뒤, 마지막에 추가하길 권장한다 (덧붙인 값까지 기록되고, 뒤 인터셉터가 원래 본문 타입을 그대로 본다)
 val client = OkHttpClient.Builder()
     .addInterceptor(DroidLensInterceptor())
     .build()

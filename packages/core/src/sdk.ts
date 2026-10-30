@@ -1,4 +1,4 @@
-import { DeviceAdb } from './adb.js';
+import { DeviceAdb, isPackageProcess } from './adb.js';
 import { LocalHttpClient } from './http.js';
 
 /**
@@ -69,6 +69,8 @@ export interface QueryResult {
   rows?: unknown[][];
   total?: number;
   truncated?: boolean;
+  /** false 면 total 은 정확한 행 수가 아니라 "상한보다 많음"을 뜻한다 (SDK 가 상한+1 행에서 조회를 멈춤) */
+  totalExact?: boolean;
   changes?: number;
 }
 
@@ -144,14 +146,27 @@ export class SdkClient {
   }
 }
 
-const clients = new Map<string, SdkClient>();
+/** serial|패키지 → 연결과 확인을 마친 앱 프로세스 pid */
+const clients = new Map<string, { client: SdkClient; pid: number }>();
+
+/**
+ * forward 로 붙은 상대가 그 앱인지. abstract 소켓 이름은 어느 앱이나 먼저 열 수 있으므로
+ * /info 가 알려 준 패키지·pid 가 실제 그 패키지 uid 로 도는 프로세스인지 확인한다 (다른 앱이 prefs·DB 요청을 가로채지 못하게)
+ */
+async function verifyApp(dev: DeviceAdb, pkg: string, info: SdkInfo): Promise<void> {
+  if (info.package !== pkg || !(await isPackageProcess(dev, pkg, info.pid))) {
+    throw new Error(`${pkg}의 SDK 소켓을 다른 프로세스가 열고 있어 연결하지 않습니다`);
+  }
+}
 
 /** SDK 클라이언트 (포트 포워딩 재사용). 앱이 SDK를 쓰지 않거나 실행 중이 아니면 에러 */
 export async function sdkFor(dev: DeviceAdb, pkg: string): Promise<SdkClient> {
   if (!/^[\w.]+$/.test(pkg)) throw new Error(`잘못된 패키지 이름: ${pkg}`);
   const key = `${dev.serial}|${pkg}`;
   const cached = clients.get(key);
-  if (cached && (await cached.info().then(() => true, () => false))) return cached;
+  // 앱이 다시 시작돼 pid 가 바뀌었으면 새로 확인한다
+  const cachedPid = cached && (await cached.client.info().then((i) => i.pid, () => undefined));
+  if (cached && cachedPid === cached.pid) return cached.client;
   clients.delete(key);
 
   const apps = await listSdkApps(dev);
@@ -162,7 +177,8 @@ export async function sdkFor(dev: DeviceAdb, pkg: string): Promise<SdkClient> {
   }
   const port = await dev.forward(`localabstract:${SDK_SOCKET_PREFIX}${pkg}`);
   const client = new SdkClient(dev.serial, pkg, port);
-  await client.info();
-  clients.set(key, client);
+  const info = await client.info();
+  await verifyApp(dev, pkg, info);
+  clients.set(key, { client, pid: info.pid });
   return client;
 }

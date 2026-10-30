@@ -10,6 +10,10 @@ public final class DroidLens {
 
     public static void init(Context context) {}
 
+    public static String version() {
+        return "noop";
+    }
+
     public static boolean isRunning() {
         return false;
     }
