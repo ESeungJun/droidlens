@@ -660,4 +660,12 @@ function stopAll(): void {
   recs.clear();
 }
 app.on('will-quit', stopAll);
+// 화면 그래프는 저장을 잠깐 미뤄 두므로(saveSoon) 끝나기 전에 한 번 쓴다. 비동기라 종료를 한 번 미루고, 멈춰도 2초 뒤엔 끝낸다
+let graphsFlushed = false;
+app.on('before-quit', (e) => {
+  if (graphsFlushed) return;
+  e.preventDefault();
+  graphsFlushed = true;
+  void Promise.race([dl.ScreenGraph.flushAll(), new Promise((r) => setTimeout(r, 2000))]).finally(() => app.quit());
+});
 app.on('window-all-closed', () => app.quit());
