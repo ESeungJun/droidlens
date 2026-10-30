@@ -112,13 +112,25 @@ export function App() {
     if (serial && openOnSelect && fgPkg !== p) run(api.bringToFront(serial, p));
   };
 
+  // 기기 목록 조회가 실패 중인지. 한 번 실패했다고 목록을 비우면 모든 탭이 닫히므로 이전 목록을 유지하고,
+  // 실패를 알리는 토스트도 4초마다가 아니라 실패로 바뀔 때 한 번만 띄운다
+  const devicesFailed = useRef(false);
   const refreshDevices = useCallback(async () => {
-    const list = (await run(api.devices())) ?? [];
+    let list: DeviceSummary[];
+    try {
+      list = await api.devices();
+      devicesFailed.current = false;
+    } catch (e) {
+      if (!devicesFailed.current) toast((e as Error).message, true);
+      devicesFailed.current = true;
+      setDevicesLoaded(true);
+      return;
+    }
     setDevices(list);
     setDevicesLoaded(true);
     const online = list.filter((d) => d.state === 'device');
     setSerial((cur) => (cur && online.some((d) => d.serial === cur) ? cur : online[0]?.serial ?? null));
-  }, [run]);
+  }, [toast]);
 
   useEffect(() => {
     refreshDevices();
