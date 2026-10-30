@@ -48,10 +48,16 @@ async function scriptPath(nameOrPath: string, run = false): Promise<string> {
 
 /** suite_run 경로 (폴더 또는 스크립트 파일). 생략하면 scripts 폴더 */
 async function suitePath(path: string | undefined): Promise<string> {
-  if (!path) return dl.scriptsDir();
-  const p = await guardPath(path, true);
+  const p = path ? await guardPath(path, true) : await realpath(await dl.scriptsDir());
   if (!existsSync(p)) throw new Error(`경로를 찾을 수 없습니다: ${path}`);
-  return (await stat(p)).isDirectory() ? p : scriptPath(p, true);
+  if (!(await stat(p)).isDirectory()) return scriptPath(p, true);
+  // 폴더 안의 스크립트도 바깥을 가리키는 심볼릭 링크일 수 있어 하나씩 실제 경로를 확인한다
+  const roots = await allowedRoots(true);
+  for (const f of await dl.collectScripts(p)) {
+    const real = await realpath(f);
+    if (!roots.some((r) => within(r, real))) throw new Error(`스크립트 폴더 밖을 가리키는 파일이 있어 실행하지 않습니다: ${f}`);
+  }
+  return p;
 }
 
 const assertionSchema = z
