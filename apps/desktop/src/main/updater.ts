@@ -8,6 +8,7 @@ import { dirname, join, resolve } from 'node:path';
 import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import { promisify } from 'node:util';
+import { quoteShell as shq } from '@droidlens/core';
 
 /**
  * GitHub Releases 기반 자체 업데이트.
@@ -23,8 +24,6 @@ const run = promisify(execFile);
 /** 다운로드가 이 시간 동안 한 바이트도 진행되지 않으면 끊는다 (무응답이면 진행률이 영원히 멈춰 있지 않게) */
 const STALL_MS = 30_000;
 
-/** 셸 스크립트에 넣을 경로. 홑따옴표로 감싸 공백·$·따옴표가 있어도 글자 그대로 전달한다 */
-const shq = (s: string) => `'${s.replace(/'/g, `'\\''`)}'`;
 const writable = (p: string) => access(p, constants.W_OK).then(
   () => true,
   () => false,
@@ -114,6 +113,8 @@ export async function checkForUpdate(): Promise<UpdateInfo> {
   const arch = await cpuArch();
   const rel = await latestRelease(arch);
   const latest = rel.tag_name.replace(/^v/, '');
+  // 버전은 파일 이름과 설치 스크립트에 들어가므로 형식이 다른 태그는 받지 않는다
+  if (!/^\d+\.\d+\.\d+([-.][0-9A-Za-z.]+)?$/.test(latest)) throw new Error('업데이트 확인 실패 (릴리스 버전 형식이 올바르지 않습니다)');
   const current = currentVersion();
   const name = assetName(latest, arch);
   const a = rel.assets.find((x) => x.name === name);
@@ -227,7 +228,7 @@ async function prepareAndLaunch(
     await mkdir(dirname(log), { recursive: true });
     const script = `#!/bin/sh
 exec >>${shq(log)} 2>&1
-echo "[$(date)] DroidLens 업데이트 ${info.current} -> ${info.latest}"
+echo "[$(date)]" ${shq(`DroidLens 업데이트 ${info.current} -> ${info.latest}`)}
 while kill -0 ${process.pid} 2>/dev/null; do sleep 0.3; done
 set -x
 if mv ${shq(target)} ${shq(old)}; then
