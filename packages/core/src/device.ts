@@ -1,5 +1,5 @@
 import { Adb, DeviceAdb, quoteShell, sleep } from './adb.js';
-import { ensureAgent } from './agent.js';
+import { withAgent } from './agent.js';
 
 export interface DeviceSummary {
   serial: string;
@@ -118,11 +118,7 @@ export async function swipe(
  * 에이전트가 있으면 ACTION_SET_TEXT(유니코드 지원), 없으면 adb input text(ASCII만, 공백은 %s).
  */
 export async function typeText(dev: DeviceAdb, text: string): Promise<void> {
-  const agent = await ensureAgent(dev);
-  if (agent) {
-    await agent.setText(text, true);
-    return;
-  }
+  if (await withAgent(dev, (a) => a.setText(text, true))) return;
   if (/[^\x20-\x7e]/.test(text)) {
     throw new Error('온디바이스 에이전트 없이는 ASCII만 입력할 수 있습니다 (adb input text 제약).');
   }
@@ -131,9 +127,7 @@ export async function typeText(dev: DeviceAdb, text: string): Promise<void> {
 
 /** 포커스된 입력창의 내용을 통째로 바꾼다 (에이전트 필요) */
 export async function replaceText(dev: DeviceAdb, text: string): Promise<void> {
-  const agent = await ensureAgent(dev);
-  if (!agent) throw new Error('텍스트 교체에는 온디바이스 에이전트가 필요합니다');
-  await agent.setText(text, false);
+  if (!(await withAgent(dev, (a) => a.setText(text, false)))) throw new Error('텍스트 교체에는 온디바이스 에이전트가 필요합니다');
 }
 
 export const KEYCODES = {

@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import { XMLParser } from 'fast-xml-parser';
 import { DeviceAdb, sleep } from './adb.js';
-import { ensureAgent, stopAgent } from './agent.js';
+import { stopAgent, withAgent } from './agent.js';
 
 export type Bounds = [left: number, top: number, right: number, bottom: number];
 
@@ -109,14 +109,13 @@ const REMOTE_DUMP = '/sdcard/droidlens_ui.xml';
  * 다른 uiautomator 세션(예: Appium)이 떠 있으면 실패한다.
  */
 export async function dumpHierarchy(dev: DeviceAdb, retries = 3): Promise<Hierarchy> {
-  const agent = await ensureAgent(dev);
-  if (agent) {
-    try {
-      return parseHierarchyXml(await agent.hierarchyXml());
-    } catch {
-      // 에이전트가 UiAutomation을 쥐고 있으면 uiautomator dump가 실패하므로 내리고 대체한다
-      await stopAgent(dev);
-    }
+  try {
+    const r = await withAgent(dev, async (a) => parseHierarchyXml(await a.hierarchyXml()));
+    if (r) return r.value;
+  } catch (e) {
+    // 에이전트가 UiAutomation을 쥐고 있으면 uiautomator dump가 실패하므로 내리고 대체한다.
+    // 실패로 기록해 잠시 uiautomator 만 쓴다 (덤프마다 에이전트를 다시 띄우지 않게)
+    await stopAgent(dev, `뷰 계층 조회 실패: ${(e as Error).message}`);
   }
   let lastErr: unknown;
   for (let i = 0; i < retries; i++) {
