@@ -5,7 +5,7 @@ import { DeviceAdb, sleep } from './adb.js';
 import { ensureAgent } from './agent.js';
 import { assertPackage, currentScreen, launchApp, topFragments, type CurrentScreen } from './app.js';
 import { z } from 'zod';
-import { getDeviceInfo, KEYCODES, longPress, PNG_MAGIC, pressKey, screenshot, swipe, swipeVector, tap, type SwipeDirection } from './device.js';
+import { KEYCODES, longPress, PNG_MAGIC, pressKey, screenshot, screenSize, swipe, swipeVector, tap, type SwipeDirection } from './device.js';
 import {
   actionKey,
   actionLabel,
@@ -666,7 +666,7 @@ export async function followPath(dev: DeviceAdb, pkg: string, start: Snapshot, p
       const { x, y } = center(c.node);
       await (a.type === 'tap' ? tap(dev, x, y) : longPress(dev, x, y));
     } else if (a.type === 'swipe') {
-      const [x1, y1, x2, y2] = swipeVector((await getDeviceInfo(dev)).screen, a.direction!);
+      const [x1, y1, x2, y2] = swipeVector(await screenSize(dev), a.direction!);
       await swipe(dev, x1, y1, x2, y2);
     } else await pressKey(dev, 'back');
     s = await waitForSettle(dev);
@@ -937,7 +937,7 @@ export async function explore(dev: DeviceAdb, opts: ExploreOptions): Promise<Exp
       }
       let action: GraphAction;
       if (move.kind === 'swipe') {
-        const [x1, y1, x2, y2] = swipeVector((await getDeviceInfo(dev)).screen, move.direction!);
+        const [x1, y1, x2, y2] = swipeVector(await screenSize(dev), move.direction!);
         action = { type: 'swipe', x1, y1, x2, y2, direction: move.direction };
       } else {
         // 처음 본 좌표가 아니라 지금 화면에서 같은 버튼을 다시 찾는다 (돌아왔을 때 스크롤 위치가 바뀌었을 수 있다)
@@ -990,7 +990,7 @@ export async function explore(dev: DeviceAdb, opts: ExploreOptions): Promise<Exp
         if (depth + 1 < maxDepth && !entered.has(to.id)) await visit([...path, { action, to: to.id }], depth + 1);
         // 페이저처럼 스와이프로 넘긴 화면은 BACK 보다 반대로 스와이프하는 쪽이 원래 화면으로 돌아온다
         if (screenId(snap) !== hereId && action.type === 'swipe' && move.direction) {
-          const [x1, y1, x2, y2] = swipeVector((await getDeviceInfo(dev)).screen, REVERSE[move.direction]);
+          const [x1, y1, x2, y2] = swipeVector(await screenSize(dev), REVERSE[move.direction]);
           await swipe(dev, x1, y1, x2, y2);
           snap = await waitForSettle(dev);
         }
@@ -1093,7 +1093,7 @@ export class FlowCollector {
       return { ...pressAction(a.type, c), x: a.x, y: a.y };
     }
     if (a.type === 'swipe') {
-      const [x1, y1, x2, y2] = swipeVector((await getDeviceInfo(this.dev)).screen, a.direction);
+      const [x1, y1, x2, y2] = swipeVector(await screenSize(this.dev), a.direction);
       return { type: 'swipe', x1, y1, x2, y2, direction: a.direction };
     }
     return a;

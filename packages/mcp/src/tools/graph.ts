@@ -52,9 +52,8 @@ export function register(server: McpServer): void {
       } else if (action.type === 'key') {
         ga = { type: 'key', key: action.key ?? 'back' };
       } else {
-        const { screen } = await dl.getDeviceInfo(dev);
         const direction = action.direction ?? 'up';
-        const [x1, y1, x2, y2] = dl.swipeVector(screen, direction);
+        const [x1, y1, x2, y2] = dl.swipeVector(await dl.screenSize(dev), direction);
         ga = { type: 'swipe', x1, y1, x2, y2, direction };
       }
       const r = await dl.recordTransition(dev, graph, ga, before);
