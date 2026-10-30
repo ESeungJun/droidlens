@@ -44,12 +44,13 @@ const TAB_LABELS = {
 } as const;
 type TabId = keyof typeof TAB_LABELS;
 
-/** 대분류 탭. 고른 대분류의 소분류가 아래 줄에 나온다 (하나뿐이면 줄을 두지 않는다). 설정·연동은 오른쪽 톱니 */
+/** 대분류 탭. 고른 대분류의 소분류가 아래 줄에 나온다 (하나뿐이면 줄을 두지 않는다) */
 const TAB_GROUPS: readonly { id: string; label: string; tabs: readonly TabId[] }[] = [
   { id: 'view', label: '화면', tabs: ['screen', 'inspect', 'flow'] },
   { id: 'diag', label: '진단', tabs: ['logs', 'network', 'perf'] },
   { id: 'app', label: '앱', tabs: ['data', 'info', 'libs'] },
   { id: 'test', label: '테스트', tabs: ['scen'] },
+  { id: 'settings', label: '설정', tabs: ['settings'] },
 ];
 const groupOf = (tab: TabId) => TAB_GROUPS.find((g) => g.tabs.includes(tab));
 const isTabId = (s: string | null): s is TabId => !!s && Object.hasOwn(TAB_LABELS, s);
@@ -398,15 +399,6 @@ export function App() {
                     {t(g.label)}
                   </button>
                 ))}
-                <div className="spacer" />
-                <button
-                  className={`tab gear ${tab === 'settings' ? 'active' : ''}`}
-                  onClick={() => openTab('settings')}
-                  title={t('설정·연동')}
-                  aria-label={t('설정·연동')}
-                >
-                  ⚙
-                </button>
               </nav>
               {group && group.tabs.length > 1 && (
                 <nav className="subtabs">
