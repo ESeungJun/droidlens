@@ -1,5 +1,5 @@
 import { readFile } from 'node:fs/promises';
-import { unzipSync } from 'fflate';
+import { unzip, type UnzipFileFilter, type Unzipped } from 'fflate';
 
 /**
  * APK 정적 분석: classes*.dex의 type_ids에서 클래스 이름을 뽑아 알려진 라이브러리 시그니처와 매칭하고,
@@ -232,6 +232,31 @@ export interface ApkAnalysis {
   kotlin: boolean;
 }
 
+/** 큰 APK 를 해제하는 동안 이벤트 루프를 막지 않게 fflate 의 비동기(워커) 해제를 쓴다 */
+function unzipAsync(data: Uint8Array, filter: UnzipFileFilter): Promise<Unzipped> {
+  return new Promise((resolve, reject) => unzip(data, { filter }, (err, out) => (err ? reject(err) : resolve(out))));
+}
+
+/**
+ * 시그니처 패키지 접두사 → 그 아래 클래스. 클래스마다 점 경계 접두사(자기 이름 포함)만 찾아보므로
+ * 시그니처마다 전체 클래스를 훑는 것과 결과는 같고 (c === p 또는 c 가 p + '.' 로 시작) 훨씬 빠르다
+ */
+function classesByPrefix(classes: string[], prefixes: Set<string>): Map<string, string[]> {
+  const out = new Map<string, string[]>();
+  for (const c of classes) {
+    for (let i = c.indexOf('.'); ; i = c.indexOf('.', i + 1)) {
+      const p = i < 0 ? c : c.slice(0, i);
+      if (prefixes.has(p)) {
+        const list = out.get(p);
+        if (list) list.push(c);
+        else out.set(p, [c]);
+      }
+      if (i < 0) break;
+    }
+  }
+  return out;
+}
+
 function packagePrefix(cls: string, depth: number): string {
   const parts = cls.split('.');
   parts.pop();
@@ -246,26 +271,27 @@ export async function analyzeApk(apkPaths: string[], appPackage?: string): Promi
 
   for (const apk of apkPaths) {
     const data = new Uint8Array(await readFile(apk));
-    const entries = unzipSync(data, {
-      filter: (f) => {
-        fileNames.push(f.name);
-        if (f.name.startsWith('lib/') && f.name.endsWith('.so')) {
-          const [, abi, name] = f.name.split('/');
-          nativeLibs.push({ abi, name, size: f.originalSize });
-          return false;
-        }
-        return /^classes\d*\.dex$/.test(f.name);
-      },
+    const entries = await unzipAsync(data, (f) => {
+      fileNames.push(f.name);
+      if (f.name.startsWith('lib/') && f.name.endsWith('.so')) {
+        const [, abi, name] = f.name.split('/');
+        nativeLibs.push({ abi, name, size: f.originalSize });
+        return false;
+      }
+      return /^classes\d*\.dex$/.test(f.name);
     });
     for (const [name, buf] of Object.entries(entries)) {
       if (name.endsWith('.dex')) {
         dexCount++;
-        classes.push(...dexClassNames(buf));
+        for (const c of dexClassNames(buf)) classes.push(c);
+        // dex 하나 파싱이 끝날 때마다 다른 작업(IPC·MCP 요청)에 차례를 넘긴다
+        await new Promise((r) => setImmediate(r));
       }
     }
   }
 
   const uniqueClasses = [...new Set(classes)];
+  const byPrefix = classesByPrefix(uniqueClasses, new Set(SIGNATURES.flatMap((sig) => sig.packages ?? [])));
   const libraries: DetectedLibrary[] = [];
   const claimed = new Set<string>();
 
@@ -274,9 +300,7 @@ export async function analyzeApk(apkPaths: string[], appPackage?: string): Promi
     let classCount = 0;
     if (sig.packages) {
       for (const p of sig.packages) {
-        const hits = uniqueClasses.filter(
-          (c) => (c === p || c.startsWith(p + '.')) && !sig.excludePackages?.some((x) => c.startsWith(x + '.')),
-        );
+        const hits = (byPrefix.get(p) ?? []).filter((c) => !sig.excludePackages?.some((x) => c.startsWith(x + '.')));
         if (hits.length) {
           classCount += hits.length;
           evidence.push(`${p}.* (${hits.length} classes)`);
