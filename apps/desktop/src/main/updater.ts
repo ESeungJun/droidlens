@@ -8,6 +8,7 @@ import { dirname, join, resolve } from 'node:path';
 import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import { promisify } from 'node:util';
+import { quoteShell as shq } from '@droidlens/core';
 
 /**
  * GitHub Releases 기반 자체 업데이트.
@@ -23,8 +24,6 @@ const run = promisify(execFile);
 /** 다운로드가 이 시간 동안 한 바이트도 진행되지 않으면 끊는다 (무응답이면 진행률이 영원히 멈춰 있지 않게) */
 const STALL_MS = 30_000;
 
-/** 셸 스크립트에 넣을 경로. 홑따옴표로 감싸 공백·$·따옴표가 있어도 글자 그대로 전달한다 */
-const shq = (s: string) => `'${s.replace(/'/g, `'\\''`)}'`;
 const writable = (p: string) => access(p, constants.W_OK).then(
   () => true,
   () => false,
