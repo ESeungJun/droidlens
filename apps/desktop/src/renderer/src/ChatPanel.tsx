@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { api, type ChatEvent } from './api';
+import { api, type ChatMessage } from './api';
 import { useApp } from './App';
 import { useT, type Vars } from './i18n';
 
@@ -13,6 +13,9 @@ const AGENTS = [
   { id: 'droidlens-verifier', label: '시나리오 검증', hint: '예: 메모 추가 버튼을 누르면 목록에 새 메모가 생기는지 확인해줘' },
   { id: 'droidlens-analyst', label: '앱 분석', hint: '예: 이 앱 기술 스택이랑 화면 구조 분석해줘' },
 ] as const;
+
+/** 대화 실행 번호. 보낼 때마다 새로 받아, 화면은 지금 실행의 이벤트만 반영한다 */
+let lastRunId = 0;
 
 const short = (name: string) => name.replace(/^mcp__droidlens__/, '');
 
@@ -33,8 +36,10 @@ export function ChatPanel({ onClose }: { onClose(): void }) {
   const [sessionId, setSessionId] = useState<string | undefined>();
   const [claude, setClaude] = useState<{ version?: string; error?: string } | null>(null);
   const bottom = useRef<HTMLDivElement>(null);
-  // 사용자가 멈춘 실행: 'stop'이면 결과를 "중지했습니다"로, 'reset'이면 새 대화로 넘어갔으니 남은 이벤트를 버린다
-  const stopped = useRef<'stop' | 'reset' | null>(null);
+  // 지금 화면에 반영하는 실행 번호. null 이면 진행 중인 실행이 없거나 지운 대화라 남은 이벤트를 모두 버린다
+  const runRef = useRef<number | null>(null);
+  // 지금 실행을 사용자가 멈췄는지 (끝났을 때 "중지했습니다"로 보여 준다)
+  const stopped = useRef(false);
   const [confirm, setConfirm] = useState<null | (() => void)>(null);
 
   useEffect(() => {
@@ -43,13 +48,11 @@ export function ChatPanel({ onClose }: { onClose(): void }) {
 
   useEffect(
     () =>
-      api.onChatEvent((e: ChatEvent) => {
-        if (stopped.current === 'reset') {
-          if (e.kind === 'done') stopped.current = null;
-          return;
-        }
-        if (e.kind === 'done' && stopped.current === 'stop') {
-          stopped.current = null;
+      api.onChatEvent((e: ChatMessage) => {
+        if (e.run !== runRef.current) return;
+        if (e.kind === 'done') runRef.current = null;
+        if (e.kind === 'done' && stopped.current) {
+          stopped.current = false;
           setBusy(false);
           if (e.sessionId) setSessionId(e.sessionId);
           setItems((cur) => [...cur, { kind: 'note', text: '중지했습니다' }]);
@@ -78,32 +81,31 @@ export function ChatPanel({ onClose }: { onClose(): void }) {
     const message = input.trim();
     if (!message || busy) return;
     setInput('');
-    if (stopped.current === 'stop') stopped.current = null; // 'reset'은 이전 실행의 done이 올 때 풀린다
+    const run = ++lastRunId;
+    runRef.current = run;
+    stopped.current = false;
     setBusy(true);
     setItems((cur) => [...cur, { kind: 'user', text: message }]);
     try {
-      await api.chatSend({ message, agent, sessionId, serial: serial ?? undefined, packageName: pkg ?? undefined });
+      await api.chatSend({ runId: run, message, agent, sessionId, serial: serial ?? undefined, packageName: pkg ?? undefined });
     } catch (e) {
+      // 그사이 지운 대화의 실행이면 보여 주지 않는다 (시작도 못 하고 실패하면 done 이 오지 않으니 여기서 정리)
+      if (runRef.current !== run) return;
+      runRef.current = null;
       setBusy(false);
-      // 지운 대화의 실행이 시작도 못 하고 실패했으면 done 이 오지 않으니 여기서 정리한다
-      if (stopped.current) {
-        stopped.current = null;
-        return;
-      }
       setItems((cur) => [...cur, { kind: 'note', text: (e as Error).message, error: true }]);
     }
   };
 
   const stop = () => {
-    stopped.current = 'stop';
+    stopped.current = true;
     api.chatStop();
   };
 
   const reset = () => {
-    if (busyRef.current) {
-      stopped.current = 'reset';
-      api.chatStop();
-    }
+    if (busyRef.current) api.chatStop();
+    runRef.current = null;
+    stopped.current = false;
     setConfirm(null);
     setItems([]);
     setSessionId(undefined);
