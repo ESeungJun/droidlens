@@ -31,8 +31,13 @@ export const common: Record<string, string> = {
   'USB 로 연결하고 폰에 뜨는 "USB 디버깅 허용" 을 누릅니다.': 'Connect via USB and tap "Allow USB debugging" on the phone.',
   '④ 무선·원격 기기': '④ Wireless or remote devices',
   'Android 11 이상은 개발자 옵션 → 무선 디버깅에서 페어링한 뒤, 클라우드 기기는 제공된 주소로 연결합니다.': 'On Android 11+, pair via Developer options → Wireless debugging; for cloud devices, connect to the address they provide.',
-  // App: 탭
+  // App: 탭 (대분류)
   화면: 'Screen',
+  진단: 'Diagnose',
+  앱: 'App',
+  테스트: 'Test',
+  // App: 탭 (소분류)
+  '기기 화면': 'Device screen',
   '뷰 계층': 'View hierarchy',
   '화면 흐름': 'Screen flow',
   로그: 'Logs',
