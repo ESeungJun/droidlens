@@ -127,6 +127,8 @@ export const api = {
   swipe: (s: string, x1: number, y1: number, x2: number, y2: number, ms?: number) => call<void>('swipe', s, x1, y1, x2, y2, ms),
   key: (s: string, key: string) => call<void>('key', s, key),
   typeText: (s: string, t: string) => call<void>('typeText', s, t),
+  /** 이 기기에서 진행 중인 녹화의 시작 시각 (없으면 null) */
+  recordStatus: (s: string) => call<number | null>('recordStatus', s),
   recordStart: (s: string) => call<number>('recordStart', s),
   recordStop: (s: string) => call<string>('recordStop', s),
   packages: (s: string, thirdPartyOnly: boolean) => call<PackageSummary[]>('packages', s, thirdPartyOnly),

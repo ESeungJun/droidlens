@@ -164,11 +164,17 @@ handle('mirrorStop', async (id?: number) => {
 });
 
 // ---------- 녹화 ----------
+/**
+ * 기기별 녹화. 녹화 상태는 여기가 기준이고 화면은 recordStatus 로 다시 읽는다 (탭을 옮기거나 기기를 바꿔도 잃지 않게).
+ * screenrecord 가 180초 제한으로 먼저 끝나도 기기에 파일이 남아 있으므로, 중지하면 그때까지 녹화된 파일을 받아 온다
+ */
 const recs = new Map<string, dl.Recording>();
+handle('recordStatus', async (s: string) => recs.get(s)?.startedAt ?? null);
 handle('recordStart', async (s: string) => {
   if (recs.has(s)) throw new Error('이미 녹화 중입니다');
-  recs.set(s, dl.startRecording(dev(s)));
-  return Date.now();
+  const r = dl.startRecording(dev(s));
+  recs.set(s, r);
+  return r.startedAt;
 });
 handle('recordStop', async (s: string) => {
   const r = recs.get(s);
