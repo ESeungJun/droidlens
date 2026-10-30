@@ -102,6 +102,7 @@ function NetworkInspector() {
   const copyCurl = () => {
     if (!detail) return;
     // 메서드·헤더·본문·URL 모두 앱이 보낸 값이라 그대로 셸에 붙이면 명령이 실행될 수 있다. 전부 같은 인용을 거친다.
+    // POSIX 셸 인용이라 cmd·PowerShell 에서는 안전하지 않다 (cmd 는 따옴표 안의 %VAR% 를 막을 방법이 없어 cmd 용은 만들지 않는다).
     // 본문은 @ 로 시작해도 파일로 읽지 않게 --data-raw, URL 은 - 로 시작해도 옵션이 되지 않게 --url 로 넘긴다
     const h = Object.entries(detail.requestHeaders).flatMap(([k, vs]) => vs.map((v) => `-H ${shq(`${k}: ${v}`)}`));
     const body = detail.requestBody ? ` --data-raw ${shq(detail.requestBody)}` : '';
@@ -145,7 +146,9 @@ function NetworkInspector() {
               <b style={{ color: statusColor(detail) }}>{detail.state === 'failed' ? 'FAIL' : `${detail.status} ${detail.message ?? ''}`}</b>
               <span className="faint">{detail.durationMs}ms · {detail.protocol}</span>
               <div className="spacer" />
-              <button className="btn sm" onClick={copyCurl}>{t('cURL 복사')}</button>
+              <button className="btn sm" onClick={copyCurl} title={t('bash·zsh 같은 POSIX 셸용 인용입니다. Windows cmd·PowerShell 에 붙이면 값 때문에 다른 명령이 실행될 수 있습니다')}>
+                {t('cURL 복사 (bash)')}
+              </button>
               <button className="btn sm" onClick={() => setSel(null)}>✕</button>
             </div>
             <div className="mono" style={{ fontSize: 11.5, wordBreak: 'break-all', marginBottom: 8 }}>{detail.method} {detail.url}</div>

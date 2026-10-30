@@ -650,8 +650,13 @@ function stopAll(): void {
   mirrorWant = null;
   mirror?.m.stop();
   mirror = null;
-  // 녹화는 기기 쪽 screenrecord 를 멈추고, 받아 올 수 없게 된 파일은 기기에서 지운다 (adb 셸은 앱이 끝나도 마저 돈다)
-  for (const [s, r] of recs) dev(s).spawn(['shell', `pkill -INT screenrecord; sleep 1; rm -f ${r.remotePath}`]).on('error', () => undefined);
+  // 녹화는 기기 쪽 screenrecord 를 멈추고, 받아 올 수 없게 된 파일은 기기에서 지운다 (adb 셸은 앱이 끝나도 마저 돈다).
+  // 다른 녹화(MCP record_start 등)는 두도록 우리 파일 경로로 좁힌다. 셸 자신의 명령줄에도 경로가 들어 있어 ^screenrecord 로 묶고,
+  // toybox pkill 은 -INT 와 -f 를 함께 쓰면 자기 셸까지 끊어서 신호는 -l INT 로 준다 (LG G8·Flip3 에서 확인)
+  for (const [s, r] of recs) {
+    const mine = dl.quoteShell(`^screenrecord .*${r.remotePath}$`);
+    dev(s).spawn(['shell', `pkill -l INT -f ${mine}; sleep 1; rm -f ${dl.quoteShell(r.remotePath)}`]).on('error', () => undefined);
+  }
   recs.clear();
 }
 app.on('will-quit', stopAll);

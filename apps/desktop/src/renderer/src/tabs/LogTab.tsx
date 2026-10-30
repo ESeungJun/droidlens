@@ -92,12 +92,16 @@ export function LogTab() {
   // 보이는 범위만 그린다. 스크롤 위치와 창 높이로 그릴 줄을 정한다
   const [scrollTop, setScrollTop] = useState(0);
   const [viewH, setViewH] = useState(600);
-  useEffect(() => {
+  // 크래시 화면에서 돌아오면 스크롤 박스가 새로 붙어 scrollTop 이 0 이다. 상태를 그 박스에 맞춘다 (따라가기면 맨 아래로)
+  useLayoutEffect(() => {
     const el = box.current;
     if (!el) return;
+    if (follow) el.scrollTop = shown.length * ROW_H;
+    setScrollTop(el.scrollTop);
     const ro = new ResizeObserver(() => setViewH(el.clientHeight));
     ro.observe(el);
     return () => ro.disconnect();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [crashes]);
   // 자동 스크롤: 전체 높이를 계산해 두었으므로 scrollHeight 를 읽지 않고 맨 아래로 보낸다 (넘치는 값은 브라우저가 끝으로 맞춘다)
   useLayoutEffect(() => {
