@@ -407,6 +407,7 @@ export async function runScript(dev: DeviceAdb, script: Script, opts: ScriptRunO
     await flow?.observe();
   } catch (e) {
     await record('준비 실패', 'fail', (e as Error).message, true);
+    await flow?.flush().catch(() => undefined);
     const report = await scenario.finish('blocked', `준비 단계 실패: ${(e as Error).message}`);
     return { verdict: 'blocked', passed, failed: 1, skipped, durationMs: Date.now() - t0, report, scenario: scenario.data };
   }
@@ -447,6 +448,7 @@ export async function runScript(dev: DeviceAdb, script: Script, opts: ScriptRunO
     }
   }
 
+  await flow?.flush().catch(() => undefined);
   const verdict = failed ? 'fail' : 'pass';
   const summary = `${passed} 통과 · ${failed} 실패 · ${skipped} 건너뜀 (${((Date.now() - t0) / 1000).toFixed(1)}초)`;
   const report = await scenario.finish(verdict, summary);
