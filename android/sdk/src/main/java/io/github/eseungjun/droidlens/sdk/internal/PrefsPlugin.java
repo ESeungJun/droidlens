@@ -1,7 +1,9 @@
 package io.github.eseungjun.droidlens.sdk.internal;
 
+import android.app.ActivityManager;
 import android.content.Context;
 import android.content.SharedPreferences;
+import android.os.Process;
 
 import org.json.JSONArray;
 import org.json.JSONException;
@@ -9,6 +11,7 @@ import org.json.JSONObject;
 
 import java.io.File;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
@@ -69,11 +72,36 @@ final class PrefsPlugin {
             default: throw new IllegalArgumentException("지원하지 않는 타입: " + type);
         }
         boolean ok = ed.commit();
-        return new JSONObject().put("ok", ok);
+        return withWarning(new JSONObject().put("ok", ok));
     }
 
     JSONObject remove(String file, String key) throws JSONException {
         boolean ok = context.getSharedPreferences(file, Context.MODE_PRIVATE).edit().remove(key).commit();
-        return new JSONObject().put("ok", ok);
+        return withWarning(new JSONObject().put("ok", ok));
+    }
+
+    /**
+     * SharedPreferences 는 프로세스마다 따로 캐시한다. 앱이 여러 프로세스로 떠 있으면 이 프로세스에서 쓴 값을
+     * 다른 프로세스가 모르고, 그쪽이 나중에 저장하면 덮어쓸 수 있으니 알려 준다.
+     */
+    private JSONObject withWarning(JSONObject o) throws JSONException {
+        if (runningProcessCount() > 1) {
+            o.put("warning", "앱이 여러 프로세스로 실행 중입니다. 이 값은 DroidLens 가 붙은 프로세스(pid " + Process.myPid()
+                    + ")에만 반영되고, 다른 프로세스가 같은 파일을 저장하면 덮어쓸 수 있습니다");
+        }
+        return o;
+    }
+
+    private int runningProcessCount() {
+        try {
+            ActivityManager am = (ActivityManager) context.getSystemService(Context.ACTIVITY_SERVICE);
+            List<ActivityManager.RunningAppProcessInfo> list = am != null ? am.getRunningAppProcesses() : null;
+            if (list == null) return 1;
+            int n = 0;
+            for (ActivityManager.RunningAppProcessInfo p : list) if (p.uid == Process.myUid()) n++;
+            return n;
+        } catch (Exception e) {
+            return 1;
+        }
     }
 }

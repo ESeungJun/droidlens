@@ -41,6 +41,8 @@ public final class DroidLensInterceptor implements Interceptor {
     @Override
     public Response intercept(Chain chain) throws IOException {
         Request request = chain.request();
+        // 서버가 없는 프로세스(provider 가 뜨지 않는 :remote 같은 보조 프로세스 등)에서는 아무도 읽지 않으니 쌓지 않는다
+        if (!DroidLens.isRunning()) return chain.proceed(request);
         Redactor redact = Redactor.get();
         NetworkStore.Entry e;
         // 기록 준비는 어떤 이유로 실패해도(오래된 OkHttp 의 NoSuchMethodError 포함) 앱 요청을 그대로 보낸다
