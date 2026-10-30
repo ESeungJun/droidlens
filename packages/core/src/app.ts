@@ -216,9 +216,10 @@ export async function clearAppData(dev: DeviceAdb, pkg: string): Promise<void> {
 
 export async function openDeepLink(dev: DeviceAdb, uri: string, pkg?: string): Promise<string> {
   if (pkg) assertPackage(pkg);
-  return dev.shell(
-    `am start -W -a android.intent.action.VIEW -d ${quoteShell(uri)}${pkg ? ` ${pkg}` : ''}`,
-  );
+  const out = await dev.shell(`am start -W -a android.intent.action.VIEW -d ${quoteShell(uri)}${pkg ? ` ${pkg}` : ''}`);
+  // 받을 앱이 없는 등 실패해도 am 은 0 으로 끝나므로 출력으로 판단한다 (launchApp 과 같은 방식)
+  if (/Error:/.test(out)) throw new Error(out.trim());
+  return out;
 }
 
 /** base.apk와 split APK를 로컬로 내려받는다 */
