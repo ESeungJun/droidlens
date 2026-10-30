@@ -42,37 +42,49 @@ public final class DroidLensInterceptor implements Interceptor {
     public Response intercept(Chain chain) throws IOException {
         Request request = chain.request();
         Redactor redact = Redactor.get();
-        NetworkStore.Entry e = NetworkStore.get().begin(request.method(), redact.url(request.url().toString()));
-        e.requestHeaders = redact.headers(request.headers().toMultimap());
-        RequestBody body = request.body();
+        NetworkStore.Entry e;
+        // 기록 준비는 어떤 이유로 실패해도(오래된 OkHttp 의 NoSuchMethodError 포함) 앱 요청을 그대로 보낸다
+        try {
+            e = NetworkStore.get().begin(request.method(), redact.url(request.url().toString()));
+        } catch (Throwable ignored) {
+            return chain.proceed(request);
+        }
         TeeRequestBody tee = null;
-        if (body != null) {
-            try {
+        try {
+            e.requestHeaders = redact.headers(request.headers().toMultimap());
+            RequestBody body = request.body();
+            if (body != null) {
                 MediaType ct = body.contentType();
                 e.requestContentType = ct != null ? ct.toString() : null;
                 e.requestSize = body.contentLength();
                 // duplex 본문은 응답과 동시에 계속 쓰이므로 기록하지 않는다
-                if (!body.isDuplex() && !compressed(request.header("Content-Encoding"))) {
-                    tee = new TeeRequestBody(body, NetworkStore.captureLimit(e.requestContentType, e.requestSize, maxBodyBytes));
-                    request = request.newBuilder().method(request.method(), tee).build();
+                if (!isDuplex(body) && !compressed(request.header("Content-Encoding"))) {
+                    TeeRequestBody t = new TeeRequestBody(body, NetworkStore.captureLimit(e.requestContentType, e.requestSize, maxBodyBytes));
+                    request = request.newBuilder().method(request.method(), t).build();
+                    tee = t;
                 }
-            } catch (Exception ignored) {
-                // 기록 실패가 앱 요청을 막지 않도록 무시
             }
+        } catch (Throwable ignored) {
+            // 본문 없이 기록만 하고 요청은 원래대로 보낸다
         }
 
         long t0 = System.nanoTime();
         Response response;
         try {
             response = chain.proceed(request);
-        } catch (IOException ex) {
-            recordRequestBody(e, tee, redact);
-            NetworkStore.get().fail(e, (System.nanoTime() - t0) / 1_000_000, redact.text(ex.toString()));
+        } catch (Throwable ex) {
+            // IOException 뿐 아니라 RuntimeException 으로 끝나도 항목이 pending 으로 남지 않게 한다
+            try {
+                recordRequestBody(e, tee, redact);
+                NetworkStore.get().fail(e, (System.nanoTime() - t0) / 1_000_000, redact.text(ex.toString()));
+            } catch (Throwable ignored) {
+                // 기록 실패가 원래 예외를 가리지 않도록 무시
+            }
             throw ex;
         }
-        recordRequestBody(e, tee, redact);
         long tookMs = (System.nanoTime() - t0) / 1_000_000;
         try {
+            recordRequestBody(e, tee, redact);
             e.status = response.code();
             e.message = response.message();
             e.protocol = response.protocol().toString();
@@ -92,11 +104,20 @@ public final class DroidLensInterceptor implements Interceptor {
                             .build();
                 }
             }
-        } catch (Exception ignored) {
+        } catch (Throwable ignored) {
             // 본문 기록 실패는 무시
         }
         NetworkStore.get().finish(e, tookMs);
         return response;
+    }
+
+    /** RequestBody.isDuplex 는 OkHttp 3.14 에 생겼다. 그보다 오래된 버전에는 duplex 가 없으니 false */
+    private static boolean isDuplex(RequestBody body) {
+        try {
+            return body.isDuplex();
+        } catch (LinkageError e) {
+            return false;
+        }
     }
 
     /** 전송이 끝난 뒤 복사해 둔 요청 본문을 기록한다. 본문이 쓰이지 않았으면(캐시 응답·전송 전 실패) 비워 둔다 */
@@ -105,7 +126,7 @@ public final class DroidLensInterceptor implements Interceptor {
         try {
             byte[] raw = tee.captured.readByteArray();
             NetworkStore.get().setRequestBody(e, redact.body(raw, e.requestContentType), tee.written, tee.written > raw.length);
-        } catch (Exception ignored) {
+        } catch (Throwable ignored) {
             // 본문 기록 실패는 무시
         }
     }
@@ -144,6 +165,7 @@ public final class DroidLensInterceptor implements Interceptor {
             return delegate.contentLength();
         }
 
+        // isOneShot·isDuplex 는 OkHttp 3.14+ 에서만 불린다 (그 전 버전엔 메서드가 없어 호출되지 않음)
         @Override
         public boolean isOneShot() {
             return delegate.isOneShot();
