@@ -75,11 +75,28 @@ export function App() {
   const [agentBusy, setAgentBusy] = useState(false);
 
   // 기기가 바뀌면 온디바이스 에이전트를 자동으로 준비 (없으면 uiautomator로 동작)
+  // 늦게 온 이전 기기의 응답이 새 기기 상태를 덮지 않게 alive 로 막는다
   useEffect(() => {
     setAgent(null);
     if (!serial) return;
+    let alive = true;
     setAgentBusy(true);
-    api.agentStart(serial).then(setAgent).catch(() => undefined).finally(() => setAgentBusy(false));
+    api
+      .agentStart(serial)
+      .then((a) => alive && setAgent(a))
+      .catch(() => undefined)
+      .finally(() => alive && setAgentBusy(false));
+    return () => {
+      alive = false;
+      setAgentBusy(false);
+    };
+  }, [serial]);
+
+  // 기기를 바꾸면 이전 기기에서 고른 앱 선택을 지운다 (처음 기기가 잡힐 때는 시작 옵션으로 받은 앱을 그대로 둔다)
+  const prevSerial = useRef<string | null>(null);
+  useEffect(() => {
+    if (prevSerial.current && prevSerial.current !== serial) setPkg(null);
+    prevSerial.current = serial;
   }, [serial]);
 
   useEffect(() => {
@@ -168,11 +185,16 @@ export function App() {
   const [pkgsLoading, setPkgsLoading] = useState(false);
   useEffect(() => {
     if (!serial) return setPkgs([]);
+    let alive = true;
     setPkgsLoading(true);
     run(api.packages(serial, thirdOnly)).then((p) => {
+      if (!alive) return;
       setPkgs(p ?? []);
       setPkgsLoading(false);
     });
+    return () => {
+      alive = false;
+    };
   }, [serial, thirdOnly, run, pkgTick]);
 
   // 포그라운드 화면: 여기서만 폴링하고 컨텍스트로 공유 (탭마다 따로 폴링하면 기기 부하가 커진다)
@@ -180,7 +202,17 @@ export function App() {
     setScreen(null);
     if (!serial) return;
     let alive = true;
-    const tick = () => api.currentScreen(serial).then((s) => alive && setScreen(s)).catch(() => undefined);
+    // 기기가 느려 응답이 2초를 넘기면 요청이 쌓이지 않게, 앞 요청이 끝나기 전에는 다시 묻지 않는다
+    let inFlight = false;
+    const tick = () => {
+      if (inFlight) return;
+      inFlight = true;
+      api
+        .currentScreen(serial)
+        .then((s) => alive && setScreen(s))
+        .catch(() => undefined)
+        .finally(() => (inFlight = false));
+    };
     tick();
     const t = setInterval(tick, 2000);
     return () => {
