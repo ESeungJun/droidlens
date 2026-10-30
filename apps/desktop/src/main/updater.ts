@@ -2,12 +2,13 @@ import { app } from 'electron';
 import { execFile, spawn } from 'node:child_process';
 import { createWriteStream } from 'node:fs';
 import { createHash } from 'node:crypto';
-import { chmod, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { access, chmod, constants, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import { promisify } from 'node:util';
+import { quoteShell as shq } from '@droidlens/core';
 
 /**
  * GitHub Releases 기반 자체 업데이트.
@@ -20,6 +21,13 @@ import { promisify } from 'node:util';
 
 const REPO = 'ESeungJun/droidlens';
 const run = promisify(execFile);
+/** 다운로드가 이 시간 동안 한 바이트도 진행되지 않으면 끊는다 (무응답이면 진행률이 영원히 멈춰 있지 않게) */
+const STALL_MS = 30_000;
+
+const writable = (p: string) => access(p, constants.W_OK).then(
+  () => true,
+  () => false,
+);
 
 export interface UpdateInfo {
   current: string;
@@ -71,6 +79,16 @@ function macBundle(): string {
   return resolve(dirname(process.execPath), '..', '..');
 }
 
+/** 교체할 앱 파일(번들)과 그 폴더에 쓸 수 있는지. Windows 는 설치 프로그램이 권한을 따로 다루므로 보지 않는다 */
+async function installTargetWritable(): Promise<boolean> {
+  if (process.platform === 'darwin') {
+    const target = macBundle();
+    return (await writable(dirname(target))) && (await writable(target));
+  }
+  if (process.platform === 'linux' && process.env.APPIMAGE) return writable(dirname(process.env.APPIMAGE));
+  return true;
+}
+
 type Release = { tag_name: string; body?: string; html_url: string; assets: { name: string; browser_download_url: string; size: number }[] };
 
 /**
@@ -95,6 +113,8 @@ export async function checkForUpdate(): Promise<UpdateInfo> {
   const arch = await cpuArch();
   const rel = await latestRelease(arch);
   const latest = rel.tag_name.replace(/^v/, '');
+  // 버전은 파일 이름과 설치 스크립트에 들어가므로 형식이 다른 태그는 받지 않는다
+  if (!/^\d+\.\d+\.\d+([-.][0-9A-Za-z.]+)?$/.test(latest)) throw new Error('업데이트 확인 실패 (릴리스 버전 형식이 올바르지 않습니다)');
   const current = currentVersion();
   const name = assetName(latest, arch);
   const a = rel.assets.find((x) => x.name === name);
@@ -106,6 +126,13 @@ export async function checkForUpdate(): Promise<UpdateInfo> {
   else if (process.platform === 'linux' && !process.env.APPIMAGE) {
     canInstall = false;
     reason = 'AppImage로 실행한 경우에만 자동 업데이트를 지원합니다';
+  } else if (process.platform === 'darwin' && macBundle().includes('/AppTranslocation/')) {
+    // 다운로드 폴더에서 바로 연 앱은 macOS 가 읽기 전용 임시 위치(App Translocation)에서 실행하므로 교체할 수 없다
+    canInstall = false;
+    reason = '앱이 macOS 임시 위치에서 실행 중이라 자동 업데이트를 할 수 없습니다. DroidLens 를 응용 프로그램 폴더로 옮긴 뒤 다시 여세요';
+  } else if (!(await installTargetWritable())) {
+    canInstall = false;
+    reason = '앱이 있는 폴더에 쓸 권한이 없어 자동 업데이트를 할 수 없습니다';
   }
   return {
     current,
@@ -120,23 +147,61 @@ export async function checkForUpdate(): Promise<UpdateInfo> {
   };
 }
 
-/** 내려받고 설치를 예약한 뒤 앱을 종료한다. onProgress(0~1) */
+/** 진행률을 알리며 내려받는다. STALL_MS 동안 받은 바이트가 없으면 끊는다 */
+async function download(url: string, file: string, size: number, onProgress: (p: number, msg: string) => void): Promise<void> {
+  const ac = new AbortController();
+  let timer: NodeJS.Timeout | undefined;
+  const kick = () => {
+    clearTimeout(timer);
+    timer = setTimeout(() => ac.abort(), STALL_MS);
+  };
+  kick();
+  try {
+    const res = await fetch(url, { headers: { 'User-Agent': 'DroidLens' }, signal: ac.signal });
+    if (!res.ok || !res.body) throw new Error(`다운로드 실패 (${res.status})`);
+    const total = Number(res.headers.get('content-length')) || size;
+    let got = 0;
+    const body = Readable.fromWeb(res.body as never);
+    body.on('data', (c: Buffer) => {
+      kick();
+      got += c.length;
+      onProgress(total ? Math.min(got / total, 1) : 0, `다운로드 ${(got / 1048576).toFixed(0)} / ${(total / 1048576).toFixed(0)}MB`);
+    });
+    await pipeline(body, createWriteStream(file));
+  } catch (e) {
+    if (ac.signal.aborted) throw new Error('다운로드가 30초 동안 진행되지 않아 중단했습니다');
+    throw e;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/**
+ * 내려받고 설치를 예약한 뒤 앱을 종료한다. onProgress(0~1)
+ * 실패하면 임시 폴더를 지우고 에러를 던진다. 실행 중인 서비스(로그·미러·대화)는 여기서 멈추지 않고
+ * 설치를 예약한 뒤 app.quit() 이 거치는 종료 정리(will-quit)에서 멈춘다 (다운로드가 실패해도 쓰던 기능이 꺼지지 않게)
+ */
 export async function installUpdate(info: UpdateInfo, onProgress: (p: number, msg: string) => void): Promise<void> {
   if (!info.asset || !info.canInstall) throw new Error(info.reason ?? '자동 설치를 할 수 없습니다');
   const dir = await mkdtemp(join(tmpdir(), 'droidlens-update-'));
-  const file = join(dir, info.asset.name);
+  try {
+    await prepareAndLaunch(info, info.asset, dir, onProgress);
+  } catch (e) {
+    await rm(dir, { recursive: true, force: true }).catch(() => undefined);
+    throw e;
+  }
+  setTimeout(() => app.quit(), 300);
+}
 
-  // 다운로드 (진행률)
-  const res = await fetch(info.asset.url, { headers: { 'User-Agent': 'DroidLens' } });
-  if (!res.ok || !res.body) throw new Error(`다운로드 실패 (${res.status})`);
-  const total = Number(res.headers.get('content-length')) || info.asset.size;
-  let got = 0;
-  const body = Readable.fromWeb(res.body as never);
-  body.on('data', (c: Buffer) => {
-    got += c.length;
-    onProgress(Math.min(got / total, 1), `다운로드 ${(got / 1048576).toFixed(0)} / ${(total / 1048576).toFixed(0)}MB`);
-  });
-  await pipeline(body, createWriteStream(file));
+/** 내려받아 확인하고, 앱이 끝나면 교체할 설치 단계를 분리된 프로세스로 띄운다 */
+async function prepareAndLaunch(
+  info: UpdateInfo,
+  asset: NonNullable<UpdateInfo['asset']>,
+  dir: string,
+  onProgress: (p: number, msg: string) => void,
+): Promise<void> {
+  const file = join(dir, asset.name);
+  await download(asset.url, file, asset.size, onProgress);
 
   // 무결성 확인: 릴리스의 SHA256SUMS 와 대조 (없거나 다르면 설치하지 않는다)
   onProgress(1, '파일 확인 중…');
@@ -146,12 +211,9 @@ export async function installUpdate(info: UpdateInfo, onProgress: (p: number, ms
   const expected = (await sumsRes.text())
     .split('\n')
     .map((l) => l.trim().split(/\s+\*?/))
-    .find(([, n]) => n === info.asset!.name)?.[0];
+    .find(([, n]) => n === asset.name)?.[0];
   const actual = createHash('sha256').update(await readFile(file)).digest('hex');
-  if (!expected || expected.toLowerCase() !== actual) {
-    await rm(dir, { recursive: true, force: true });
-    throw new Error('내려받은 파일이 릴리스 체크섬과 다릅니다. 설치하지 않습니다');
-  }
+  if (!expected || expected.toLowerCase() !== actual) throw new Error('내려받은 파일이 릴리스 체크섬과 다릅니다. 설치하지 않습니다');
 
   if (process.platform === 'darwin') {
     onProgress(1, '압축 해제 중…');
@@ -159,22 +221,28 @@ export async function installUpdate(info: UpdateInfo, onProgress: (p: number, ms
     await run('ditto', ['-x', '-k', file, unpacked]);
     const newApp = join(unpacked, 'DroidLens.app');
     const target = macBundle();
-    // 앱이 완전히 종료된 뒤 교체하고 다시 연다. 실패하면 기존 앱을 되돌린다.
+    const old = `${target}.old`;
+    // 앱이 완전히 종료된 뒤 교체하고 다시 연다. 기존 앱을 못 옮기거나 복사에 실패해도 그 자리의 앱
+    // (새 앱 또는 되돌린 기존 앱)을 마지막에 반드시 다시 열도록 set -e 를 쓰지 않는다
     const log = join(app.getPath('home'), '.droidlens', 'update.log');
+    await mkdir(dirname(log), { recursive: true });
     const script = `#!/bin/sh
-exec >>"${log}" 2>&1
-echo "[$(date)] DroidLens 업데이트 ${info.current} -> ${info.latest}"
+exec >>${shq(log)} 2>&1
+echo "[$(date)]" ${shq(`DroidLens 업데이트 ${info.current} -> ${info.latest}`)}
 while kill -0 ${process.pid} 2>/dev/null; do sleep 0.3; done
-set -ex
-mv "${target}" "${target}.old"
-if ditto "${newApp}" "${target}"; then
-  rm -rf "${target}.old"
+set -x
+if mv ${shq(target)} ${shq(old)}; then
+  if ditto ${shq(newApp)} ${shq(target)}; then
+    rm -rf ${shq(old)}
+  else
+    rm -rf ${shq(target)}; mv ${shq(old)} ${shq(target)}
+  fi
 else
-  rm -rf "${target}"; mv "${target}.old" "${target}"
+  echo "기존 앱을 옮기지 못해 업데이트를 건너뜁니다"
 fi
-xattr -dr com.apple.quarantine "${target}" 2>/dev/null || true
-open "${target}"
-rm -rf "${dir}"
+xattr -dr com.apple.quarantine ${shq(target)} 2>/dev/null || true
+open ${shq(target)}
+rm -rf ${shq(dir)}
 `;
     const sh = join(dir, 'update.sh');
     await writeFile(sh, script);
@@ -188,17 +256,18 @@ rm -rf "${dir}"
     onProgress(1, '교체 중…');
     const target = process.env.APPIMAGE!;
     await chmod(file, 0o755);
+    // 교체에 실패해도 그 자리의 기존 파일로 다시 띄운다
     const script = `#!/bin/sh
 while kill -0 ${process.pid} 2>/dev/null; do sleep 0.3; done
-mv -f "${file}" "${target}" && chmod +x "${target}"
-nohup "${target}" >/dev/null 2>&1 &
+mv -f ${shq(file)} ${shq(target)} && chmod +x ${shq(target)}
+nohup ${shq(target)} >/dev/null 2>&1 &
+rm -rf ${shq(dir)}
 `;
     const sh = join(dir, 'update.sh');
     await writeFile(sh, script);
     await chmod(sh, 0o755);
     spawn('/bin/sh', [sh], { detached: true, stdio: 'ignore', env: cleanEnv() }).unref();
   }
-  setTimeout(() => app.quit(), 300);
 }
 
 /**

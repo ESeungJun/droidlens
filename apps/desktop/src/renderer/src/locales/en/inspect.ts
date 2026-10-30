@@ -74,7 +74,9 @@ export const inspect: Record<string, string> = {
   '시간': 'Time',
   '크기': 'Size',
   '아직 요청이 없습니다. OkHttp에 DroidLensInterceptor를 추가했는지 확인하세요.': 'No requests yet. Make sure DroidLensInterceptor is added to your OkHttp client.',
-  'cURL 복사': 'Copy as cURL',
+  'cURL 복사 (bash)': 'Copy as cURL (bash)',
+  'bash·zsh 같은 POSIX 셸용 인용입니다. Windows cmd·PowerShell 에 붙이면 값 때문에 다른 명령이 실행될 수 있습니다':
+    'Quoted for POSIX shells such as bash and zsh. Pasting into Windows cmd or PowerShell may run other commands because of the values',
   '응답': 'Response',
   '요청': 'Request',
   '헤더': 'Headers',

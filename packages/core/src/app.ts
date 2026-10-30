@@ -2,7 +2,7 @@ import { mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { ChildProcess } from 'node:child_process';
 import { DeviceAdb, quoteShell } from './adb.js';
-import { agentFor } from './agent.js';
+import { checkedAgent } from './agent.js';
 
 const PKG_RE = /^[a-zA-Z][\w]*(\.[\w]+)+$/;
 
@@ -24,7 +24,7 @@ export interface CurrentScreen {
  * 에이전트가 있으면 Activity를 접근성 이벤트로 즉시 얻는다.
  */
 export async function currentScreen(dev: DeviceAdb, opts: { fragments?: boolean } = {}): Promise<CurrentScreen> {
-  const agent = agentFor(dev.serial);
+  const agent = await checkedAgent(dev);
   if (agent) {
     const st = await agent.state().catch(() => undefined);
     if (st?.package && st.activity) {
@@ -216,9 +216,10 @@ export async function clearAppData(dev: DeviceAdb, pkg: string): Promise<void> {
 
 export async function openDeepLink(dev: DeviceAdb, uri: string, pkg?: string): Promise<string> {
   if (pkg) assertPackage(pkg);
-  return dev.shell(
-    `am start -W -a android.intent.action.VIEW -d ${quoteShell(uri)}${pkg ? ` ${pkg}` : ''}`,
-  );
+  const out = await dev.shell(`am start -W -a android.intent.action.VIEW -d ${quoteShell(uri)}${pkg ? ` ${pkg}` : ''}`);
+  // 받을 앱이 없는 등 실패해도 am 은 0 으로 끝나므로 출력으로 판단한다 (launchApp 과 같은 방식)
+  if (/Error:/.test(out)) throw new Error(out.trim());
+  return out;
 }
 
 /** base.apk와 split APK를 로컬로 내려받는다 */
@@ -301,8 +302,10 @@ export function streamLogcat(
   if (opts.pid) args.push(`--pid=${opts.pid}`);
   const proc = dev.spawn(args);
   let buf = '';
-  proc.stdout!.on('data', (chunk: Buffer) => {
-    buf += chunk.toString('utf8');
+  // 청크 경계에서 잘린 한글 등 여러 바이트 글자가 깨지지 않게 문자열 디코딩을 스트림에 맡긴다
+  proc.stdout!.setEncoding('utf8');
+  proc.stdout!.on('data', (chunk: string) => {
+    buf += chunk;
     const parts = buf.split('\n');
     buf = parts.pop() ?? '';
     for (const p of parts) {
@@ -313,11 +316,30 @@ export function streamLogcat(
   return { proc, stop: () => proc.kill() };
 }
 
-/** 최근 크래시(FATAL EXCEPTION / ANR) 로그 */
-export async function recentCrashes(dev: DeviceAdb, pkg?: string): Promise<string[]> {
-  const out = await dev.text(['logcat', '-d', '-b', 'crash', '-v', 'threadtime'], { timeoutMs: 20_000 });
-  const blocks = out.split(/(?=^.*FATAL EXCEPTION)/m).filter((b) => b.includes('FATAL EXCEPTION'));
+/**
+ * 최근 크래시(FATAL EXCEPTION / ANR) 로그.
+ * opts.since(기기 시계 기준 epoch ms, deviceTime 참고)를 주면 그 뒤의 것만. 이때는 시각을 epoch 로 받아 비교한다
+ * (threadtime 시각은 기기 시간대·연도 없는 값이라 호스트 시계와 비교할 수 없다)
+ */
+export async function recentCrashes(dev: DeviceAdb, pkg?: string, opts: { since?: number } = {}): Promise<string[]> {
+  const format = opts.since === undefined ? 'threadtime' : 'epoch';
+  const out = await dev.text(['logcat', '-d', '-b', 'crash', '-v', format], { timeoutMs: 20_000 });
+  let blocks = out.split(/(?=^.*FATAL EXCEPTION)/m).filter((b) => b.includes('FATAL EXCEPTION'));
+  if (opts.since !== undefined) {
+    const since = opts.since;
+    blocks = blocks.filter((b) => {
+      const m = /^\s*(\d+)\.(\d+)/m.exec(b);
+      return !m || Number(m[1]) * 1000 + Number(m[2].slice(0, 3).padEnd(3, '0')) >= since;
+    });
+  }
   return pkg ? blocks.filter((b) => b.includes(pkg)) : blocks;
+}
+
+/** 기기 시계 (epoch ms). 기기가 남긴 시각(SDK 네트워크·이벤트, logcat)과 비교할 기준은 호스트가 아니라 이 값으로 잡는다 */
+export async function deviceTime(dev: DeviceAdb): Promise<number> {
+  const sec = Number((await dev.shell('date +%s')).trim());
+  if (!Number.isFinite(sec) || sec <= 0) throw new Error('기기 시각을 읽지 못했습니다');
+  return sec * 1000;
 }
 
 export { pidOf };

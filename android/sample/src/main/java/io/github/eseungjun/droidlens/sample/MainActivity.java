@@ -17,15 +17,28 @@ import io.github.eseungjun.droidlens.sdk.DroidLens;
 import io.github.eseungjun.droidlens.sdk.DroidLensInterceptor;
 import okhttp3.Call;
 import okhttp3.Callback;
+import okhttp3.FormBody;
+import okhttp3.Interceptor;
 import okhttp3.MediaType;
 import okhttp3.OkHttpClient;
 import okhttp3.Request;
 import okhttp3.RequestBody;
 import okhttp3.Response;
+import okio.BufferedSink;
+import okio.BufferedSource;
 
 /** SDK 동작 확인용 샘플: 네트워크 요청, SQLite, SharedPreferences, 커스텀 이벤트 */
 public class MainActivity extends Activity {
-    private final OkHttpClient http = new OkHttpClient.Builder().addInterceptor(new DroidLensInterceptor()).build();
+    /** 공통 파라미터 인터셉터가 마지막으로 본 폼 본문 타입 (폼 POST 버튼 결과에 표시) */
+    private volatile String formSeen = "-";
+    /**
+     * 앱에서는 DroidLensInterceptor 를 마지막에 두기를 권장한다.
+     * 여기서는 앞에 두어도 뒤 인터셉터가 FormBody 를 그대로 보는지 확인하려고 일부러 먼저 넣었다.
+     */
+    private final OkHttpClient http = new OkHttpClient.Builder()
+            .addInterceptor(new DroidLensInterceptor())
+            .addInterceptor(this::addCommonParams)
+            .build();
     private TextView status;
     private SQLiteOpenHelper dbHelper;
 
@@ -46,13 +59,17 @@ public class MainActivity extends Activity {
         root.setOrientation(LinearLayout.VERTICAL);
         root.setPadding(48, 96, 48, 48);
         status = new TextView(this);
-        status.setText("SDK running: " + DroidLens.isRunning());
+        status.setText("SDK " + DroidLens.version() + " running: " + DroidLens.isRunning());
         root.addView(status);
         root.addView(button("GET 요청", "btn_get", () -> get("https://jsonplaceholder.typicode.com/todos/1")));
         root.addView(button("POST 요청", "btn_post", this::post));
+        root.addView(button("폼 POST", "btn_form", this::postForm));
         root.addView(button("404 요청", "btn_404", () -> get("https://jsonplaceholder.typicode.com/does-not-exist")));
         // 에뮬레이터에 인터넷이 없을 때: adb reverse tcp:8099 tcp:8099 후 호스트에서 로컬 서버 실행
         root.addView(button("로컬 서버 요청", "btn_local", () -> get("http://127.0.0.1:8099/api/user?id=7")));
+        // 한 번만 쓸 수 있는 스트림 본문 업로드와, 줄 단위로 천천히 오는 응답 (로컬 서버 /upload, /stream)
+        root.addView(button("스트림 업로드", "btn_upload", this::upload));
+        root.addView(button("스트리밍 응답", "btn_stream", this::stream));
         root.addView(button("DB에 메모 추가", "btn_db", this::insertNote));
         root.addView(button("Prefs 저장", "btn_prefs", this::savePrefs));
         root.addView(button("커스텀 이벤트", "btn_event", () -> {
@@ -80,6 +97,89 @@ public class MainActivity extends Activity {
     private void post() {
         RequestBody body = RequestBody.create("{\"title\":\"안녕\",\"userId\":1}", MediaType.get("application/json; charset=utf-8"));
         enqueue(new Request.Builder().url("https://jsonplaceholder.typicode.com/posts").post(body).build());
+    }
+
+    private void postForm() {
+        FormBody body = new FormBody.Builder().add("title", "폼 제목").add("token", "secret-123").build();
+        Request req = new Request.Builder().url("https://jsonplaceholder.typicode.com/posts").post(body).build();
+        http.newCall(req).enqueue(new Callback() {
+            @Override
+            public void onFailure(Call call, IOException e) {
+                runOnUiThread(() -> status.setText("실패: " + e.getMessage()));
+            }
+
+            @Override
+            public void onResponse(Call call, Response response) throws IOException {
+                String text = response.body() != null ? response.body().string() : "";
+                runOnUiThread(() -> status.setText("form " + formSeen + " " + response.code() + " " + text.replace('\n', ' ')));
+            }
+        });
+    }
+
+    /** 흔한 공통 파라미터 인터셉터: 폼 본문이면 필드를 덧붙인다. 앞 인터셉터가 본문을 감싸면 FormBody 로 보이지 않는다 */
+    private Response addCommonParams(Interceptor.Chain chain) throws IOException {
+        Request req = chain.request();
+        if (!(req.body() instanceof FormBody)) {
+            if (req.body() != null && "POST".equals(req.method()) && req.url().encodedPath().equals("/posts")
+                    && "application/x-www-form-urlencoded".equals(String.valueOf(req.body().contentType()))) {
+                formSeen = "감싸짐(" + req.body().getClass().getSimpleName() + ")";
+            }
+            return chain.proceed(req);
+        }
+        FormBody form = (FormBody) req.body();
+        FormBody.Builder b = new FormBody.Builder();
+        for (int i = 0; i < form.size(); i++) b.addEncoded(form.encodedName(i), form.encodedValue(i));
+        b.add("app_ver", "1");
+        formSeen = "FormBody";
+        return chain.proceed(req.newBuilder().post(b.build()).build());
+    }
+
+    /** 1MB 를 64KB 씩 만들어 보내는 일회용 본문. 인터셉터가 미리 써 보면 서버가 받는 크기가 줄어든다 */
+    private void upload() {
+        RequestBody body = new RequestBody() {
+            private boolean used;
+
+            @Override
+            public MediaType contentType() {
+                return MediaType.get("application/octet-stream");
+            }
+
+            @Override
+            public boolean isOneShot() {
+                return true;
+            }
+
+            @Override
+            public void writeTo(BufferedSink sink) throws IOException {
+                if (used) throw new IOException("이미 쓴 본문");
+                used = true;
+                byte[] chunk = new byte[64 * 1024];
+                for (int i = 0; i < 16; i++) sink.write(chunk);
+            }
+        };
+        enqueue(new Request.Builder().url("http://127.0.0.1:8099/upload").post(body).build());
+    }
+
+    /** 첫 줄이 도착하자마자 화면에 보이면 인터셉터가 응답을 막지 않는 것 */
+    private void stream() {
+        long t0 = System.currentTimeMillis();
+        http.newCall(new Request.Builder().url("http://127.0.0.1:8099/stream").build()).enqueue(new Callback() {
+            @Override
+            public void onFailure(Call call, IOException e) {
+                runOnUiThread(() -> status.setText("실패: " + e.getMessage()));
+            }
+
+            @Override
+            public void onResponse(Call call, Response response) throws IOException {
+                try (BufferedSource src = response.body().source()) {
+                    String line;
+                    while ((line = src.readUtf8Line()) != null) {
+                        String text = "stream +" + (System.currentTimeMillis() - t0) + "ms: " + line;
+                        runOnUiThread(() -> status.setText(text));
+                    }
+                }
+            }
+        });
     }
 
     private void enqueue(Request req) {

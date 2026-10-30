@@ -3,7 +3,7 @@ import { execFile } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { copyFile, mkdir, readdir, readFile, stat, writeFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
-import { basename, join, resolve, sep } from 'node:path';
+import { basename, isAbsolute, join, resolve, sep } from 'node:path';
 import { promisify } from 'node:util';
 import * as dl from '@droidlens/core';
 import { resolveClaude, sendChat, stopChat, type ChatRequest } from './chat';
@@ -83,6 +83,8 @@ handle('avdStart', (name: string) => dl.startAvd(adb, name, { onProgress: (messa
 handle('avdStop', (s: string) => dl.stopAvd(adb, s));
 handle('deviceInfo', (s: string) => dl.getDeviceInfo(dev(s)));
 handle('screenshot', async (s: string) => `data:image/png;base64,${(await dl.screenshot(dev(s))).toString('base64')}`);
+// 화면 탭 스냅샷 모드처럼 계속 받는 경우: base64 문자열로 바꾸지 않고 PNG 바이트 그대로 넘긴다 (구조화 복제로 Uint8Array 가 된다)
+handle('screenshotPng', (s: string) => dl.screenshot(dev(s)));
 handle('saveScreenshot', async (s: string, label?: string) => {
   const dir = await dl.ensureDir('screenshots');
   const p = join(dir, `${dl.timestamp()}_${dl.safeName(label ?? 'shot')}.png`);
@@ -119,42 +121,62 @@ handle('typeText', (s: string, t: string) => inOrder(() => dl.typeText(dev(s), t
 
 // ---------- 고프레임 미러링 (scrcpy) ----------
 let mirror: { serial: string; m: dl.Mirror } | null = null;
+/**
+ * 가장 최근에 요청된 미러링 세션 id (렌더러가 정한다). 연결에 수~십수 초가 걸리는 동안 중지·재시작이 오면
+ * 이 값이 바뀌므로, 연결이 끝났을 때 자기 id 가 아니면 바로 멈춘다. 이벤트에도 id 를 실어 렌더러가 이전 세션 패킷을 버리게 한다
+ */
+let mirrorWant: number | null = null;
 const scrcpyServer = () =>
   app.isPackaged ? resourcePath('scrcpy', 'scrcpy-server') : resourcePath('vendor', 'scrcpy', 'scrcpy-server');
-handle('mirrorStart', async (s: string, maxSize?: number) => {
-  debug('mirrorStart', s, maxSize);
+handle('mirrorStart', async (s: string, maxSize: number | undefined, id: number) => {
+  debug('mirrorStart', s, maxSize, id);
+  mirrorWant = id;
   mirror?.m.stop();
   mirror = null;
   if (!existsSync(scrcpyServer())) throw new Error('scrcpy 서버 파일이 없습니다 (node scripts/fetch-scrcpy.mjs)');
   const m = await dl.startMirror(
     dev(s),
     {
-      onSession: (width, height) => send('mirror:session', { width, height }),
+      onSession: (width, height) => send('mirror:session', { id, width, height }),
       // Buffer는 구조화 복제로 Uint8Array가 된다
-      onPacket: (p) => (debug('packet', p.data.length, p.config ? 'config' : '', p.key ? 'key' : ''), send('mirror:packet', { data: p.data, config: p.config, key: p.key, pts: Number(p.pts) })),
+      onPacket: (p) => (debug('packet', p.data.length, p.config ? 'config' : '', p.key ? 'key' : ''), send('mirror:packet', { id, data: p.data, config: p.config, key: p.key, pts: Number(p.pts) })),
       onClose: (reason) => {
         if (mirror?.m === m) mirror = null;
-        send('mirror:closed', { reason });
+        send('mirror:closed', { id, reason });
       },
     },
     { serverPath: scrcpyServer(), maxSize: maxSize ?? 1280 },
   );
+  // 연결하는 사이 중지되거나 다른 세션이 시작됐으면 이 세션은 버린다
+  if (mirrorWant !== id) {
+    m.stop();
+    return false;
+  }
   mirror = { serial: s, m };
   debug('mirror connected');
   return true;
 });
-handle('mirrorStop', async () => {
-  debug('mirrorStop');
+/** id 를 주면 그 세션이 아직 최신일 때만 멈춘다 (늦게 온 이전 화면의 정리가 새 세션을 끊지 않게) */
+handle('mirrorStop', async (id?: number) => {
+  debug('mirrorStop', id);
+  if (id !== undefined && id !== mirrorWant) return;
+  mirrorWant = null;
   mirror?.m.stop();
   mirror = null;
 });
 
 // ---------- 녹화 ----------
+/**
+ * 기기별 녹화. 녹화 상태는 여기가 기준이고 화면은 recordStatus 로 다시 읽는다 (탭을 옮기거나 기기를 바꿔도 잃지 않게).
+ * screenrecord 가 180초 제한으로 먼저 끝나도 기기에 파일이 남아 있으므로, 중지하면 그때까지 녹화된 파일을 받아 온다
+ */
 const recs = new Map<string, dl.Recording>();
+handle('recordStatus', async (s: string) => recs.get(s)?.startedAt ?? null);
 handle('recordStart', async (s: string) => {
   if (recs.has(s)) throw new Error('이미 녹화 중입니다');
-  recs.set(s, dl.startRecording(dev(s)));
-  return Date.now();
+  const r = dl.startRecording(dev(s));
+  recs.set(s, r);
+  return r.startedAt;
 });
 handle('recordStop', async (s: string) => {
   const r = recs.get(s);
@@ -184,24 +206,47 @@ handle('crashes', (s: string, pkg?: string) => dl.recentCrashes(dev(s), pkg));
 
 // ---------- logcat ----------
 let logStream: { stop(): void } | null = null;
-handle('logcatStart', async (s: string, pkg?: string) => {
+/** 가장 최근에 요청된 로그 스트림 id (렌더러가 정한다). pid 를 찾는 사이 중지·재시작이 오면 바뀌어 이전 요청은 스트림을 열지 않는다 */
+let logWant: number | null = null;
+handle('logcatStart', async (s: string, pkg: string | undefined, id: number) => {
+  logWant = id;
   logStream?.stop();
+  logStream = null;
   const pid = pkg ? await dl.pidOf(dev(s), pkg) : undefined;
-  if (pkg && !pid) throw new Error(`${pkg} 프로세스가 실행 중이 아닙니다`);
+  if (logWant !== id) return null;
+  if (pkg && !pid) {
+    logWant = null;
+    throw new Error(`${pkg} 프로세스가 실행 중이 아닙니다`);
+  }
   let batch: dl.LogLine[] = [];
-  const timer = setInterval(() => {
-    if (batch.length) send('logcat', batch.splice(0));
-  }, 200);
+  const flush = () => {
+    if (batch.length) send('logcat', { id, lines: batch.splice(0) });
+  };
+  const timer = setInterval(flush, 200);
   const st = dl.streamLogcat(dev(s), (l) => batch.push(l), { pid });
-  logStream = {
+  const stream = {
     stop: () => {
       clearInterval(timer);
       st.stop();
     },
   };
+  st.proc.on('error', () => undefined);
+  // 기기 연결이 끊기는 등으로 스트림이 스스로 끝나면 화면에 알린다 (중지를 눌러 끝난 것은 알리지 않는다)
+  st.proc.on('close', () => {
+    clearInterval(timer);
+    if (logStream !== stream) return;
+    flush();
+    logStream = null;
+    logWant = null;
+    send('logcat:closed', { id });
+  });
+  logStream = stream;
   return pid ?? null;
 });
-handle('logcatStop', async () => {
+/** id 를 주면 그 스트림이 아직 최신일 때만 멈춘다 */
+handle('logcatStop', async (id?: number) => {
+  if (id !== undefined && id !== logWant) return;
+  logWant = null;
   logStream?.stop();
   logStream = null;
 });
@@ -494,9 +539,7 @@ handle('updateInstall', async (info: UpdateInfo) => {
   // 렌더러가 넘긴 정보 대신 다시 확인한 결과로 설치한다 (다운로드 URL을 렌더러에서 받지 않음)
   const fresh = await checkForUpdate();
   if (!fresh.available || fresh.latest !== info.latest) throw new Error('설치할 업데이트가 없습니다');
-  stopChat();
-  mirror?.m.stop();
-  logStream?.stop();
+  // 로그·미러·대화는 설치를 예약한 뒤 app.quit() 의 종료 정리(stopAll)에서 멈춘다. 다운로드가 실패하면 그대로 쓸 수 있다
   await installUpdate(fresh, (p, message) => send('update:progress', { p, message }));
 });
 handle('adbStatus', async () => ({ ...(await adb.version()), candidates: dl.adbCandidates() }));
@@ -508,6 +551,8 @@ async function updateConfig(patch: Record<string, unknown>): Promise<void> {
   await dl.writeJson(configPath(), cfg);
 }
 handle('setAdbPath', async (p: string) => {
+  // 여기 등록한 파일은 앱이 계속 실행하므로 adb 실행 파일 경로만 받는다 (비우면 자동 탐색)
+  if (p && !(isAbsolute(p) && /^adb(\.exe)?$/i.test(basename(p)))) throw new Error('adb 실행 파일의 전체 경로를 입력하세요 (파일 이름이 adb 또는 adb.exe)');
   await updateConfig({ adbPath: p || undefined });
   adb = new dl.Adb();
   return adb.version();
@@ -593,9 +638,34 @@ app.whenReady().then(async () => {
   }
   createWindow();
 });
-app.on('window-all-closed', () => {
+/**
+ * 앱이 끝날 때 띄워 둔 외부 프로세스(claude·adb logcat·scrcpy·screenrecord)를 모두 정리한다.
+ * 창을 닫을 때뿐 아니라 Cmd+Q·업데이트 설치(app.quit)로 끝날 때도 거치도록 will-quit 에서 한다
+ */
+function stopAll(): void {
   stopChat();
+  logWant = null;
   logStream?.stop();
+  logStream = null;
+  mirrorWant = null;
   mirror?.m.stop();
-  app.quit();
+  mirror = null;
+  // 녹화는 기기 쪽 screenrecord 를 멈추고, 받아 올 수 없게 된 파일은 기기에서 지운다 (adb 셸은 앱이 끝나도 마저 돈다).
+  // 다른 녹화(MCP record_start 등)는 두도록 우리 파일 경로로 좁힌다. 셸 자신의 명령줄에도 경로가 들어 있어 ^screenrecord 로 묶고,
+  // toybox pkill 은 -INT 와 -f 를 함께 쓰면 자기 셸까지 끊어서 신호는 -l INT 로 준다 (LG G8·Flip3 에서 확인)
+  for (const [s, r] of recs) {
+    const mine = dl.quoteShell(`^screenrecord .*${r.remotePath}$`);
+    dev(s).spawn(['shell', `pkill -l INT -f ${mine}; sleep 1; rm -f ${dl.quoteShell(r.remotePath)}`]).on('error', () => undefined);
+  }
+  recs.clear();
+}
+app.on('will-quit', stopAll);
+// 화면 그래프는 저장을 잠깐 미뤄 두므로(saveSoon) 끝나기 전에 한 번 쓴다. 비동기라 종료를 한 번 미루고, 멈춰도 2초 뒤엔 끝낸다
+let graphsFlushed = false;
+app.on('before-quit', (e) => {
+  if (graphsFlushed) return;
+  e.preventDefault();
+  graphsFlushed = true;
+  void Promise.race([dl.ScreenGraph.flushAll(), new Promise((r) => setTimeout(r, 2000))]).finally(() => app.quit());
 });
+app.on('window-all-closed', () => app.quit());

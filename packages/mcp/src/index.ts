@@ -11,7 +11,7 @@ import * as scenario from './tools/scenario.js';
 import * as screen from './tools/screen.js';
 import * as sdk from './tools/sdk.js';
 
-export const VERSION = '0.8.4';
+export const VERSION = '0.9.0';
 
 export function createServer(): McpServer {
   const server = new McpServer({ name: 'droidlens', version: VERSION });
@@ -44,14 +44,26 @@ async function cli(args: string[]): Promise<number> {
   return r.failed ? 1 : 0;
 }
 
+/** 미뤄 둔 화면 그래프 저장을 마저 쓰고 끝낸다 (저장이 멈춰도 5초 뒤엔 끝낸다) */
+let exiting = false;
+async function exit(code: number): Promise<void> {
+  if (exiting) return;
+  exiting = true;
+  await Promise.race([dl.ScreenGraph.flushAll(), dl.sleep(5000)]).catch(() => undefined);
+  process.exit(code);
+}
+
 if (process.argv[2] === 'run') {
   cli(process.argv.slice(3)).then(
-    (code) => process.exit(code),
+    (code) => exit(code),
     (e) => {
       console.error((e as Error).message);
-      process.exit(2);
+      void exit(2);
     },
   );
 } else {
+  // 클라이언트가 끊거나(stdin 닫힘) 신호로 끝낼 때도 saveSoon 으로 모아 둔 기록을 잃지 않게 한다
+  for (const sig of ['SIGINT', 'SIGTERM'] as const) process.on(sig, () => void exit(0));
+  process.stdin.on('end', () => void exit(0));
   await createServer().connect(new StdioServerTransport());
 }
