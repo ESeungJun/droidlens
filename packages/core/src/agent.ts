@@ -76,12 +76,17 @@ export class AgentClient {
   }
 }
 
+const CONNECTION_CODES = new Set(['ECONNREFUSED', 'ECONNRESET', 'EPIPE', 'ECONNABORTED', 'UND_ERR_SOCKET']);
+
 /**
  * 요청이 서버에 닿지 못한 실패 (fetch 가 TypeError 'fetch failed' 로 던진다).
- * 시간 초과(TimeoutError)·HTTP 오류와 달리 기기에서 실행되지 않았으므로 다시 보내도 된다
+ * 시간 초과(TimeoutError)·HTTP 오류와 달리 기기에서 실행되지 않았으므로 다시 보내도 된다.
+ * 응답 처리 코드의 TypeError(버그)까지 연결 실패로 보지 않게 메시지·원인 코드로 가린다
  */
 export function isConnectionError(e: unknown): boolean {
-  return e instanceof TypeError;
+  if (!(e instanceof TypeError)) return false;
+  const code = (e.cause as { code?: unknown } | undefined)?.code;
+  return e.message === 'fetch failed' || (typeof code === 'string' && CONNECTION_CODES.has(code));
 }
 
 const clients = new Map<string, AgentClient>();
