@@ -92,9 +92,11 @@ export function App() {
     };
   }, [serial]);
 
-  // 기기를 바꾸면 이전 기기에서 고른 앱 선택을 지운다 (처음 기기가 잡힐 때는 시작 옵션으로 받은 앱을 그대로 둔다)
+  // 다른 기기로 바꾸면 이전 기기에서 고른 앱 선택을 지운다 (처음 기기가 잡힐 때는 시작 옵션으로 받은 앱을 그대로 둔다).
+  // 기기가 잠깐 빠졌다(null) 같은 기기가 다시 붙는 경우(Wi-Fi adb 등)는 바뀐 것으로 보지 않게 마지막 기기만 기억한다
   const prevSerial = useRef<string | null>(null);
   useEffect(() => {
+    if (!serial) return;
     if (prevSerial.current && prevSerial.current !== serial) setPkg(null);
     prevSerial.current = serial;
   }, [serial]);
