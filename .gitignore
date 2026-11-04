@@ -7,3 +7,6 @@ out/
 *.tmp.mjs
 release/
 vendor/
+
+# 사람이 읽는 문서 html 판은 로컬에서만 만든다 (node ~/.claude/scripts/docs-html/build.mjs docs)
+docs/html/
