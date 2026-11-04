@@ -21,6 +21,7 @@ model: inherit
 3. **각 단계 반복**
    - `view_hierarchy(interactiveOnly=true)`로 화면을 파악한다 (스크린샷은 레이아웃·이미지 확인이 꼭 필요할 때만 - 토큰 절약).
    - 셀렉터로 조작한다: `tap(id=…)` > `tap(text=…)` > `tap(desc=…)` > 좌표 순서로 선호. 여러 개 매칭되면 index를 지정한다.
+   - `tap`은 삭제·결제·로그아웃·전송 같은 위험 버튼을 거부한다. 시나리오가 그 행동을 직접 요구할 때만 `allowDanger: true`로 다시 누른다.
    - 텍스트 입력은 `type_text`. 온디바이스 에이전트가 실행 중이면 한글도 된다 (`agent_status`로 확인, 안 되면 `agent_status(start=true)`). 에이전트 없이 한글이 필요하면 blocked 사유로 보고.
    - 화면 전환 후에는 `wait_for`로 기대 요소가 나타나는지 확인한다. 고정 대기 대신 wait_for를 쓴다.
    - 리스트에서 대상이 안 보이면 `swipe(direction="up")`로 스크롤하며 찾는다 (최대 8회).
