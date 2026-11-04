@@ -352,3 +352,58 @@ export function hierarchyStats(h: Hierarchy) {
     likelyCompose: isCompose,
   };
 }
+
+// ---------- 에이전트 탭 보호 ----------
+
+/**
+ * 에이전트가 tap 도구로 누르기 전에 확인할 위험 단어 (되돌리기 어렵거나 밖으로 나가는 행동).
+ * 자동 탐색용 DANGEROUS_LABELS 보다 좁다: 에이전트는 '완료'·'제출' 같은 버튼을 정상 흐름에서 자주 누르기 때문.
+ * 영어는 단어 단위로 비교해 'display'·'border' 같은 단어 속 pay·order 에 걸리지 않게 한다.
+ */
+const TAP_GUARD_EN =
+  /\b(log ?out|sign ?out|delete|remove|uninstall|purchase|buy|pay|checkout|place order|order now|send|transfer|unsubscribe|deactivate|reset|trash|bin|garbage)\b/i;
+const TAP_GUARD_KO = /로그아웃|삭제|탈퇴|결제|구매|주문하기|송금|이체|전송|보내기|지우기|초기화|해지/;
+
+/** btnDelete·ic_trash·action.send 처럼 붙여 쓴 이름을 단어로 나눈다 */
+function splitWords(s: string): string {
+  return s.replace(/([a-z0-9])([A-Z])/g, '$1 $2').replace(/[_.\-/:]+/g, ' ');
+}
+
+/** 이 문자열이 위험 행동처럼 보이는가 */
+export function isRiskyLabel(s: string): boolean {
+  return !!s && (TAP_GUARD_KO.test(s) || TAP_GUARD_EN.test(splitWords(s)));
+}
+
+/**
+ * 누르려는 요소(와 그 안의 자식)에서 위험해 보이는 라벨을 찾는다. 없으면 undefined.
+ * 글자 → 접근성 설명 → 리소스 이름 순으로 보고, 아이콘만 있는 버튼은 리소스 이름(ic_delete, trash)으로 잡는다.
+ */
+export function riskyLabelOf(n: ViewNode): string | undefined {
+  const id = n.resourceId.split(':id/')[1] ?? '';
+  for (const s of [n.text, n.contentDesc, id]) if (isRiskyLabel(s)) return s;
+  for (const c of n.children) {
+    // 자식이 따로 누를 수 있는 버튼이면 그건 다른 대상이다 (카드 안의 '삭제' 버튼 때문에 카드 전체를 막지 않게)
+    if (c.clickable || c.longClickable) continue;
+    const hit = riskyLabelOf(c);
+    if (hit) return hit;
+  }
+  return undefined;
+}
+
+/** 좌표 (x, y)를 누르면 실제로 반응할 요소: 그 점을 품은 클릭 가능한 요소 중 가장 작은 것 */
+export function clickableAt(root: ViewNode, x: number, y: number): ViewNode | undefined {
+  let best: ViewNode | undefined;
+  let bestArea = Infinity;
+  for (const n of flatten(root)) {
+    if (!n.clickable && !n.longClickable) continue;
+    if (n.depth === 0) continue;
+    const [l, t, r, b] = n.bounds;
+    if (x < l || x > r || y < t || y > b) continue;
+    const area = (r - l) * (b - t);
+    if (area < bestArea) {
+      best = n;
+      bestArea = area;
+    }
+  }
+  return best;
+}
