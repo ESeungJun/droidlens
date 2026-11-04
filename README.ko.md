@@ -220,7 +220,9 @@ pnpm dist                               # 현재 OS용 설치 파일 → apps/de
 packages/core     adb 엔진 (기기·입력·캡처, 뷰 계층, 화면 그래프·자동 탐색, 라이브러리 탐지, 시나리오)
 packages/mcp      MCP 서버 (단일 파일 번들 droidlens-mcp.mjs)
 android/agent     온디바이스 에이전트 APK (Instrumentation + HTTP)
-android/sdk       앱 SDK (네트워크·Prefs·DB·이벤트), sdk-noop, sample
+android/sdk       앱 SDK (네트워크·Prefs·DB·이벤트)
+android/sdk-noop  릴리스 빌드용 빈 SDK
+android/sample    예제 앱
 apps/desktop      Electron + React
 agents/           Claude Code 에이전트 정의
 ```
