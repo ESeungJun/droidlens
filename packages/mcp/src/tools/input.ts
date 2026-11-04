@@ -9,13 +9,17 @@ export function register(server: McpServer): void {
   server.registerTool(
     'tap',
     {
-      description: '셀렉터로 찾은 요소의 중앙을 탭하거나, x/y 좌표를 탭. 셀렉터 사용을 권장',
+      description: '셀렉터로 찾은 요소의 중앙을 탭하거나, x/y 좌표를 탭. 셀렉터 사용을 권장. 삭제·결제·로그아웃·전송 같은 위험 버튼은 allowDanger 없이는 누르지 않는다',
       inputSchema: {
         ...serialArg,
         ...selectorShape,
         x: z.number().optional(),
         y: z.number().optional(),
         long: z.boolean().optional().describe('길게 누르기'),
+        allowDanger: z
+          .boolean()
+          .optional()
+          .describe('삭제·결제·로그아웃·전송 같은 위험 버튼도 누른다. 사용자가 그 행동을 직접 요청했을 때만 true'),
       },
       annotations: acts,
     },
@@ -25,12 +29,26 @@ export function register(server: McpServer): void {
       let y = a.y;
       let what = `${x},${y}`;
       const sel = pickSelector(a);
+      let node: dl.ViewNode | undefined;
+      let tree: dl.ViewNode | undefined;
       if (hasSelector(sel)) {
-        const n = await resolveNode(dev, sel);
-        ({ x, y } = dl.center(n));
-        what = describeNode(n);
+        tree = (await dl.dumpHierarchy(dev)).root;
+        node = await resolveNode(dev, sel, tree);
+        ({ x, y } = dl.center(node));
+        what = describeNode(node);
       }
       if (x === undefined || y === undefined) throw new Error('셀렉터나 x/y 중 하나가 필요합니다');
+      if (!a.allowDanger) {
+        // 셀렉터로 찾은 요소와, 그 좌표에서 실제로 반응할 요소(라벨만 있는 글자를 골랐을 때 그 부모 버튼) 둘 다 본다
+        tree ??= (await dl.dumpHierarchy(dev)).root;
+        const hit = dl.clickableAt(tree, x, y);
+        const risky = (node && dl.riskyLabelOf(node)) || (hit && dl.riskyLabelOf(hit));
+        if (risky) {
+          throw new Error(
+            `위험해 보이는 버튼("${risky}")이라 누르지 않았습니다. 사용자가 이 행동을 직접 요청했다면 allowDanger: true 로 다시 호출하세요`,
+          );
+        }
+      }
       if (a.long) await dl.longPress(dev, x, y);
       else await dl.tap(dev, x, y);
       // 녹화: 셀렉터로 눌렀으면 셀렉터를, 아니면 좌표를 남긴다 (셀렉터 쪽이 해상도·레이아웃 변화에 강하다)
