@@ -220,7 +220,9 @@ pnpm dist                               # installer for the current OS → apps/
 packages/core     adb engine (device, input, capture, view hierarchy, screen graph & auto-exploration, library detection, scenarios)
 packages/mcp      MCP server (single-file bundle droidlens-mcp.mjs)
 android/agent     on-device agent APK (Instrumentation + HTTP)
-android/sdk       app SDK (network, prefs, DB, events), sdk-noop, sample
+android/sdk       app SDK (network, prefs, DB, events)
+android/sdk-noop  no-op SDK for release builds
+android/sample    sample app
 apps/desktop      Electron + React
 agents/           Claude Code agent definitions
 ```

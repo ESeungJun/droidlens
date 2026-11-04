@@ -1,0 +1,328 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>DroidLens 구현도 · droidlens</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable.min.css">
+<style>
+:root{--bg:#fbfaf8;--panel:#fff;--text:#1f2328;--muted:#656d76;--line:#e6e3de;--accent:#3b5bdb;--accent-soft:#edf2ff;--code:#f4f2ee;--th:#f4f2ee}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#15171a;--panel:#1c1f23;--text:#e6e6e3;--muted:#9aa1a9;--line:#2e3238;--accent:#91a7ff;--accent-soft:#232a45;--code:#23262b;--th:#23262b}}
+:root[data-theme="dark"]{--bg:#15171a;--panel:#1c1f23;--text:#e6e6e3;--muted:#9aa1a9;--line:#2e3238;--accent:#91a7ff;--accent-soft:#232a45;--code:#23262b;--th:#23262b}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{margin:0;background:var(--bg);color:var(--text);font:16px/1.75 Pretendard,-apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo",sans-serif;word-break:keep-all;overflow-wrap:anywhere}
+.layout{display:grid;grid-template-columns:240px minmax(0,1fr) 220px;gap:40px;max-width:1280px;margin:0 auto;padding:32px 24px}
+nav.docs,aside.toc{position:sticky;top:24px;align-self:start;max-height:calc(100vh - 48px);overflow:auto;font-size:14px}
+nav.docs .project{font-weight:700;font-size:15px;margin-bottom:12px}
+nav.docs a,aside.toc a{display:block;color:var(--muted);text-decoration:none;padding:5px 10px;border-radius:8px}
+nav.docs a:hover,aside.toc a:hover{color:var(--text);background:var(--accent-soft)}
+nav.docs a.on{color:var(--accent);background:var(--accent-soft);font-weight:600}
+aside.toc .label{color:var(--muted);font-size:12px;font-weight:600;letter-spacing:.04em;margin:0 10px 6px}
+aside.toc a.d3{padding-left:22px;font-size:13px}
+main{min-width:0}
+.meta{display:flex;justify-content:space-between;align-items:center;color:var(--muted);font-size:13px;border-bottom:1px solid var(--line);padding-bottom:12px;margin-bottom:8px}
+.meta button{font:inherit;color:var(--muted);background:none;border:1px solid var(--line);border-radius:999px;padding:3px 12px;cursor:pointer}
+h1{font-size:32px;line-height:1.3;margin:24px 0 16px}
+h2{font-size:23px;margin:48px 0 12px;padding-bottom:6px;border-bottom:1px solid var(--line)}
+h3{font-size:18px;margin:32px 0 8px}
+h1,h2,h3,h4{position:relative;scroll-margin-top:16px}
+.anchor{position:absolute;left:-1em;color:var(--muted);text-decoration:none;opacity:0}
+h1:hover .anchor,h2:hover .anchor,h3:hover .anchor,h4:hover .anchor{opacity:.6}
+a{color:var(--accent)}
+code{font:13.5px/1.6 "JetBrains Mono",ui-monospace,SFMono-Regular,Menlo,monospace;background:var(--code);padding:2px 6px;border-radius:5px}
+pre{background:var(--code);border:1px solid var(--line);border-radius:10px;padding:14px 16px;overflow:auto}
+pre code{background:none;padding:0}
+pre.mermaid{background:var(--panel);text-align:center}
+table{border-collapse:collapse;width:100%;margin:16px 0;font-size:14.5px;display:block;overflow-x:auto}
+th,td{border:1px solid var(--line);padding:8px 12px;text-align:left;vertical-align:top}
+th{background:var(--th);font-weight:600;white-space:nowrap}
+blockquote{margin:16px 0;padding:8px 16px;border-left:3px solid var(--accent);background:var(--accent-soft);border-radius:0 8px 8px 0;color:var(--text)}
+img{max-width:100%;border-radius:8px}
+hr{border:0;border-top:1px solid var(--line);margin:32px 0}
+li{margin:3px 0}
+@media (max-width:1100px){.layout{grid-template-columns:200px minmax(0,1fr)}aside.toc{display:none}}
+@media (max-width:760px){.layout{display:block;padding:16px}nav.docs{position:static;max-height:none;display:flex;flex-wrap:wrap;gap:4px;margin-bottom:8px}nav.docs .project{width:100%;margin:0}h1{font-size:26px}}
+@media print{nav.docs,aside.toc,.meta button{display:none}.layout{display:block}}
+</style>
+</head>
+<body>
+<div class="layout">
+<nav class="docs"><div class="project">droidlens</div><a href="%EA%B8%B0%ED%9A%8D%EC%84%9C.html">기획서</a><a href="%EC%84%A4%EA%B3%84%EC%84%9C.html">설계서</a><a href="%EA%B5%AC%ED%98%84%EB%8F%84.html" class="on">구현도</a><a href="%EA%B2%B0%EC%A0%95%EA%B8%B0%EB%A1%9D.html">결정기록</a><a href="ROADMAP.html">ROADMAP</a></nav>
+<main>
+<div class="meta"><span>마지막 수정 2026-11-05 · 원본 docs/구현도.md</span><button id="theme" type="button">테마</button></div>
+<h1 id="droidlens-구현도"><a class="anchor" href="#droidlens-구현도">#</a>DroidLens 구현도</h1>
+<blockquote>
+<p>2026-11-05에 v0.10.4 코드에서 복원했다.</p>
+</blockquote>
+<p>관련 문서: <a href="기획서.html">기획서</a> · <a href="설계서.html">설계서</a> · <a href="결정기록.html">결정기록</a> · <a href="ROADMAP.html">로드맵</a></p>
+<h2 id="폴더모듈-구조"><a class="anchor" href="#폴더모듈-구조">#</a>폴더·모듈 구조</h2>
+<pre><code>droidlens/
+├─ packages/
+│  ├─ core/src/              adb 엔진 (@droidlens/core)
+│  │  ├─ adb.ts              adb 찾기·실행, 기기 셸·forward
+│  │  ├─ device.ts           기기 정보, 입력, 스크린샷·녹화
+│  │  ├─ agent.ts            온디바이스 에이전트 설치·상주·재확인, 실패 시 uiautomator 대체
+│  │  ├─ hierarchy.ts        뷰 계층 파싱·셀렉터·통계·압축 텍스트
+│  │  ├─ graph.ts            화면 그래프 저장, 자동 탐색, 경로 재생, 위험 버튼 회피
+│  │  ├─ graph-model.ts      그래프 공용 계산(렌더러에서도 사용)
+│  │  ├─ libraries.ts        DEX type_ids 파싱 + 시그니처 103개로 라이브러리 탐지
+│  │  ├─ scenario.ts         시나리오 기록·HTML 리포트
+│  │  ├─ script.ts           YAML 스크립트 파싱·실행·회귀 실행
+│  │  ├─ visual.ts           스크린샷 비교
+│  │  ├─ perf.ts             시작 시간·CPU·메모리·프레임
+│  │  ├─ sdk.ts              SDK 소켓 찾기·포워딩·클라이언트
+│  │  ├─ scrcpy.ts           scrcpy 서버 실행·패킷 파싱
+│  │  ├─ emulator.ts         AVD 목록·실행·종료
+│  │  ├─ app.ts              앱 목록·정보·실행·딥링크
+│  │  ├─ http.ts             공용 로컬 HTTP 클라이언트
+│  │  ├─ image.ts            이미지 처리
+│  │  └─ workspace.ts        ~/.droidlens 경로·원자적 쓰기
+│  └─ mcp/src/               MCP 서버 (@droidlens/mcp → droidlens-mcp.mjs)
+│     ├─ index.ts            stdio 서버, `run` CLI(회귀 실행)
+│     ├─ common.ts           셀렉터 해석(resolveNode) 등 공용
+│     └─ tools/              device · screen · input · app · graph · sdk · scenario · perf (도구 50개)
+├─ apps/desktop/             Electron + React 데스크톱 (@droidlens/desktop)
+│  ├─ src/main/index.ts      메인 프로세스, IPC, 창, 프로세스 정리
+│  ├─ src/main/chat.ts       에이전트 대화창(claude -p 헤드리스, stream-json)
+│  ├─ src/main/updater.ts    업데이트 확인·다운로드·교체
+│  ├─ src/main/delta.ts      blockmap으로 달라진 조각만 받기
+│  ├─ src/preload/index.ts   렌더러에 여는 IPC 채널
+│  ├─ src/renderer/src/      App.tsx, MirrorCanvas(WebCodecs), ChatPanel, DeviceSetup, Updater, i18n, theme
+│  │  └─ tabs/               Screen · Inspector · Flow · Log · Network(+Mocks) · Perf · AppData · AppInfo · Libs · Scenarios(+Scripts) · Settings
+│  └─ electron-builder.yml   패키징(MCP 번들·에이전트 APK·scrcpy·에이전트 정의 포함)
+├─ android/
+│  ├─ agent/                 온디바이스 에이전트(AgentInstrumentation · AgentServer · ActivityTracker)
+│  ├─ sdk/                   앱 SDK(DroidLens · DroidLensInterceptor · InitProvider, internal/ 저장소·Redactor·SdkServer)
+│  ├─ sdk-noop/              release용 빈 구현
+│  └─ sample/                검증용 앱
+├─ agents/                   Claude Code 에이전트 정의(droidlens-verifier, droidlens-analyst)
+├─ examples/scripts/         예시 YAML
+├─ scripts/                  install.sh(한 줄 설치), fetch-scrcpy.mjs, blockmaps.mjs, 아이콘 도구
+├─ .githooks/commit-msg      Conventional Commits 검사
+├─ .github/workflows/        ci.yml · commit-convention.yml · release.yml
+└─ docs/                     ROADMAP.md, 이미지·영상, 이 문서들</code></pre>
+<p>핵심 파일 링크: <a href="../../packages/core/src/agent.ts">packages/core/src/agent.ts</a> · <a href="../../packages/core/src/graph.ts">packages/core/src/graph.ts</a> · <a href="../../packages/core/src/script.ts">packages/core/src/script.ts</a> · <a href="../../packages/mcp/src/index.ts">packages/mcp/src/index.ts</a> · <a href="../../apps/desktop/src/main/index.ts">apps/desktop/src/main/index.ts</a> · <a href="../../apps/desktop/src/main/updater.ts">apps/desktop/src/main/updater.ts</a> · <a href="../../android/sdk/src/main/java/io/github/eseungjun/droidlens/sdk/internal/Redactor.java">android/sdk/src/main/java/io/github/eseungjun/droidlens/sdk/internal/Redactor.java</a> · <a href="../../.github/workflows/release.yml">release.yml</a></p>
+<h2 id="주요-흐름"><a class="anchor" href="#주요-흐름">#</a>주요 흐름</h2>
+<h3 id="1-화면-읽기-에이전트-우선-실패-시-대체"><a class="anchor" href="#1-화면-읽기-에이전트-우선-실패-시-대체">#</a>1. 화면 읽기 (에이전트 우선, 실패 시 대체)</h3>
+<pre class="mermaid">sequenceDiagram
+  participant C as core/agent.ts
+  participant ADB as adb
+  participant AG as 에이전트 APK
+  participant UI as uiautomator
+  C-&gt;&gt;ADB: 에이전트 설치 확인, am instrument로 상주
+  C-&gt;&gt;ADB: forward localabstract:droidlens_agent
+  C-&gt;&gt;AG: HTTP 뷰 계층 요청
+  alt 에이전트 정상
+    AG--&gt;&gt;C: XML 0.03~0.3초
+  else 실패·미설치
+    C-&gt;&gt;UI: uiautomator dump
+    UI--&gt;&gt;C: XML 1.5~3초
+  end
+  C-&gt;&gt;C: hierarchy.ts 파싱·셀렉터</pre>
+<h3 id="2-에이전트-검증-스크립트-회귀"><a class="anchor" href="#2-에이전트-검증-스크립트-회귀">#</a>2. 에이전트 검증 → 스크립트 → 회귀</h3>
+<pre class="mermaid">sequenceDiagram
+  participant U as 사용자
+  participant CC as Claude Code (droidlens-verifier)
+  participant M as MCP 서버
+  participant CORE as core
+  participant D as 기기
+  U-&gt;&gt;CC: 자연어 시나리오
+  CC-&gt;&gt;M: scenario_start
+  loop 단계마다
+    CC-&gt;&gt;M: current_screen / tap / type_text / wait_for
+    M-&gt;&gt;CORE: 셀렉터 해석, 위험 버튼 검사
+    CORE-&gt;&gt;D: adb · 에이전트
+    CC-&gt;&gt;M: scenario_step (판정 + 스크린샷)
+  end
+  CC-&gt;&gt;M: scenario_finish
+  M-&gt;&gt;CORE: report.html 생성, 통과면 script.yaml 녹화
+  Note over CORE: ~/.droidlens/scenarios, scripts
+  U-&gt;&gt;M: droidlens-mcp.mjs run 폴더 (CI)
+  M--&gt;&gt;U: 실패 시 종료 코드 1</pre>
+<h3 id="3-자동-탐색"><a class="anchor" href="#3-자동-탐색">#</a>3. 자동 탐색</h3>
+<pre class="mermaid">flowchart TD
+  S[&quot;시작 화면 (CLEAR_TASK 실행)&quot;] --&gt; R[&quot;뷰 계층 읽기 → 구조 시그니처&quot;]
+  R --&gt; N{&quot;새 화면?&quot;}
+  N -- &quot;예&quot; --&gt; SAVE[&quot;그래프에 노드 추가 + 스크린샷&quot;]
+  N -- &quot;아니오&quot; --&gt; PICK
+  SAVE --&gt; PICK[&quot;클릭 후보 고르기&quot;]
+  PICK --&gt; DG{&quot;위험 라벨?&lt;br/&gt;결제·삭제·로그아웃·전송&quot;}
+  DG -- &quot;예&quot; --&gt; SKIP[&quot;건너뜀&quot;]
+  DG -- &quot;아니오&quot; --&gt; RE[&quot;누르기 직전에 같은 버튼 다시 찾기&quot;]
+  RE --&gt; TAP[&quot;탭 → 안정 대기&quot;]
+  TAP --&gt; E[&quot;엣지 기록&quot;]
+  E --&gt; D{&quot;최대 깊이 또는 500번?&quot;}
+  D -- &quot;아니오&quot; --&gt; R
+  D -- &quot;예&quot; --&gt; BACK[&quot;뒤로 → 원래 화면인지 확인&quot;]
+  SKIP --&gt; PICK</pre>
+<h3 id="4-업데이트"><a class="anchor" href="#4-업데이트">#</a>4. 업데이트</h3>
+<pre class="mermaid">flowchart LR
+  A[&quot;시작 + 6시간마다&lt;br/&gt;GitHub 최신 릴리스&quot;] --&gt; B{&quot;새 버전?&quot;}
+  B -- &quot;예&quot; --&gt; C[&quot;상단 바 ⬆ 업데이트&quot;]
+  C --&gt; D{&quot;이전 파일 + blockmap 있고&lt;br/&gt;받을 양 60% 이하?&quot;}
+  D -- &quot;예&quot; --&gt; E[&quot;HTTP Range로 달라진 조각만&quot;]
+  D -- &quot;아니오&quot; --&gt; F[&quot;전체 다운로드&quot;]
+  E --&gt; G[&quot;SHA256SUMS 확인&quot;]
+  F --&gt; G
+  G --&gt; H[&quot;OS별 교체 후 재시작&quot;]</pre>
+<h2 id="빌드실행배포"><a class="anchor" href="#빌드실행배포">#</a>빌드·실행·배포</h2>
+<pre><code class="lang-bash">pnpm install          # .githooks 커밋 훅도 설정
+pnpm build            # core + mcp
+pnpm dev              # 데스크톱 앱 개발 모드 (scrcpy 서버도 받음)
+pnpm build:agent      # 에이전트 APK (JDK 17 + Android SDK)
+pnpm dist             # 현재 OS용 설치 파일 → apps/desktop/release/
+pnpm mcp              # MCP 서버 직접 실행
+pnpm typecheck</code></pre>
+<ul>
+<li>UI 확인: <code>DROIDLENS_OPEN=&quot;tab=..&amp;pkg=..&quot; DROIDLENS_SNAPSHOT=&lt;png&gt;</code>로 자체 캡처(프로젝트 메모리). 띄운 개발 빌드는 반드시 끈다.</li>
+<li>에이전트를 끄려면 <code>DROIDLENS_AGENT=0</code>.</li>
+<li>CI(<code>ci.yml</code>): master·develop push와 PR에서 빌드, 에이전트·SDK·샘플 APK, 데스크톱 타입 검사·빌드.</li>
+<li>커밋 규칙(<code>commit-convention.yml</code>): push된 커밋과 PR 제목이 Conventional Commits인지 검사.</li>
+<li>릴리스(<code>release.yml</code>): <code>v*</code> 태그 푸시 → macOS(서명·공증)·Windows·Linux 빌드 → 설치 파일, zip, blockmap, <code>droidlens-mcp.mjs</code>, 에이전트 APK, SHA256SUMS를 Releases에 올림.</li>
+<li>브랜치(git flow, README): <code>develop</code>에서 <code>feature/…</code>(실제로는 <code>feat/…</code>·<code>fix/…</code>) → develop PR, <code>release/&lt;버전&gt;</code> → master, <code>hotfix/&lt;버전&gt;</code> → master, 이후 master를 develop에 병합. 문서만 바꿀 때는 <code>docs/&lt;이름&gt;</code>.</li>
+</ul>
+<h2 id="버전릴리스-현황"><a class="anchor" href="#버전릴리스-현황">#</a>버전·릴리스 현황</h2>
+<table>
+<thead>
+<tr>
+<th>태그</th>
+<th>날짜</th>
+<th>주요 내용</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>v0.1.0</td>
+<td>2026-10-14</td>
+<td>adb 코어, MCP 도구 28개, 데스크톱, 에이전트 2종, 온디바이스 에이전트 APK, 세 OS 설치 파일</td>
+</tr>
+<tr>
+<td>v0.2.0</td>
+<td>2026-10-14</td>
+<td>선택형 SDK(네트워크·Prefs·DB·이벤트), JitPack</td>
+</tr>
+<tr>
+<td>v0.3.0</td>
+<td>2026-10-14</td>
+<td>scrcpy 고프레임 미러링</td>
+</tr>
+<tr>
+<td>v0.4.0</td>
+<td>2026-10-14</td>
+<td>보안·구조 리뷰 반영, YAML 스크립트·회귀 실행</td>
+</tr>
+<tr>
+<td>v0.4.1</td>
+<td>2026-10-14</td>
+<td>앱 안 에이전트 대화창</td>
+</tr>
+<tr>
+<td>v0.4.2</td>
+<td>2026-10-14</td>
+<td>앱 안 자동 업데이트</td>
+</tr>
+<tr>
+<td>v0.4.3</td>
+<td>2026-10-14</td>
+<td>macOS 업데이트 로그</td>
+</tr>
+<tr>
+<td>v0.4.4</td>
+<td>2026-10-14</td>
+<td>git flow 전환(main → master·develop) 뒤 첫 릴리스 브랜치, 아이콘 교체, README 영어·한국어 분리</td>
+</tr>
+<tr>
+<td>v0.5.0</td>
+<td>2026-10-14</td>
+<td>다국어, 뷰 계층·흐름 개선, 기기 연결 도우미, SDK 민감 정보 가리기, 임시 서명, 한 줄 설치</td>
+</tr>
+<tr>
+<td>v0.5.1</td>
+<td>2026-10-14</td>
+<td>핫픽스: GitHub API 한도 대응</td>
+</tr>
+<tr>
+<td>v0.5.2</td>
+<td>2026-10-15</td>
+<td>업데이트 뒤 테스트 환경 변수 차단, Windows claude 인자</td>
+</tr>
+<tr>
+<td>v0.6.0</td>
+<td>2026-10-15</td>
+<td>앱별 화면 지도 누적, 지정 동작 탐색</td>
+</tr>
+<tr>
+<td>v0.7.0</td>
+<td>2026-10-15</td>
+<td>AVD 실행·종료, 탭 앱 화면 구분</td>
+</tr>
+<tr>
+<td>v0.8.0</td>
+<td>2026-10-16</td>
+<td>라이트·다크 테마</td>
+</tr>
+<tr>
+<td>v0.8.1~0.8.3</td>
+<td>2026-10-21~22</td>
+<td>흐름 기록·다중 디스플레이·WebView 탐색 수정</td>
+</tr>
+<tr>
+<td>v0.8.4</td>
+<td>2026-10-22</td>
+<td>macOS Developer ID 서명 + 공증</td>
+</tr>
+<tr>
+<td>v0.9.0</td>
+<td>2026-10-30</td>
+<td>버그·성능·보안 일괄 수정, 에이전트 버전 4</td>
+</tr>
+<tr>
+<td>v0.10.0</td>
+<td>2026-10-30</td>
+<td>성능 지표, 네트워크 목, 스크린샷 비교</td>
+</tr>
+<tr>
+<td>v0.10.1</td>
+<td>2026-10-30</td>
+<td>탭을 대분류·소분류로</td>
+</tr>
+<tr>
+<td>v0.10.2</td>
+<td>2026-10-30</td>
+<td>조각 업데이트, 흐름 카드 되돌리기</td>
+</tr>
+<tr>
+<td>v0.10.3</td>
+<td>2026-10-30</td>
+<td>설정을 &#39;설정&#39; 탭으로</td>
+</tr>
+<tr>
+<td>v0.10.4</td>
+<td>2026-11-04</td>
+<td>MCP <code>tap</code>이 위험 버튼을 기본으로 누르지 않게</td>
+</tr>
+</tbody></table>
+<h2 id="앞으로-할-일"><a class="anchor" href="#앞으로-할-일">#</a>앞으로 할 일</h2>
+<p><a href="ROADMAP.html">ROADMAP</a>의 미완료 항목이 기준이다.</p>
+<ul>
+<li>scrcpy 컨트롤 소켓·오디오</li>
+<li>SDK: DataStore, Compose recomposition</li>
+<li>자동 탐색: 스크롤 영역, 입력 폼 더미 값, 로그인 프리셋</li>
+<li>결과 대시보드, 스크립트 매개변수</li>
+<li>버전 간 비교(라이브러리·화면 그래프, REA 연동)</li>
+</ul>
+
+</main>
+<aside class="toc"><div class="label">이 문서</div><a class="d2" href="#폴더모듈-구조">폴더·모듈 구조</a><a class="d2" href="#주요-흐름">주요 흐름</a><a class="d3" href="#1-화면-읽기-에이전트-우선-실패-시-대체">1. 화면 읽기 (에이전트 우선, 실패 시 대체)</a><a class="d3" href="#2-에이전트-검증-스크립트-회귀">2. 에이전트 검증 → 스크립트 → 회귀</a><a class="d3" href="#3-자동-탐색">3. 자동 탐색</a><a class="d3" href="#4-업데이트">4. 업데이트</a><a class="d2" href="#빌드실행배포">빌드·실행·배포</a><a class="d2" href="#버전릴리스-현황">버전·릴리스 현황</a><a class="d2" href="#앞으로-할-일">앞으로 할 일</a></aside>
+</div>
+<script>
+(function(){var r=document.documentElement,k='docs-theme';try{var s=localStorage.getItem(k);if(s)r.dataset.theme=s}catch(e){}
+document.getElementById('theme').onclick=function(){var d=r.dataset.theme||(matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light');r.dataset.theme=d==='dark'?'light':'dark';try{localStorage.setItem(k,r.dataset.theme)}catch(e){}location.reload()};})();
+</script>
+<script type="module">
+import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11.4.1/dist/mermaid.esm.min.mjs';
+const r=document.documentElement;const dark=r.dataset.theme?r.dataset.theme==='dark':matchMedia('(prefers-color-scheme: dark)').matches;
+mermaid.initialize({startOnLoad:true,theme:dark?'dark':'default',fontFamily:'Pretendard, sans-serif'});
+</script>
+</body>
+</html>

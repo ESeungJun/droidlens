@@ -1,0 +1,188 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>DroidLens 기획서 · droidlens</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable.min.css">
+<style>
+:root{--bg:#fbfaf8;--panel:#fff;--text:#1f2328;--muted:#656d76;--line:#e6e3de;--accent:#3b5bdb;--accent-soft:#edf2ff;--code:#f4f2ee;--th:#f4f2ee}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#15171a;--panel:#1c1f23;--text:#e6e6e3;--muted:#9aa1a9;--line:#2e3238;--accent:#91a7ff;--accent-soft:#232a45;--code:#23262b;--th:#23262b}}
+:root[data-theme="dark"]{--bg:#15171a;--panel:#1c1f23;--text:#e6e6e3;--muted:#9aa1a9;--line:#2e3238;--accent:#91a7ff;--accent-soft:#232a45;--code:#23262b;--th:#23262b}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{margin:0;background:var(--bg);color:var(--text);font:16px/1.75 Pretendard,-apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo",sans-serif;word-break:keep-all;overflow-wrap:anywhere}
+.layout{display:grid;grid-template-columns:240px minmax(0,1fr) 220px;gap:40px;max-width:1280px;margin:0 auto;padding:32px 24px}
+nav.docs,aside.toc{position:sticky;top:24px;align-self:start;max-height:calc(100vh - 48px);overflow:auto;font-size:14px}
+nav.docs .project{font-weight:700;font-size:15px;margin-bottom:12px}
+nav.docs a,aside.toc a{display:block;color:var(--muted);text-decoration:none;padding:5px 10px;border-radius:8px}
+nav.docs a:hover,aside.toc a:hover{color:var(--text);background:var(--accent-soft)}
+nav.docs a.on{color:var(--accent);background:var(--accent-soft);font-weight:600}
+aside.toc .label{color:var(--muted);font-size:12px;font-weight:600;letter-spacing:.04em;margin:0 10px 6px}
+aside.toc a.d3{padding-left:22px;font-size:13px}
+main{min-width:0}
+.meta{display:flex;justify-content:space-between;align-items:center;color:var(--muted);font-size:13px;border-bottom:1px solid var(--line);padding-bottom:12px;margin-bottom:8px}
+.meta button{font:inherit;color:var(--muted);background:none;border:1px solid var(--line);border-radius:999px;padding:3px 12px;cursor:pointer}
+h1{font-size:32px;line-height:1.3;margin:24px 0 16px}
+h2{font-size:23px;margin:48px 0 12px;padding-bottom:6px;border-bottom:1px solid var(--line)}
+h3{font-size:18px;margin:32px 0 8px}
+h1,h2,h3,h4{position:relative;scroll-margin-top:16px}
+.anchor{position:absolute;left:-1em;color:var(--muted);text-decoration:none;opacity:0}
+h1:hover .anchor,h2:hover .anchor,h3:hover .anchor,h4:hover .anchor{opacity:.6}
+a{color:var(--accent)}
+code{font:13.5px/1.6 "JetBrains Mono",ui-monospace,SFMono-Regular,Menlo,monospace;background:var(--code);padding:2px 6px;border-radius:5px}
+pre{background:var(--code);border:1px solid var(--line);border-radius:10px;padding:14px 16px;overflow:auto}
+pre code{background:none;padding:0}
+pre.mermaid{background:var(--panel);text-align:center}
+table{border-collapse:collapse;width:100%;margin:16px 0;font-size:14.5px;display:block;overflow-x:auto}
+th,td{border:1px solid var(--line);padding:8px 12px;text-align:left;vertical-align:top}
+th{background:var(--th);font-weight:600;white-space:nowrap}
+blockquote{margin:16px 0;padding:8px 16px;border-left:3px solid var(--accent);background:var(--accent-soft);border-radius:0 8px 8px 0;color:var(--text)}
+img{max-width:100%;border-radius:8px}
+hr{border:0;border-top:1px solid var(--line);margin:32px 0}
+li{margin:3px 0}
+@media (max-width:1100px){.layout{grid-template-columns:200px minmax(0,1fr)}aside.toc{display:none}}
+@media (max-width:760px){.layout{display:block;padding:16px}nav.docs{position:static;max-height:none;display:flex;flex-wrap:wrap;gap:4px;margin-bottom:8px}nav.docs .project{width:100%;margin:0}h1{font-size:26px}}
+@media print{nav.docs,aside.toc,.meta button{display:none}.layout{display:block}}
+</style>
+</head>
+<body>
+<div class="layout">
+<nav class="docs"><div class="project">droidlens</div><a href="%EA%B8%B0%ED%9A%8D%EC%84%9C.html" class="on">기획서</a><a href="%EC%84%A4%EA%B3%84%EC%84%9C.html">설계서</a><a href="%EA%B5%AC%ED%98%84%EB%8F%84.html">구현도</a><a href="%EA%B2%B0%EC%A0%95%EA%B8%B0%EB%A1%9D.html">결정기록</a><a href="ROADMAP.html">ROADMAP</a></nav>
+<main>
+<div class="meta"><span>마지막 수정 2026-11-05 · 원본 docs/기획서.md</span><button id="theme" type="button">테마</button></div>
+<h1 id="droidlens-기획서"><a class="anchor" href="#droidlens-기획서">#</a>DroidLens 기획서</h1>
+<blockquote>
+<p>이 문서는 2026-11-05에 이미 구현·배포된 코드(v0.10.4), README, <a href="ROADMAP.html">ROADMAP</a>, git 히스토리, 개발 글(<code>dev-post/03-droidlens/post.md</code>)을 보고 거꾸로 정리했다. 구현된 기능을 사용자가 요구한 기능으로 본다.</p>
+</blockquote>
+<p>관련 문서: <a href="설계서.html">설계서</a> · <a href="구현도.html">구현도</a> · <a href="결정기록.html">결정기록</a> · <a href="ROADMAP.html">로드맵</a></p>
+<h2 id="한-줄-소개"><a class="anchor" href="#한-줄-소개">#</a>한 줄 소개</h2>
+<p>Android 앱을 들여다보는 데스크톱 렌즈. SDK 없이 adb만으로 어떤 앱이든 화면·뷰 계층·화면 흐름·라이브러리를 보고, Claude Code 에이전트가 MCP로 기기를 직접 조작해 검증까지 한다.</p>
+<h2 id="왜-만들었나"><a class="anchor" href="#왜-만들었나">#</a>왜 만들었나</h2>
+<ul>
+<li>Meta의 Flipper가 2025년에 아카이브됐다. 앱 안에 SDK를 붙여 네트워크·DB·뷰 계층을 데스크톱에서 보던 도구였다.</li>
+<li>Flipper는 SDK를 붙여야 해서 남의 앱은 못 보고, 내 앱도 release 빌드는 못 봤다(개발 글).</li>
+<li>Claude Code로 개발을 거의 다 하다 보니 에이전트가 기기를 직접 보고 검증할 수 있으면 좋겠다고 봤다(개발 글).</li>
+</ul>
+<h2 id="누가-쓰나"><a class="anchor" href="#누가-쓰나">#</a>누가 쓰나</h2>
+<ul>
+<li>Android 개발자: 내 앱 디버깅(네트워크·DB·Prefs), 남의 앱 구조 분석.</li>
+<li>QA·검증 담당: 말로 시나리오를 시키고, 통과한 흐름을 회귀 테스트로 쌓는다.</li>
+<li>Claude Code 사용자: <code>droidlens-verifier</code>·<code>droidlens-analyst</code> 에이전트와 MCP 도구.</li>
+<li>Android 개발자가 아닌 사람도 시작할 수 있어야 한다(기기 연결 도우미, 한 줄 설치).</li>
+</ul>
+<h2 id="목표-개발-글의-네-가지-기준"><a class="anchor" href="#목표-개발-글의-네-가지-기준">#</a>목표 (개발 글의 네 가지 기준)</h2>
+<ol>
+<li>SDK 없이 어떤 앱이든 볼 수 있을 것</li>
+<li>사람이 아니라 에이전트가 직접 쓰고 검증할 수 있을 것</li>
+<li>안드로이드 개발자가 아니어도 시작할 수 있을 것</li>
+<li>혼자서도 계속 굴러갈 것(릴리스만 올리면 설치·업데이트가 알아서)</li>
+</ol>
+<h2 id="핵심-시나리오"><a class="anchor" href="#핵심-시나리오">#</a>핵심 시나리오</h2>
+<ol>
+<li><strong>남의 앱 분석</strong>: 기기 연결 → 앱 선택 → 라이브러리 탭에서 쓰는 라이브러리·난독화 여부 확인 → 뷰 계층 3D로 레이아웃 구조 확인 → 화면 흐름에서 자동 탐색으로 화면 지도 만들기.</li>
+<li><strong>내 앱 디버깅</strong>: debug 빌드에 SDK 추가 → 네트워크 탭에서 요청·응답 확인, 목 규칙으로 실패 상황 재현 → 앱 데이터 탭에서 Prefs·DB 편집.</li>
+<li><strong>에이전트 검증</strong>: Claude Code에 &quot;로그인하고 설정에서 다크 모드 켜지는지 확인해줘&quot; → <code>droidlens-verifier</code>가 기기를 조작하며 단계별 판정 → HTML 리포트 + 통과하면 YAML 스크립트 자동 저장.</li>
+<li><strong>회귀 실행</strong>: 저장된 스크립트 폴더를 데스크톱·MCP <code>suite_run</code>·CLI(<code>droidlens-mcp.mjs run</code>)로 다시 돌림 → 실패하면 종료 코드 1(CI용).</li>
+<li><strong>첫 사용</strong>: 기기가 없으면 기기 연결 도우미가 에뮬레이터 설치(Claude Code에 맡기는 프롬프트 포함)·실기기 연결을 안내.</li>
+</ol>
+<h2 id="기능-목록"><a class="anchor" href="#기능-목록">#</a>기능 목록</h2>
+<h3 id="구현됨"><a class="anchor" href="#구현됨">#</a>구현됨</h3>
+<p><strong>화면</strong></p>
+<ul>
+<li>기기 화면: scrcpy 스트림 + WebCodecs 미러링(최대 60fps) 또는 스냅샷 모드, 탭·스와이프·롱프레스·하드웨어 키·텍스트 입력, 스크린샷, 녹화(최대 180초)</li>
+<li>뷰 계층: 스크린샷 ↔ 트리 양방향 선택, 속성·셀렉터, 깊이별 노드 수, Compose 추정, 3D 깊이 분해도</li>
+<li>화면 흐름: 앱별 화면 지도 누적(자동 탐색·직접 조작·시나리오 실행), 위험 버튼(결제·삭제·로그아웃·전송) 회피, 지정 동작으로 흐름 탐색, 경로 강조, 기록된 경로로 자동 이동, 지도 내보내기·가져오기</li>
+</ul>
+<p><strong>진단</strong></p>
+<ul>
+<li>로그: 실시간 logcat(앱 PID 필터·레벨·검색), 최근 크래시</li>
+<li>네트워크(SDK): OkHttp 요청·응답, cURL 복사, 네트워크 목(응답·연결 실패·지연)</li>
+<li>성능: CPU·메모리(PSS)·초당 프레임, 버벅인 프레임 비율, 앱 시작 시간(콜드·다시 열기, 중앙값)</li>
+</ul>
+<p><strong>앱</strong></p>
+<ul>
+<li>앱 데이터(SDK): SharedPreferences 조회·편집, SQLite/Room 브라우저와 SQL(쓰기는 명시 허용 시), 커스텀 이벤트</li>
+<li>앱 정보: 버전·SDK·권한·Activity, 실행·재시작·종료, 딥링크</li>
+<li>라이브러리: APK의 DEX·네이티브 lib로 라이브러리·프레임워크 탐지(시그니처 103개), 난독화 추정</li>
+</ul>
+<p><strong>테스트</strong></p>
+<ul>
+<li>시나리오 검증 리포트(단계별 스크린샷·판정), 리포트 삭제·묶기</li>
+<li>YAML 스크립트: 작성·실행·전체 회귀 실행, assert 11종(<code>visible</code>·<code>notVisible</code>·<code>text</code>·<code>activity</code>·<code>package</code>·<code>network</code>·<code>pref</code>·<code>db</code>·<code>event</code>·<code>perf</code>·<code>noCrash</code>), <code>startup</code>, 스크린샷 비교(<code>matchScreenshot</code>)</li>
+<li>에이전트 검증이 통과하면 조작·검사를 스크립트로 자동 녹화</li>
+</ul>
+<p><strong>연동·설정</strong></p>
+<ul>
+<li>내장 MCP 서버(도구 50개), 설정 탭에서 <code>claude mcp add --scope user</code> 원클릭 등록, 에이전트 2종 설치</li>
+<li>앱 안 에이전트 대화창(이 컴퓨터의 Claude Code 로그인 사용, API 키 불필요)</li>
+<li>온디바이스 에이전트 APK 자동 설치·실행(상단 바에서 켜고 끄기)</li>
+<li>가상 기기(AVD) 목록·실행·종료, 기기 연결 도우미</li>
+<li>한국어·영어, 라이트·다크 테마</li>
+<li>한 줄 설치 스크립트(macOS·Linux), 앱 안 업데이트(달라진 조각만 받기)</li>
+</ul>
+<h3 id="나중-roadmap의-미완료-항목"><a class="anchor" href="#나중-roadmap의-미완료-항목">#</a>나중 (<a href="ROADMAP.html">ROADMAP</a>의 미완료 항목)</h3>
+<ul>
+<li>scrcpy 컨트롤 소켓으로 입력 지연 단축, 오디오</li>
+<li>SDK: DataStore, Compose 트리 상세(recomposition)</li>
+<li>자동 탐색 개선: 스크롤 영역 탐색, 입력 폼 더미 값, 로그인 시나리오 프리셋 후 탐색</li>
+<li>결과 대시보드(실행 이력·성공률 추이), 스크립트 매개변수 주입</li>
+<li>버전 간 비교: 라이브러리 diff, 화면 그래프 diff, REA 연동</li>
+</ul>
+<h3 id="범위-밖"><a class="anchor" href="#범위-밖">#</a>범위 밖</h3>
+<table>
+<thead>
+<tr>
+<th>항목</th>
+<th>이유</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>타사 앱의 네트워크·DB·Prefs</td>
+<td>앱 내부 정보라 SDK를 넣은 debug 빌드에서만 볼 수 있다(README 알려진 한계)</td>
+</tr>
+<tr>
+<td>OkHttp가 아닌 네트워크 스택</td>
+<td>인스펙터가 OkHttp 인터셉터 기반이다</td>
+</tr>
+<tr>
+<td>iOS</td>
+<td>Android(adb) 전용 도구다</td>
+</tr>
+<tr>
+<td>WebView·Flutter·게임 엔진 화면의 정밀 분석</td>
+<td>접근성 노드가 적다(README 알려진 한계)</td>
+</tr>
+<tr>
+<td>Appium 등과 동시 사용</td>
+<td>UiAutomation을 하나만 잡을 수 있다. 에이전트를 끄면 된다</td>
+</tr>
+</tbody></table>
+<h2 id="지원-플랫폼과-배포-채널"><a class="anchor" href="#지원-플랫폼과-배포-채널">#</a>지원 플랫폼과 배포 채널</h2>
+<ul>
+<li>데스크톱: macOS(arm64·x64), Windows(x64·arm64), Linux(x86_64 AppImage)</li>
+<li>기기: Android 실기기·에뮬레이터(USB 디버깅). 에이전트 APK minSdk 24, SDK minSdk 21</li>
+<li>배포: GitHub Releases(공개 저장소 <code>ESeungJun/droidlens</code>), 한 줄 설치 스크립트, 앱 안 업데이트</li>
+<li>SDK: JitPack(<code>com.github.ESeungJun.droidlens:sdk</code> / <code>sdk-noop</code>)</li>
+<li>MCP 단독 파일: Releases의 <code>droidlens-mcp.mjs</code>(Node 20+)</li>
+</ul>
+<h2 id="완료성공-기준"><a class="anchor" href="#완료성공-기준">#</a>완료·성공 기준</h2>
+<ul>
+<li>SDK 없이 기기에 깔린 아무 앱에서 화면·뷰 계층·흐름·라이브러리를 볼 수 있다.</li>
+<li>에이전트가 MCP 도구만으로 시나리오를 검증하고 리포트·스크립트를 남긴다.</li>
+<li>저장된 스크립트를 CLI로 돌려 CI에서 성공·실패를 종료 코드로 받는다.</li>
+<li>위험 버튼은 자동 탐색과 MCP <code>tap</code> 모두 기본으로 누르지 않는다.</li>
+<li>릴리스 태그만 푸시하면 세 OS 설치 파일이 올라가고, 설치된 앱이 스스로 업데이트한다.</li>
+</ul>
+<p>참고 수치(개발 글, v0.5.1 시점): 첫 커밋부터 v0.5.1까지 하루, 커밋 88개, PR 24개, 릴리스 10개, 코드 약 11,800줄, MCP 도구 43개. 현재(v0.10.4) MCP 도구는 50개(코드의 <code>registerTool</code> 수).</p>
+
+</main>
+<aside class="toc"><div class="label">이 문서</div><a class="d2" href="#한-줄-소개">한 줄 소개</a><a class="d2" href="#왜-만들었나">왜 만들었나</a><a class="d2" href="#누가-쓰나">누가 쓰나</a><a class="d2" href="#목표-개발-글의-네-가지-기준">목표 (개발 글의 네 가지 기준)</a><a class="d2" href="#핵심-시나리오">핵심 시나리오</a><a class="d2" href="#기능-목록">기능 목록</a><a class="d3" href="#구현됨">구현됨</a><a class="d3" href="#나중-roadmap의-미완료-항목">나중 (ROADMAP의 미완료 항목)</a><a class="d3" href="#범위-밖">범위 밖</a><a class="d2" href="#지원-플랫폼과-배포-채널">지원 플랫폼과 배포 채널</a><a class="d2" href="#완료성공-기준">완료·성공 기준</a></aside>
+</div>
+<script>
+(function(){var r=document.documentElement,k='docs-theme';try{var s=localStorage.getItem(k);if(s)r.dataset.theme=s}catch(e){}
+document.getElementById('theme').onclick=function(){var d=r.dataset.theme||(matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light');r.dataset.theme=d==='dark'?'light':'dark';try{localStorage.setItem(k,r.dataset.theme)}catch(e){}location.reload()};})();
+</script>
+
+</body>
+</html>
