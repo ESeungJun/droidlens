@@ -69,7 +69,7 @@ li{margin:3px 0}
 <ul>
 <li><strong>무엇을 정했나</strong>: Instrumentation + UiAutomation을 붙잡고 HTTP로 답하는 13KB 에이전트를 자동 설치한다. 실패하면 uiautomator로 돌아간다.</li>
 <li><strong>후보</strong>: adb <code>uiautomator dump</code>·<code>dumpsys</code>만 쓰기 / 기기 안 에이전트.</li>
-<li><strong>고른 이유</strong>: 뷰 계층 1.5<del>3초, Activity 확인 1</del>7초는 화면을 수십 번 읽는 에이전트에게 너무 길다. 에이전트로 0.03~0.3초, 한글 입력도 된다(개발 글, <code>591a14e</code>).</li>
+<li><strong>고른 이유</strong>: 뷰 계층 1.5~3초, Activity 확인 1~7초는 화면을 수십 번 읽는 에이전트에게 너무 길다. 에이전트로 0.03~0.3초, 한글 입력도 된다(개발 글, <code>591a14e</code>).</li>
 <li><strong>누가 정했나</strong>: 이승준.</li>
 <li><strong>버린 시도</strong>: adb만 쓰는 방식(지금은 대체 경로로만 남음).</li>
 <li><strong>근거</strong>: <code>591a14e</code>, 개발 글 &quot;2. adb가 너무 느려서&quot;.</li>
