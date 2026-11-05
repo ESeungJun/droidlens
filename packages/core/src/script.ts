@@ -7,7 +7,7 @@ import { ensureAgent } from './agent.js';
 import { clearAppData, currentScreen, deviceTime, openDeepLink, recentCrashes, type CurrentScreen } from './app.js';
 import { KEYCODES, longPress, pressKey, replaceText, screenshot, swipeDirection, tap, typeText } from './device.js';
 import { FlowCollector, launchAndSettle } from './graph.js';
-import { center, dumpHierarchy, findNodes, type Selector, type ViewNode } from './hierarchy.js';
+import { center, clickableAt, dumpHierarchy, findNodes, riskyLabelOf, type Selector, type ViewNode } from './hierarchy.js';
 import { Scenario, type ScenarioData } from './scenario.js';
 import { sdkFor } from './sdk.js';
 import { kbToMb, measureStartup, MAX_STARTUP_RUNS, perfSample, resetFrameStats } from './perf.js';
@@ -289,6 +289,11 @@ export interface ScriptRunOptions {
   sourcePath?: string;
   /** 지나간 화면과 연결을 앱의 화면 지도에 모은다 (기본 true, 에이전트가 있을 때만) */
   collectFlow?: boolean;
+  /**
+   * 누르기 직전에 그 좌표에서 실제로 반응할 요소를 찾아 위험 라벨(삭제·결제·로그아웃·전송 등)이면 그 단계를 실패시킨다.
+   * MCP 처럼 에이전트가 스크립트를 쓰고 돌리는 경로에서 켠다. 사람이 데스크톱·CLI 에서 돌릴 때는 끈다 (기본 false)
+   */
+  guardDanger?: boolean;
 }
 
 export interface RunResult {
@@ -546,7 +551,7 @@ export async function runScript(dev: DeviceAdb, script: Script, opts: ScriptRunO
     }
     opts.onStep?.({ index: i, total, title, status: 'running' });
     try {
-      const detail = await runStep(dev, app, step, defaultTimeout, ctx, flow, opts.signal, out);
+      const detail = await runStep(dev, app, step, defaultTimeout, ctx, flow, opts.signal, out, opts.guardDanger);
       const seen = (await flow?.observe())?.screen;
       if (detail === 'skip') {
         skipped++;
@@ -580,6 +585,20 @@ export async function runScript(dev: DeviceAdb, script: Script, opts: ScriptRunO
   return { verdict, passed, failed, skipped, durationMs: Date.now() - t0, report, scenario: scenario.data };
 }
 
+/**
+ * 누를 좌표에서 실제로 반응할 요소(와 셀렉터로 찾은 요소)의 라벨을 보고 위험하면 단계를 실패시킨다.
+ * MCP tap 도구와 같은 검사다. 검사가 '어떤 경로로 눌렀나'가 아니라 '무엇이 눌리나'를 따라가게 한다
+ */
+async function refuseRiskyTap(dev: DeviceAdb, x: number, y: number, node?: ViewNode): Promise<void> {
+  const hit = clickableAt((await dumpHierarchy(dev)).root, x, y);
+  const risky = (node && riskyLabelOf(node)) || (hit && riskyLabelOf(hit));
+  if (risky) {
+    throw new StepFailure(
+      `위험해 보이는 버튼("${risky}")이라 누르지 않았습니다. 사용자가 이 행동을 직접 요청했다면 allowDanger: true 로 다시 실행하세요`,
+    );
+  }
+}
+
 async function runStep(
   dev: DeviceAdb,
   app: string,
@@ -589,6 +608,7 @@ async function runStep(
   flow?: FlowCollector,
   signal?: AbortSignal,
   out: StepOutput = {},
+  guardDanger = false,
 ): Promise<string> {
   if ('tap' in step || 'longPress' in step) {
     const t = 'tap' in step ? step.tap : step.longPress;
@@ -598,6 +618,7 @@ async function runStep(
       throw new StepFailure(`요소를 찾지 못했습니다 (${t.timeout ?? defaultTimeout}ms): ${selText(t)}`);
     }
     const { x, y } = center(n);
+    if (guardDanger) await refuseRiskyTap(dev, x, y, n);
     flow?.note({ type: 'tap' in step ? 'tap' : 'longpress', x, y });
     if ('tap' in step) await tap(dev, x, y);
     else await longPress(dev, x, y);
@@ -605,6 +626,7 @@ async function runStep(
     return `${n.className.split('.').pop()} "${n.text || n.contentDesc}" @${Math.round(x)},${Math.round(y)}`;
   }
   if ('tapAt' in step) {
+    if (guardDanger) await refuseRiskyTap(dev, step.tapAt.x, step.tapAt.y);
     flow?.note({ type: 'tap', ...step.tapAt });
     await tap(dev, step.tapAt.x, step.tapAt.y);
     await settle(dev);
