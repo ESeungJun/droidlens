@@ -83,6 +83,13 @@ const assertionSchema = z
       '{"perf":{"maxMemoryMb":300,"maxJankPercent":10}}',
   );
 
+const allowDangerArg = {
+  allowDanger: z
+    .boolean()
+    .optional()
+    .describe('삭제·결제·로그아웃·전송 같은 위험 버튼 단계도 누른다. 사용자가 그 행동을 직접 요청했을 때만 true'),
+};
+
 export function register(server: McpServer): void {
   let scenario: dl.Scenario | undefined;
   let since = Date.now();
@@ -274,17 +281,20 @@ export function register(server: McpServer): void {
   server.registerTool(
     'script_run',
     {
-      description: '스크립트를 기기에서 실행하고 단계별 판정과 HTML 리포트를 돌려준다. 회귀 테스트·재현에 사용',
-      inputSchema: { ...serialArg, script: z.string().describe('이름 또는 경로') },
+      description:
+        '스크립트를 기기에서 실행하고 단계별 판정과 HTML 리포트를 돌려준다. 회귀 테스트·재현에 사용. ' +
+        '삭제·결제·로그아웃·전송 같은 위험 버튼을 누르는 단계는 allowDanger 없이는 누르지 않고 실패로 남긴다',
+      inputSchema: { ...serialArg, script: z.string().describe('이름 또는 경로'), ...allowDangerArg },
       annotations: acts,
     },
-    async ({ serial, script }, extra) => {
+    async ({ serial, script, allowDanger }, extra) => {
       const dev = await device(serial);
       const p = await scriptPath(script, true);
       const lines: string[] = [];
       const r = await dl.runScript(dev, await dl.loadScript(p), {
         sourcePath: p,
         signal: extra.signal,
+        guardDanger: !allowDanger,
         onStep: (e) => {
           if (e.status !== 'running') lines.push(`${e.index + 1}/${e.total} ${e.status.toUpperCase()} ${e.title}${e.detail && e.status === 'fail' ? `\n    ${e.detail.replace(/\n/g, '\n    ')}` : ''}`);
         },
@@ -297,13 +307,13 @@ export function register(server: McpServer): void {
     'suite_run',
     {
       description: '폴더 안의 모든 스크립트(*.yaml)를 차례로 실행하는 회귀 테스트. path를 생략하면 ~/.droidlens/scripts. ' +
-        '그 폴더나 MCP 서버를 띄운 프로젝트 폴더 안만 실행할 수 있다',
-      inputSchema: { ...serialArg, path: z.string().optional() },
+        '그 폴더나 MCP 서버를 띄운 프로젝트 폴더 안만 실행할 수 있다. 위험 버튼 단계는 script_run 과 같이 allowDanger 없이는 누르지 않는다',
+      inputSchema: { ...serialArg, path: z.string().optional(), ...allowDangerArg },
       annotations: acts,
     },
-    async ({ serial, path }, extra) => {
+    async ({ serial, path, allowDanger }, extra) => {
       const dev = await device(serial);
-      const r = await dl.runSuite(dev, await suitePath(path), { signal: extra.signal });
+      const r = await dl.runSuite(dev, await suitePath(path), { signal: extra.signal, guardDanger: !allowDanger });
       const rows = r.results.map((x) =>
         x.error
           ? `✗ ${x.name}: ${x.error.split('\n')[0]}`
