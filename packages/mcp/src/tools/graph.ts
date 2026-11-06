@@ -1,7 +1,7 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import * as dl from '@droidlens/core';
-import { device, text, json, serialArg, selectorShape, pickSelector, readOnly, acts, hasSelector, resolveNode } from '../common.js';
+import { device, text, json, serialArg, selectorShape, pickSelector, readOnly, acts, hasSelector, resolveNode, logAction } from '../common.js';
 
 export function register(server: McpServer): void {
   // ---------- 화면 그래프 ----------
@@ -57,6 +57,7 @@ export function register(server: McpServer): void {
         ga = { type: 'swipe', x1, y1, x2, y2, direction };
       }
       const r = await dl.recordTransition(dev, graph, ga, before);
+      logAction(`${dl.actionLabel(ga)} → ${r.to.label} (화면 지도에 기록)`);
       return text(`${r.from.label} --[${dl.actionLabel(ga)}]--> ${r.to.label}${r.to.visits === 1 ? ' (새 화면)' : ''}\n화면 ${graph.nodes.size}개 · 전이 ${graph.edges.size}개`);
     },
   );
@@ -127,6 +128,7 @@ export function register(server: McpServer): void {
     async ({ serial, packageName, maxSteps, maxDepth, avoid, relaunch, startScreen, only, allowDanger }, extra) => {
       const dev = await device(serial);
       const log: string[] = [];
+      // 탐색은 중간까지 실제로 누르고 다니므로 실패해도 조작 로그를 남긴다
       const r = await dl.explore(dev, {
         packageName,
         maxSteps,
@@ -139,7 +141,11 @@ export function register(server: McpServer): void {
         // 클라이언트가 도구 호출을 취소하면 탐색도 멈춘다
         signal: extra.signal,
         onProgress: (e) => log.push(`#${e.step} ${e.message}`),
+      }).catch((e: Error) => {
+        logAction(`자동 탐색 중단: ${e.message.split('\n')[0]}`);
+        throw e;
       });
+      logAction(`자동 탐색 ${r.steps}스텝 (화면 ${r.graph.nodes.length}개 · 전이 ${r.graph.edges.length}개)`);
       return text(
         [
           `화면 ${r.graph.nodes.length}개, 전이 ${r.graph.edges.length}개, ${r.steps}스텝`,
@@ -162,7 +168,11 @@ export function register(server: McpServer): void {
     async ({ serial, packageName, screen }) => {
       const dev = await device(serial);
       const g = await dl.ScreenGraph.open(packageName);
-      const r = await dl.navigateTo(dev, g, screen);
+      const r = await dl.navigateTo(dev, g, screen).catch((e: Error) => {
+        logAction(`화면 이동 실패 → ${g.nodes.get(screen)?.label ?? screen}: ${e.message.split('\n')[0]}`);
+        throw e;
+      });
+      logAction(`화면 이동 → ${g.nodes.get(screen)?.label ?? screen}${r.moved && r.path?.length ? ` (${r.path.map((e) => dl.actionLabel(e.action)).join(' → ')})` : ''}`);
       const route = r.moved && r.path?.length ? `\n경로: ${r.path.map((e) => dl.actionLabel(e.action)).join(' → ')}` : '';
       return text(`${r.moved ? '도착' : '이미 그 화면'}: ${g.nodes.get(screen)?.label ?? screen}${route}`);
     },

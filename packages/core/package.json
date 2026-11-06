@@ -12,6 +12,10 @@
     "./graph-model": {
       "types": "./dist/graph-model.d.ts",
       "default": "./dist/graph-model.js"
+    },
+    "./scenario-view": {
+      "types": "./dist/scenario-view.d.ts",
+      "default": "./dist/scenario-view.js"
     }
   },
   "scripts": {

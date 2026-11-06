@@ -1,7 +1,7 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import * as dl from '@droidlens/core';
-import { device, hasSelector, resolveNode, recordStep, cleanSelector, text, serialArg, selectorShape, pickSelector, describeNode, readOnly, acts } from '../common.js';
+import { device, hasSelector, resolveNode, recordStep, logAction, nodeLabel, recorder, cleanSelector, text, serialArg, selectorShape, pickSelector, describeNode, readOnly, acts } from '../common.js';
 
 export function register(server: McpServer): void {
   // ---------- 조작 ----------
@@ -57,6 +57,7 @@ export function register(server: McpServer): void {
         target
           ? ((a.long ? { longPress: target } : { tap: target }) as dl.ScriptStep)
           : { tapAt: { x: Math.round(x), y: Math.round(y) } },
+        `${a.long ? '길게 누름' : '탭'} ${node ? nodeLabel(node) : `좌표 (${Math.round(x)}, ${Math.round(y)})`}${a.allowDanger ? ' · 위험 버튼 허용' : ''}`,
       );
       return text(`${a.long ? 'long-pressed' : 'tapped'}: ${what}`);
     },
@@ -81,11 +82,12 @@ export function register(server: McpServer): void {
       const dev = await device(a.serial);
       if (a.direction) {
         await dl.swipeDirection(dev, a.direction, a.durationMs);
-        recordStep({ swipe: a.direction });
+        recordStep({ swipe: a.direction }, `스와이프 ${({ up: '위로', down: '아래로', left: '왼쪽으로', right: '오른쪽으로' } as Record<string, string>)[a.direction] ?? a.direction}`);
         return text(`swiped ${a.direction}`);
       }
       if ([a.x1, a.y1, a.x2, a.y2].some((v) => v === undefined)) throw new Error('direction 또는 x1,y1,x2,y2가 필요합니다');
       await dl.swipe(dev, a.x1!, a.y1!, a.x2!, a.y2!, a.durationMs);
+      logAction(`스와이프 (${a.x1}, ${a.y1}) → (${a.x2}, ${a.y2})`);
       return text('swiped');
     },
   );
@@ -100,24 +102,35 @@ export function register(server: McpServer): void {
     async (a) => {
       const dev = await device(a.serial);
       const sel = pickSelector(a);
+      let into: dl.ViewNode | undefined;
       if (hasSelector(sel)) {
-        const { x, y } = dl.center(await resolveNode(dev, sel));
+        into = await resolveNode(dev, sel);
+        const { x, y } = dl.center(into);
         await dl.tap(dev, x, y);
         await dl.sleep(300);
       }
-      if (a.clear) {
-        const agent = await dl.ensureAgent(dev);
-        if (agent) {
-          await dl.replaceText(dev, a.value);
-          recordStep({ type: { text: a.value, clear: true, ...(hasSelector(sel) ? { into: cleanSelector(sel) } : {}) } } as dl.ScriptStep);
-          return text(`replaced with ${a.value.length} chars`);
+      // 셀렉터로 칸을 탭한 뒤 입력이 실패해도 화면은 바뀌었으므로 그 탭을 조작 로그에 남긴다
+      try {
+        // 조작 로그에서 값을 보여도 되는지 판단하려면 실제로 글자를 받는 칸을 알아야 한다. 셀렉터가 입력칸을 감싼
+        // 레이아웃을 가리킬 수도 있어 입력칸이 아니면 포커스된 칸을 찾는다 (시나리오 기록 중일 때만)
+        const field = into && isTextField(into) ? into : recorder.active ? await focusedField(dev) : undefined;
+        if (a.clear) {
+          const agent = await dl.ensureAgent(dev);
+          if (agent) {
+            await dl.replaceText(dev, a.value);
+            recordStep({ type: { text: a.value, clear: true, ...(hasSelector(sel) ? { into: cleanSelector(sel) } : {}) } } as dl.ScriptStep, typedLabel(a.value, field, into, true));
+            return text(`replaced with ${a.value.length} chars`);
+          }
+          await dl.pressKey(dev, 123); // MOVE_END
+          await dev.shell(`input keyevent ${Array(60).fill(67).join(' ')}`);
         }
-        await dl.pressKey(dev, 123); // MOVE_END
-        await dev.shell(`input keyevent ${Array(60).fill(67).join(' ')}`);
+        await dl.typeText(dev, a.value);
+        recordStep({ type: { text: a.value, ...(hasSelector(sel) ? { into: cleanSelector(sel) } : {}) } } as dl.ScriptStep, typedLabel(a.value, field, into, !!a.clear));
+        return text(`typed ${a.value.length} chars`);
+      } catch (e) {
+        if (into && hasSelector(sel)) logAction(`탭 ${nodeLabel(into)} — 입력 실패: ${(e as Error).message.split('\n')[0]}`);
+        throw e;
       }
-      await dl.typeText(dev, a.value);
-      recordStep({ type: { text: a.value, ...(hasSelector(sel) ? { into: cleanSelector(sel) } : {}) } } as dl.ScriptStep);
-      return text(`typed ${a.value.length} chars`);
     },
   );
 
@@ -130,7 +143,7 @@ export function register(server: McpServer): void {
     },
     async ({ serial, key }) => {
       await dl.pressKey(await device(serial), key);
-      recordStep({ key });
+      recordStep({ key }, `키 ${key}`);
       return text(`pressed ${key}`);
     },
   );
@@ -147,11 +160,15 @@ export function register(server: McpServer): void {
       const sel = pickSelector(a);
       const deadline = Date.now() + (a.timeoutMs ?? 10_000);
       while (Date.now() < deadline) {
-        const h = await dl.dumpHierarchy(dev).catch(() => undefined);
+        // 조작 로그용 조회라 이미 떠 있는 에이전트로만 본다 (실패해도 느린 덤프로 넘어가지 않고 값을 가린다)
+  const h = await dl.quickDump(dev);
         if (h) {
           const found = dl.findNodes(h.root, sel);
           if (a.gone ? found.length === 0 : found.length > 0) {
-            recordStep({ wait: { ...cleanSelector(sel), ...(a.gone ? { gone: true } : {}), ...(a.timeoutMs ? { timeout: a.timeoutMs } : {}) } } as dl.ScriptStep);
+            recordStep(
+              { wait: { ...cleanSelector(sel), ...(a.gone ? { gone: true } : {}), ...(a.timeoutMs ? { timeout: a.timeoutMs } : {}) } } as dl.ScriptStep,
+              `기다림: ${dl.selectorLabel(sel)} ${a.gone ? '사라짐' : '나타남'}`,
+            );
             return text(a.gone ? '사라짐 확인' : `발견: ${describeNode(found[0])}`);
           }
         }
@@ -160,4 +177,32 @@ export function register(server: McpServer): void {
       throw new Error(`${a.timeoutMs ?? 10_000}ms 안에 ${a.gone ? '사라지지 않음' : '나타나지 않음'}: ${JSON.stringify(sel)}`);
     },
   );
+}
+
+/**
+ * 입력 조작 로그 문구. 리포트는 공유되므로 값은 기본으로 가리고, 대상 칸을 확인했고 그 칸이 비밀번호·인증·카드 칸이
+ * 아닐 때만 보여 준다 (스크립트 YAML 에는 재실행을 위해 그대로 남는다)
+ */
+function typedLabel(value: string, field: dl.ViewNode | undefined, target: dl.ViewNode | undefined, clear: boolean): string {
+  const names = [field, target].flatMap((n) => (n ? [n.resourceId, n.contentDesc, n.text] : [])).join(' ');
+  const plain = !!field && !field.password && !dl.isSecretName(names) && !dl.looksSecret(value);
+  const shown = plain ? `"${value}"` : `${dl.MASK} (${value.length}자)`;
+  const to = target ?? field;
+  return `입력 ${shown}${to ? ` → ${nodeLabel(to)}` : ''}${clear ? ' (기존 글자 지움)' : ''}`;
+}
+
+const isTextField = (n: dl.ViewNode) => /EditText|TextField|AutoComplete/i.test(n.className);
+
+/** 셀렉터 없이 입력할 때 받는 칸: 지금 포커스된 입력칸 (못 찾으면 undefined → 값은 가린다) */
+async function focusedField(dev: dl.DeviceAdb): Promise<dl.ViewNode | undefined> {
+  // 조작 로그용 조회라 이미 떠 있는 에이전트로만 본다 (실패해도 느린 덤프로 넘어가지 않고 값을 가린다)
+  const h = await dl.quickDump(dev);
+  if (!h) return undefined;
+  const stack = [h.root];
+  while (stack.length) {
+    const n = stack.pop()!;
+    if (n.focused && isTextField(n)) return n;
+    stack.push(...n.children);
+  }
+  return undefined;
 }
