@@ -22,6 +22,8 @@ jobs:
           cache: gradle
       - run: pnpm install --frozen-lockfile
       - run: pnpm build
+      # 순수 모듈(비밀값 가리기·리포트 표시 모델) 단위 테스트. 빌드 결과(dist)를 시험한다
+      - run: pnpm test
       - name: Build on-device agent APK
         working-directory: android
         shell: bash

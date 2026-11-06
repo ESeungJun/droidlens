@@ -9,6 +9,7 @@
     "dev": "pnpm build && pnpm fetch:scrcpy && pnpm --filter @droidlens/desktop dev",
     "mcp": "node packages/mcp/dist/index.js",
     "typecheck": "pnpm -r run typecheck",
+    "test": "pnpm -r --filter \"./packages/*\" --if-present run test",
     "dist": "pnpm build && pnpm build:agent && pnpm fetch:scrcpy && pnpm --filter @droidlens/desktop dist",
     "build:agent": "cd android && ./gradlew :agent:assembleRelease",
     "fetch:scrcpy": "node scripts/fetch-scrcpy.mjs"
