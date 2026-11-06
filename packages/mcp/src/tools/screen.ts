@@ -82,7 +82,7 @@ export function register(server: McpServer): void {
             ...(sels?.length ? { ignore: sels.map(cleanSelector) } : {}),
             ...(tolerance !== undefined ? { tolerance } : {}),
           },
-        });
+        }, `화면 비교 "${name}"`);
       }
       if (r.saved) return text(`${update ? '기준 이미지를 바꿨습니다' : '기준 이미지가 없어 지금 화면을 기준으로 저장했습니다'}: ${r.baseline}`);
       const d = r.diff!;

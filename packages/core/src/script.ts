@@ -3,12 +3,14 @@ import { basename, extname, join } from 'node:path';
 import YAML from 'yaml';
 import { z } from 'zod';
 import { DeviceAdb, sleep } from './adb.js';
-import { ensureAgent } from './agent.js';
+import { checkedAgent, ensureAgent } from './agent.js';
 import { clearAppData, currentScreen, deviceTime, openDeepLink, recentCrashes, type CurrentScreen } from './app.js';
 import { KEYCODES, longPress, pressKey, replaceText, screenshot, swipeDirection, tap, typeText } from './device.js';
 import { FlowCollector, launchAndSettle } from './graph.js';
 import { center, clickableAt, dumpHierarchy, findNodes, riskyLabelOf, type Selector, type ViewNode } from './hierarchy.js';
-import { Scenario, type ScenarioData } from './scenario.js';
+import { Scenario } from './scenario.js';
+import { MASK, redactUrl, redactValue } from './redact.js';
+import type { ScenarioAction, ScenarioData, ScenarioStep } from './scenario-view.js';
 import { sdkFor } from './sdk.js';
 import { kbToMb, measureStartup, MAX_STARTUP_RUNS, perfSample, resetFrameStats } from './perf.js';
 import { DEFAULT_MAX_DIFF_PERCENT, matchScreenshot } from './visual.js';
@@ -256,6 +258,45 @@ const selText = (s: Selector) =>
     .map(([k, v]) => `${k}=${JSON.stringify(v)}`)
     .join(' ');
 
+/** 셀렉터를 사람이 읽는 짧은 말로: "상점정보/후기" · #login_button · [설정] */
+export function selectorLabel(s: Selector): string {
+  if (s.text) return `"${s.text}"`;
+  if (s.textContains) return `"…${s.textContains}…"`;
+  if (s.desc) return `[${s.desc}]`;
+  if (s.descContains) return `[…${s.descContains}…]`;
+  if (s.id) return `#${s.id.split(':id/').pop()}`;
+  return s.className ?? '요소';
+}
+
+/** 검사 조건을 사람이 읽는 기대 문장으로 (리포트의 "기대" 칸) */
+export function describeAssertion(a: Assertion): string {
+  const parts: string[] = [];
+  if (a.visible) parts.push(`${selectorLabel(a.visible)} 보임`);
+  if (a.notVisible) parts.push(`${selectorLabel(a.notVisible)} 안 보임`);
+  if (a.text) parts.push(`${selectorLabel(a.text.of)} 글자 ${a.text.equals !== undefined ? `= "${a.text.equals}"` : `에 "${a.text.contains ?? ''}" 포함`}`);
+  if (a.activity) parts.push(`화면 ${a.activity}`);
+  if (a.package) parts.push(`앱 ${a.package}`);
+  if (a.network) parts.push(`요청 ${a.network.method ?? ''} ${a.network.url}${a.network.status ? ` → ${a.network.status}` : ''}`.replace('  ', ' '));
+  if (a.pref) parts.push(`설정 ${a.pref.file}.${a.pref.key} = ${redactValue(a.pref.key, JSON.stringify(a.pref.equals))}`);
+  if (a.db) parts.push(`DB ${a.db.sql} = ${JSON.stringify(a.db.equals)}`);
+  if (a.event) parts.push(`이벤트 ${a.event} 기록`);
+  if (a.perf) parts.push([a.perf.maxMemoryMb && `메모리 ${a.perf.maxMemoryMb}MB 이하`, a.perf.maxJankPercent !== undefined && `버벅임 ${a.perf.maxJankPercent}% 이하`].filter(Boolean).join(', '));
+  if (a.noCrash) parts.push('크래시 없음');
+  return parts.join(' · ') || '검사';
+}
+
+/** 준비 단계 설명 (리포트용): 무엇을 했는지만 남기고 Prefs 값·목 URL 의 쿼리 같은 값은 가린다 */
+function describeSetup(setup: Script['setup']): string | undefined {
+  if (!setup) return undefined;
+  const parts = [
+    setup.clearData && '앱 데이터 지움',
+    setup.restart !== false && '앱 재시작',
+    ...(setup.prefs ?? []).map((p) => `설정 ${p.file}.${p.key} = ${redactValue(p.key, String(p.value))}`),
+    ...(setup.mocks ?? []).map((m) => `네트워크 목 ${m.method ?? '*'} ${redactUrl(m.url)}`),
+  ];
+  return parts.filter(Boolean).join('\n') || undefined;
+}
+
 export function describeStep(step: ScriptStep): string {
   const [kind, arg] = Object.entries(step)[0] as [string, unknown];
   switch (kind) {
@@ -409,9 +450,10 @@ export async function evaluateAssertion(dev: DeviceAdb, app: string, a: Assertio
         const files = await (await sdkFor(dev, app)).prefs();
         const v = files.find((f) => f.name === a.pref!.file)?.entries[a.pref!.key];
         actual = v?.value;
-        return v && String(v.value) === String(a.pref!.equals) ? `${a.pref!.file}.${a.pref!.key} = ${v.value}` : undefined;
+        return v && String(v.value) === String(a.pref!.equals) ? `${a.pref!.file}.${a.pref!.key} = ${redactValue(a.pref!.key, String(v.value))}` : undefined;
       },
-      () => `기대: ${a.pref!.file}.${a.pref!.key} = ${a.pref!.equals} / 실제: ${actual}`,
+      // 근거·실패 문구는 리포트에 남으므로 값은 키 이름·모양에 따라 가린다
+      () => `기대: ${a.pref!.file}.${a.pref!.key} = ${redactValue(a.pref!.key, String(a.pref!.equals))} / 실제: ${redactValue(a.pref!.key, String(actual))}`,
     );
   }
   if (a.db) {
@@ -483,10 +525,28 @@ export async function runScript(dev: DeviceAdb, script: Script, opts: ScriptRunO
   /** 단계가 직접 만든 이미지 (스크린샷 비교의 차이 이미지). 있으면 새로 찍지 않고 이것을 남긴다 */
   const out: StepOutput = {};
   /** seen: 흐름 수집이 방금 확인한 화면 (있으면 다시 조회하지 않는다) */
-  const record = async (title: string, status: 'pass' | 'fail' | 'info' | 'skip', detail?: string, withShot = false, seen?: CurrentScreen) => {
-    const png = out.png ?? (withShot ? await screenshot(dev).catch(() => undefined) : undefined);
-    const scr = seen ?? (await currentScreen(dev).catch(() => undefined));
-    await scenario.step(title, status, { detail, png, screen: scr ? `${scr.packageName} ${scr.activity}` : undefined, baseline: out.baseline });
+  const record = async (
+    title: string,
+    status: 'pass' | 'fail' | 'info' | 'skip',
+    detail?: string,
+    withShot = false,
+    seen?: CurrentScreen,
+    extra: { actions?: ScenarioAction[]; check?: ScenarioStep['check'] } = {},
+  ) => {
+    // 통과한 검사는 요소가 나타난 직후라 화면이 아직 움직이는 중일 수 있다. 멈춘 뒤 찍는다 (실패는 실패한 그 순간을 남긴다)
+    if (!out.png && withShot && status === 'pass') await waitScreenSettled(dev);
+    const fresh = !out.png && withShot;
+    const png = out.png ?? (fresh ? await screenshot(dev).catch(() => undefined) : undefined);
+    // 새로 찍었으면 그 순간의 화면을 다시 읽는다 (seen 은 기다리기 전에 본 화면이라 다른 창이 그 뒤에 떴을 수 있다)
+    const scr = (fresh ? undefined : seen) ?? (await currentScreen(dev).catch(() => undefined));
+    await scenario.step(title, status, {
+      detail,
+      png,
+      screen: scr ? `${scr.packageName} ${scr.activity}` : undefined,
+      foreign: png ? foreignPackage(scr, app) : undefined,
+      ...extra,
+      baseline: out.baseline,
+    });
     out.png = undefined;
     out.baseline = undefined;
   };
@@ -532,7 +592,7 @@ export async function runScript(dev: DeviceAdb, script: Script, opts: ScriptRunO
     // 버벅인 프레임 비율 assert 가 준비 단계를 빼고 스크립트 단계만 보게 한다
     await resetFrameStats(dev, app).catch(() => undefined);
     const seen = await flow?.observe();
-    await record('준비: 앱 실행', 'info', script.setup ? JSON.stringify(script.setup) : undefined, shotAll, seen?.screen);
+    await record('준비: 앱 실행', 'info', describeSetup(script.setup), shotAll, seen?.screen);
   } catch (e) {
     await record('준비 실패', 'fail', (e as Error).message, true);
     const left = await removeMocks();
@@ -550,25 +610,40 @@ export async function runScript(dev: DeviceAdb, script: Script, opts: ScriptRunO
       break;
     }
     opts.onStep?.({ index: i, total, title, status: 'running' });
+    // 검사·스크린샷이 아닌 단계는 그 자체가 조작이라 조작 로그로도 남긴다
+    const isCheck = 'assert' in step || 'screenshot' in step || 'matchScreenshot' in step;
+    // 검사 단계는 판정 방식을, 그 밖(조작·스샷 찍기)은 조작 로그를 남긴다. 리포트는 공유되므로 입력값은 가린다
+    const reportTitle =
+      'type' in step
+        ? `type ${MASK} (${step.type.text.length}자)${step.type.into ? ` → ${selText(step.type.into)}` : ''}`
+        : 'deeplink' in step
+          ? `deeplink ${redactUrl(step.deeplink)}`
+          : 'assert' in step
+            ? describeAssertion(step.assert)
+            : title;
+    const check = 'assert' in step || 'matchScreenshot' in step;
+    const extra = (actual?: string) =>
+      check
+        ? { check: { by: 'assert' as const, ...('assert' in step ? { expect: describeAssertion(step.assert) } : {}), ...(actual ? { actual } : {}) } }
+        : { actions: [{ at: Date.now(), text: reportTitle }] };
     try {
       const detail = await runStep(dev, app, step, defaultTimeout, ctx, flow, opts.signal, out, opts.guardDanger);
       const seen = (await flow?.observe())?.screen;
       if (detail === 'skip') {
         skipped++;
-        await record(title, 'skip', '선택(optional) 요소가 없어 건너뜀', shotAll, seen);
+        await record(reportTitle, 'skip', '선택(optional) 요소가 없어 건너뜀', shotAll, seen, extra());
         opts.onStep?.({ index: i, total, title, status: 'skip' });
         continue;
       }
       passed++;
-      const isCheck = 'assert' in step || 'screenshot' in step;
-      await record(title, 'pass', detail, shotAll || isCheck, seen);
+      await record(reportTitle, 'pass', detail, shotAll || isCheck, seen, extra(detail || undefined));
       opts.onStep?.({ index: i, total, title, status: 'pass', detail });
     } catch (e) {
       // 조작 도중 실패하면 화면 상태를 알 수 없으므로 다음 관찰부터 지도에 새로 이어 붙인다
       flow?.forget();
       failed++;
       const msg = (e as Error).message;
-      await record(title, 'fail', msg, true);
+      await record(reportTitle, 'fail', msg, true, undefined, extra(/실제:\s*(.+)$/m.exec(msg)?.[1] ?? msg.split('\n')[0]));
       opts.onStep?.({ index: i, total, title, status: 'fail', detail: msg });
       if (!script.continueOnFail) {
         skipped += total - i - 1;
@@ -751,6 +826,22 @@ async function settle(dev: DeviceAdb): Promise<void> {
   const agent = await ensureAgent(dev);
   if (agent) await agent.waitIdle(250, 2500).catch(() => sleep(400));
   else await sleep(700);
+}
+
+/**
+ * 스크린샷 직전에 화면이 멈출 때까지 기다린다. settle 과 달리 에이전트를 새로 설치·실행하지 않는다
+ * (설치하면 Play 프로텍트 창이 떠서 그 창이 스크린샷에 찍힌다)
+ */
+export async function waitScreenSettled(dev: DeviceAdb): Promise<void> {
+  const agent = await checkedAgent(dev).catch(() => undefined);
+  if (agent) await agent.waitIdle(250, 2500).catch(() => sleep(400));
+  else await sleep(700);
+}
+
+/** 지금 앞 화면이 대상 앱이 아니면 그 패키지 이름 (런처로 나간 경우 포함). 같거나 모르면 undefined */
+export function foreignPackage(screen: CurrentScreen | undefined, app: string | undefined): string | undefined {
+  if (!screen?.packageName || !app || screen.packageName === app) return undefined;
+  return screen.packageName;
 }
 
 export interface SuiteResult {

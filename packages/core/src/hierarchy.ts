@@ -1,7 +1,7 @@
 import { createHash, randomBytes } from 'node:crypto';
 import { XMLParser } from 'fast-xml-parser';
 import { DeviceAdb, sleep } from './adb.js';
-import { isConnectionError, isTimeoutError, stopAgent, withAgent } from './agent.js';
+import { checkedAgent, isConnectionError, isTimeoutError, stopAgent, withAgent } from './agent.js';
 
 export type Bounds = [left: number, top: number, right: number, bottom: number];
 
@@ -111,6 +111,20 @@ const MAX_AGENT_DUMP_FAILURES = 3;
 const XML_MARK = '__DROIDLENS_XML__';
 
 const dumpByAgent = (dev: DeviceAdb) => withAgent(dev, async (a) => parseHierarchyXml(await a.hierarchyXml()));
+/**
+ * 이미 떠 있는 에이전트로만 덤프한다. 없거나 실패하면 undefined (느린 uiautomator 로 넘어가지 않고,
+ * 실패 횟수도 세지 않아 에이전트를 내리지 않는다). 조작 로그처럼 없어도 되는 조회에 쓴다
+ */
+export async function quickDump(dev: DeviceAdb): Promise<Hierarchy | undefined> {
+  const a = await checkedAgent(dev).catch(() => undefined);
+  if (!a) return undefined;
+  try {
+    return parseHierarchyXml(await a.hierarchyXml());
+  } catch {
+    return undefined;
+  }
+}
+
 /** 에이전트가 죽었거나 멈춘 실패 (응답이 온 오류와 달리 다시 보내도 나아지지 않는다) */
 const agentBroken = (e: unknown) => isConnectionError(e) || isTimeoutError(e);
 

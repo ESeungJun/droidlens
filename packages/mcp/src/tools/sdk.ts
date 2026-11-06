@@ -1,7 +1,7 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import * as dl from '@droidlens/core';
-import { device, text, json, serialArg, readOnly, acts, recorder } from '../common.js';
+import { device, text, json, serialArg, readOnly, acts, recorder, logAction } from '../common.js';
 
 export function register(server: McpServer): void {
   // ---------- 앱 SDK (네트워크 · 저장소 · 이벤트) ----------
@@ -94,6 +94,7 @@ export function register(server: McpServer): void {
     },
     async ({ serial, packageName, file, key, type, value }) => {
       await (await dl.sdkFor(await device(serial), packageName)).setPref(file, key, type, value);
+      logAction(`설정(Prefs) 변경 ${file}.${key} = ${dl.redactValue(key, value)}`);
       return text(`${file}.${key} = ${value} (${type})`);
     },
   );
@@ -103,6 +104,7 @@ export function register(server: McpServer): void {
     { description: 'SharedPreferences 키 삭제', inputSchema: { ...serialArg, ...pkgArg, file: z.string(), key: z.string() }, annotations: acts },
     async ({ serial, packageName, file, key }) => {
       await (await dl.sdkFor(await device(serial), packageName)).removePref(file, key);
+      logAction(`설정(Prefs) 삭제 ${file}.${key}`);
       return text(`removed ${file}.${key}`);
     },
   );
@@ -129,7 +131,11 @@ export function register(server: McpServer): void {
     },
     async ({ serial, packageName, db, sql, write }) => {
       const r = await (await dl.sdkFor(await device(serial), packageName)).query(db, sql, write);
-      if (r.changes !== undefined) return text(`${r.changes}행 변경`);
+      if (r.changes !== undefined) {
+        const shape = dl.redactSql(sql);
+        logAction(`DB 쓰기 ${db}: ${shape.length > 160 ? shape.slice(0, 160) + '…' : shape} (${r.changes}행 변경)`);
+        return text(`${r.changes}행 변경`);
+      }
       const rows = (r.rows ?? []).map((row) => row.map((v) => (v === null ? 'NULL' : String(v))).join(' | '));
       return text([(r.columns ?? []).join(' | '), ...rows, r.truncated ? (r.totalExact === false ? `… 500행 넘음, 500행만 표시` : `… 총 ${r.total}행 중 500행`) : `(${r.total}행)`].join('\n'));
     },
@@ -196,6 +202,7 @@ export function register(server: McpServer): void {
         if (saved.enabled === false) recorder.mocks.delete(saved.id);
         else recorder.mocks.set(saved.id, saved);
       }
+      logAction(`네트워크 목 설정: ${mockLine({ ...saved, url: dl.redactUrl(saved.url) })}`);
       return text(`저장했습니다: ${mockLine(saved)}`);
     },
   );
@@ -224,9 +231,12 @@ export function register(server: McpServer): void {
       }
       if (!id) {
         await c.clearMocks();
+        logAction('네트워크 목 모두 지움');
         return text('목 규칙을 모두 지웠습니다');
       }
-      return text((await c.removeMock(id)) ? `${id} 를 지웠습니다` : `${id} 규칙이 없습니다`);
+      const removed = await c.removeMock(id);
+      if (removed) logAction(`네트워크 목 지움 ${id}`);
+      return text(removed ? `${id} 를 지웠습니다` : `${id} 규칙이 없습니다`);
     },
   );
 }

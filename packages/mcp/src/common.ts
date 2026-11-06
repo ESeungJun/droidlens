@@ -91,10 +91,28 @@ export const recorder: {
   steps: dl.ScriptStep[];
   /** 녹화 중 켠 네트워크 목 (규칙 id → 규칙). 저장하는 스크립트의 setup.mocks 가 된다 */
   mocks: Map<string, dl.MockRule>;
-} = { active: false, steps: [], mocks: new Map() };
+  /** 직전 scenario_step 이후 한 조작 로그. 다음 단계에 붙고 비워진다 */
+  actions: dl.ScenarioAction[];
+} = { active: false, steps: [], mocks: new Map(), actions: [] };
 
-export function recordStep(step: dl.ScriptStep): void {
-  if (recorder.active) recorder.steps.push(step);
+/** 시나리오 진행 중이면 조작 로그를 남긴다 (스크립트로 녹화되지 않는 조작도 포함: 좌표 스와이프·앱 종료·목·Prefs 변경 등) */
+export function logAction(text: string): void {
+  if (recorder.active) recorder.actions.push({ at: Date.now(), text });
+}
+
+/** 스크립트 단계로 녹화하고 조작 로그도 남긴다. label 이 없으면 단계 설명을 쓴다 */
+export function recordStep(step: dl.ScriptStep, label?: string): void {
+  if (!recorder.active) return;
+  recorder.steps.push(step);
+  logAction(label ?? dl.describeStep(step));
+}
+
+/** 요소를 사람이 읽는 짧은 말로: "상점정보/후기" (#tab_store) */
+export function nodeLabel(n: dl.ViewNode): string {
+  const id = n.resourceId ? `#${n.resourceId.split(':id/').pop()}` : '';
+  const name = n.text ? `"${n.text}"` : n.contentDesc ? `[${n.contentDesc}]` : '';
+  if (name && id) return `${name} (${id})`;
+  return name || id || `${n.className.split('.').pop()} @${n.bounds.join(',')}`;
 }
 
 /** 셀렉터 인자에서 스크립트용 셀렉터만 추린다 (undefined 제거) */

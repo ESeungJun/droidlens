@@ -38,7 +38,10 @@ export function register(server: McpServer): void {
     },
     async ({ serial, packageName, cold, runs }) => {
       const r = await dl.measureStartup(await device(serial), packageName, { cold, runs });
-      recordStep({ startup: { ...(cold === false ? { cold } : {}), ...(runs ? { runs } : {}) } });
+      recordStep(
+        { startup: { ...(cold === false ? { cold } : {}), ...(runs ? { runs } : {}) } },
+        `시작 시간 측정 (${r.cold ? '콜드' : '다시 열기'} ${r.runs.length}회, 앱 재시작) → 중앙값 ${r.medianMs}ms`,
+      );
       return text(
         [
           `${r.cold ? '콜드' : '다시 열기'} 시작 ${r.runs.length}회: 중앙값 ${r.medianMs}ms (최소 ${r.minMs} · 최대 ${r.maxMs})`,
