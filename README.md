@@ -8,6 +8,7 @@ Inspect <b>any app</b> with just adb, no SDK required, and let Claude Code agent
 <p align="center"><a href="https://github.com/ESeungJun/droidlens/releases/latest"><b>⬇ Download the latest release</b></a></p>
 
 <p align="center"><b>English</b> · <a href="README.ko.md">한국어</a></p>
+<p align="center">📝 Story behind it: <a href="https://medium.com/@haul/38a63a512ed8">Medium</a> · <a href="https://velog.io/@haul/droidlens-flipper-alternative-in-a-day">velog (Korean)</a></p>
 
 <p align="center"><a href="docs/video/droidlens-demo.mp4"><img src="docs/images/demo.gif" width="100%" alt="DroidLens demo: mirroring, 3D view hierarchy, screen flow, library detection and Claude Code agents"></a><br>
 <sub>▶ <a href="docs/video/droidlens-demo.mp4">Watch the full-quality video (MP4, 28s)</a></sub></p>

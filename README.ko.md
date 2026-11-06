@@ -8,6 +8,7 @@ SDK 없이 adb만으로 <b>모든 앱</b>을 분석하고, Claude Code 에이전
 <p align="center"><a href="https://github.com/ESeungJun/droidlens/releases/latest"><b>⬇ 최신 버전 다운로드</b></a></p>
 
 <p align="center"><a href="README.md">English</a> · <b>한국어</b></p>
+<p align="center">📝 만든 이야기: <a href="https://velog.io/@haul/droidlens-flipper-alternative-in-a-day">velog</a></p>
 
 <p align="center"><a href="docs/video/droidlens-demo.mp4"><img src="docs/images/demo.gif" width="100%" alt="DroidLens 소개: 미러링, 3D 뷰 계층, 화면 흐름, 라이브러리 탐지, Claude Code 에이전트"></a><br>
 <sub>▶ <a href="docs/video/droidlens-demo.mp4">원본 화질 영상 보기 (MP4, 28초, 영어)</a></sub></p>
