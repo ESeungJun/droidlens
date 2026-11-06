@@ -122,7 +122,14 @@ export function register(server: McpServer): void {
       recorder.app = packageName;
       recorder.steps = [];
       recorder.mocks = new Map();
-      return text(`시나리오 시작: ${scenario.data.id}\n폴더: ${scenario.data.dir}${packageName ? '\n조작 녹화 중' : ''}`);
+      recorder.actions = [];
+      // 온디바이스 에이전트를 지금 띄워 둔다. 단계 도중에 처음 설치되면 Play 프로텍트 창이 앱을 가린 채 스크린샷에 찍힌다
+      await dl.ensureAgent(dev).catch(() => undefined);
+      const top = await dl.currentScreen(dev).catch(() => undefined);
+      const warn = dl.isBlockingPackage(top?.packageName)
+        ? `\n⚠ 시스템 창(${top!.packageName} ${top!.activity})이 화면을 가리고 있습니다. 기기에서 닫은 뒤 진행하세요 (그대로 두면 판정과 스크린샷이 이 창을 기준으로 남습니다)`
+        : '';
+      return text(`시나리오 시작: ${scenario.data.id}\n폴더: ${scenario.data.dir}${packageName ? '\n조작 녹화 중' : ''}${warn}`);
     },
   );
 
@@ -134,44 +141,72 @@ export function register(server: McpServer): void {
         'assert 없이 status로 직접 판정할 수도 있다: pass / fail / info(진행 기록) / skip.',
       inputSchema: {
         ...serialArg,
-        title: z.string().describe('무엇을 했고 무엇을 확인했는지'),
+        title: z.string().describe('이 단계에서 확인한 것 (예: "상점정보/후기 탭이 보임"). 한 조작은 자동으로 조작 로그에 남으니 제목에 다시 쓰지 않아도 된다'),
         status: z.enum(['pass', 'fail', 'info', 'skip']).optional().describe('assert가 없을 때 필수'),
         assert: assertionSchema.optional(),
         detail: z.string().optional().describe('기대값 vs 실제값, 근거'),
-        screenshot: z.boolean().optional().describe('기본 true'),
+        screenshot: z.boolean().optional().describe('기본 true. 판정(pass/fail) 단계는 근거가 되므로 끄지 않는다'),
+        corrects: z
+          .number()
+          .int()
+          .optional()
+          .describe('앞 단계의 판정을 바로잡을 때 그 단계 번호. 리포트에서 원래 단계에 합쳐 "정정"으로 보이고, 사람이 확인할 것에 올라간다'),
       },
       annotations: acts,
     },
-    async ({ serial, title, status, assert, detail, screenshot }) => {
+    async ({ serial, title, status, assert, detail, screenshot, corrects }) => {
       if (!scenario) throw new Error('먼저 scenario_start를 호출하세요');
+      if (corrects !== undefined && !scenario.data.steps.some((s) => s.index === corrects)) {
+        throw new Error(`바로잡을 ${corrects}단계가 없습니다 (지금까지 ${scenario.data.steps.length}단계)`);
+      }
       const dev = await device(serial);
       let finalStatus = status;
       let finalDetail = detail;
+      let check: dl.ScenarioStep['check'] = { by: 'agent' };
       if (assert) {
         const app = recorder.app ?? scenario.data.packageName;
         if (!app) throw new Error('assert를 쓰려면 scenario_start에 packageName이 필요합니다');
         const parsed = dl.stepSchema.parse({ assert });
         if (!('assert' in parsed)) throw new Error('assert 형식이 올바르지 않습니다');
+        check = { by: 'assert', expect: dl.describeAssertion(parsed.assert) };
         try {
           const evidence = await dl.evaluateAssertion(dev, app, parsed.assert, { since });
           finalStatus = 'pass';
           finalDetail = [detail, evidence].filter(Boolean).join('\n');
+          check.actual = evidence;
           // 통과한 검사만 녹화한다 (실패한 기대를 스크립트에 넣으면 회귀 테스트가 항상 실패한다)
           if (recorder.active) recorder.steps.push(parsed);
         } catch (e) {
           finalStatus = 'fail';
-          finalDetail = [detail, (e as Error).message].filter(Boolean).join('\n');
+          const msg = (e as Error).message;
+          finalDetail = [detail, msg].filter(Boolean).join('\n');
+          check.actual = /실제:\s*(.+)$/m.exec(msg)?.[1] ?? msg.split('\n')[0];
         }
       }
       if (!finalStatus) throw new Error('status 또는 assert가 필요합니다');
+      // 조작(tap 등)은 입력만 보내고 바로 끝나고, assert 는 요소가 나타나는 즉시 통과한다. 화면이 아직 움직이는 중이라
+      // 바로 찍으면 전환 중간이 찍히므로 멈출 때까지 기다린다. 실패한 검사는 실패한 그 순간을 남긴다
+      if (screenshot !== false && finalStatus !== 'fail') await dl.waitScreenSettled(dev);
       const png = screenshot === false ? undefined : await dl.screenshot(dev);
       const screen = await dl.currentScreen(dev, { fragments: true }).catch(() => undefined);
+      const foreign = png ? dl.foreignPackage(screen, recorder.app ?? scenario.data.packageName) : undefined;
+      // 직전 단계 이후 한 조작을 이 단계에 붙이고 비운다
+      const actions = recorder.actions;
+      recorder.actions = [];
       const s = await scenario.step(title, finalStatus, {
         detail: finalDetail,
         png,
+        foreign,
+        actions,
+        // info 도 check 를 남겨 새 기록임을 표시한다 (예전 기록처럼 제목을 "조작 → 확인" 으로 쪼개지 않게)
+        check,
+        corrects,
         screen: screen ? `${screen.activity}${screen.fragments.length ? ' / ' + screen.fragments.join(', ') : ''}` : undefined,
       });
-      return text(`step ${s.index} ${finalStatus}: ${title}${assert && finalDetail ? `\n${finalDetail}` : ''}`);
+      const foreignNote = foreign
+        ? `\n⚠ 스크린샷 순간 앞 화면이 대상 앱이 아닙니다: ${foreign}${dl.isBlockingPackage(foreign) ? ' (시스템 창이 가림 — 기기에서 닫고 이 단계를 다시 확인하세요)' : ''}`
+        : '';
+      return text(`step ${s.index} ${finalStatus}: ${title}${assert && finalDetail ? `\n${finalDetail}` : ''}${foreignNote}`);
     },
   );
 
@@ -191,7 +226,8 @@ export function register(server: McpServer): void {
     },
     async ({ verdict, summary, saveScript, scriptName }) => {
       if (!scenario) throw new Error('진행 중인 시나리오가 없습니다');
-      const html = await scenario.finish(verdict, summary);
+      const html = await scenario.finish(verdict, summary, recorder.actions);
+      recorder.actions = [];
       const d = scenario.data;
       scenario = undefined;
       const lines = [`리포트: ${html}`, `${d.steps.length}단계 · 실패 ${d.steps.filter((s) => s.status === 'fail').length} · 판정 ${verdict}`];

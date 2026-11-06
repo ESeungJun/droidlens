@@ -18,11 +18,21 @@ jobs:
         with:
           distribution: temurin
           java-version: 17
+          # Gradle 배포판(wrapper)과 의존성을 캐시한다. 매번 services.gradle.org 에서 받다가 504·시간 초과로 깨지던 것을 막는다
+          cache: gradle
       - run: pnpm install --frozen-lockfile
       - run: pnpm build
+      # 순수 모듈(비밀값 가리기·리포트 표시 모델) 단위 테스트. 빌드 결과(dist)를 시험한다
+      - run: pnpm test
       - name: Build on-device agent APK
         working-directory: android
         shell: bash
-        run: ./gradlew :agent:assembleRelease :sdk:assembleRelease :sdk-noop:assembleRelease :sample:assembleDebug --no-daemon
+        # 캐시가 없을 때 Gradle 배포판 다운로드가 일시적으로 실패하면 두 번까지 다시 시도한다
+        run: |
+          for i in 1 2 3; do
+            ./gradlew :agent:assembleRelease :sdk:assembleRelease :sdk-noop:assembleRelease :sample:assembleDebug --no-daemon && exit 0
+            echo "::warning::Gradle 실패 ($i/3), 다시 시도"; sleep $((i * 20))
+          done
+          exit 1
       - run: pnpm --filter @droidlens/desktop typecheck
       - run: pnpm --filter @droidlens/desktop build

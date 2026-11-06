@@ -9,30 +9,61 @@ const CAT_LABEL: Record<string, string> = {
   media: '미디어·카메라', debug: '디버그', security: '보안', map: '지도', push: '푸시', other: '기타',
 };
 
+/**
+ * 분석 결과와 진행 상태는 탭 밖(모듈)에 둔다. 탭은 고를 때만 그려지므로 컴포넌트 상태에 두면
+ * 분석 중에 다른 탭에 다녀왔을 때 진행 표시가 사라져 멈춘 것처럼 보이고, 다시 누르면 분석이 두 번 돈다
+ */
 const cache = new Map<string, ApkAnalysis>();
+const running = new Map<string, Promise<unknown>>();
+/** 분석 중인 앱별 진행 문구 */
+const progress = new Map<string, string>();
+const listeners = new Set<() => void>();
+const notify = () => listeners.forEach((f) => f());
+
+// 진행 문구는 탭이 닫혀 있어도 받아 둔다 (돌아왔을 때 지금 단계가 보이게)
+const offProgress = api.onProgress((p) => {
+  if (p.kind !== 'libs' || !p.pkg) return;
+  progress.set(p.pkg, p.message);
+  notify();
+});
+// 개발 중 모듈을 다시 불러올 때 구독이 겹치지 않게 푼다
+(import.meta as ImportMeta & { hot?: { dispose(cb: () => void): void } }).hot?.dispose(offProgress);
+
+function startAnalysis(serial: string, pkg: string, run: <T>(p: Promise<T>) => Promise<T | undefined>): void {
+  if (running.has(pkg)) return;
+  const job = run(api.analyzeLibraries(serial, pkg))
+    .then((res) => {
+      if (res) cache.set(pkg, res);
+    })
+    .finally(() => {
+      running.delete(pkg);
+      progress.delete(pkg);
+      notify();
+    });
+  running.set(pkg, job);
+  notify();
+}
 
 export function LibsTab() {
   const { serial, pkg, run } = useApp();
   const t = useT();
-  const [r, setR] = useState<ApkAnalysis | null>(null);
-  const [busy, setBusy] = useState(false);
-  const [msg, setMsg] = useState('');
+  const [, rerender] = useState(0);
 
-  useEffect(() => setR(pkg ? cache.get(pkg) ?? null : null), [pkg]);
-  useEffect(() => api.onProgress((p) => p.kind === 'libs' && setMsg(p.message)), []);
+  useEffect(() => {
+    const f = () => rerender((n) => n + 1);
+    listeners.add(f);
+    return () => {
+      listeners.delete(f);
+    };
+  }, []);
 
   if (!pkg) return <NeedPkg />;
 
-  const analyze = async () => {
-    if (!serial) return;
-    setBusy(true);
-    const res = await run(api.analyzeLibraries(serial, pkg));
-    setBusy(false);
-    setMsg('');
-    if (res) {
-      cache.set(pkg, res);
-      setR(res);
-    }
+  const r = cache.get(pkg) ?? null;
+  const busy = running.has(pkg);
+  const msg = progress.get(pkg) ?? '';
+  const analyze = () => {
+    if (serial) startAnalysis(serial, pkg, run);
   };
 
   const groups = new Map<string, ApkAnalysis['libraries']>();

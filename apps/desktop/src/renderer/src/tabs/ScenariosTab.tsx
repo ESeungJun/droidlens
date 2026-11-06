@@ -3,6 +3,7 @@ import { api, type ScenarioData } from '../api';
 import { useApp } from '../App';
 import { useT } from '../i18n';
 import { ScriptsPanel } from './ScriptsPanel';
+import { buildScenarioView, formatDuration, STATUS_LABEL, VERDICT_LABEL, type StepRow } from '@droidlens/core/scenario-view';
 
 function StepShot({ dir, file }: { dir: string; file: string }) {
   const [src, setSrc] = useState<string>();
@@ -122,6 +123,12 @@ function ReportsView() {
     await load();
   };
 
+  const listLine = (s: ScenarioData) => {
+    const v = buildScenarioView(s);
+    const base = t('{n}단계 · 실패 {fail}', { n: v.rows.length, fail: v.counts.fail });
+    return v.attention.length ? `${base} · ${t('확인할 것 {n}', { n: v.attention.length })}` : base;
+  };
+
   const item = (s: ScenarioData) => (
     <div key={s.id} className={`scen-item ${sel?.id === s.id ? 'sel' : ''}`} onClick={() => (picking ? setPicked((c) => toggle(c, [s.id], !c.has(s.id))) : setSel(s))}>
       {picking && <input type="checkbox" checked={picked.has(s.id)} readOnly style={{ marginTop: 3 }} />}
@@ -131,7 +138,7 @@ function ReportsView() {
           <span className={`v-${s.verdict ?? 'blocked'}`}>{s.verdict ? s.verdict.toUpperCase() : t('진행 중')}</span>
         </div>
         <div className="faint" style={{ fontSize: 11 }}>
-          {new Date(s.startedAt).toLocaleString()} · {t('{n}단계 · 실패 {fail}', { n: s.steps.length, fail: s.steps.filter((x) => x.status === 'fail').length })}
+          {new Date(s.startedAt).toLocaleString()} · {listLine(s)}
         </div>
       </div>
     </div>
@@ -224,27 +231,168 @@ function ReportsView() {
           <div className="muted" style={{ marginBottom: 10 }}>
             {[sel.packageName, sel.device].filter(Boolean).join(' · ')}
           </div>
-          {sel.goal && <p><b>{t('목표')}</b> {sel.goal}</p>}
-          {sel.summary && <p><b>{t('결론')}</b> {sel.summary}</p>}
-          {sel.steps.map((st) => (
-            <div className="step" key={st.index}>
-              <div>
-                <span className={`badge b-${st.status}`}>{st.status.toUpperCase()}</span>
-                <b>{st.index}. {st.title}</b>
-              </div>
-              {st.screen && <div className="faint mono" style={{ fontSize: 11, marginTop: 4 }}>{st.screen}</div>}
-              {st.detail && <pre>{st.detail}</pre>}
-              {st.screenshot && (
-                <div className="shot">
-                  <StepShot dir={sel.dir} file={st.screenshot} />
-                </div>
-              )}
-              {st.baseline && <AcceptBaseline dir={sel.dir} baseline={st.baseline} />}
-            </div>
-          ))}
+          <ScenarioDetail data={sel} />
         </div>
       ) : (
         <div className="empty">{t('시나리오를 선택하세요')}</div>
+      )}
+    </div>
+  );
+}
+
+const STATUS_TONE = { pass: 'pass', fail: 'fail', info: 'info', skip: 'mute' } as const;
+/** 화면 문구 (core 라벨과 같은 뜻이지만 다른 화면 문구와 번역 키가 겹치지 않게 따로 둔다) */
+const HOW_TEXT: Record<StepRow['how'], string> = { assert: '자동 검사', agent: '직접 판정', record: '진행 기록', action: '조작 실행' };
+/** 스샷 파일은 시나리오 폴더 바로 아래 step-NNN.png 만 연다 (scenario.json 이 바뀌어도 다른 파일을 열지 않게) */
+const SHOT_FILE = /^step-\d+(?:-actual)?\.png$/;
+
+function Shot({ dir, file, tag }: { dir: string; file: string; tag?: string }) {
+  const t = useT();
+  if (!SHOT_FILE.test(file)) return null;
+  return (
+    <button className="rv-shot" title={t('크게 보기')} onClick={() => api.openPath(`${dir}/${file}`)}>
+      <StepShot dir={dir} file={file} />
+      {tag && <span className="tag">{tag}</span>}
+    </button>
+  );
+}
+
+/** 시나리오 한 건의 결론 → 확인할 것 → 단계 (HTML 리포트와 같은 정리 규칙) */
+function ScenarioDetail({ data }: { data: ScenarioData }) {
+  const t = useT();
+  const v = useMemo(() => buildScenarioView(data), [data]);
+  const [onlyAttn, setOnlyAttn] = useState(false);
+  useEffect(() => setOnlyAttn(false), [data.id]);
+  const jump = (index: number) => {
+    setOnlyAttn(false);
+    requestAnimationFrame(() => document.getElementById(`rv-s${index}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' }));
+  };
+  const time = (at: number) => new Date(at).toLocaleTimeString();
+  return (
+    <div className="rv">
+      <div className="muted">{[data.device, data.packageName, formatDuration(v.durationMs)].filter(Boolean).join(' · ')}</div>
+      <section className="rv-verdict">
+        <div className="rv-top">
+          <span className={`rv-big ${v.verdict === 'pass' ? 'pass' : v.verdict === 'fail' ? 'fail' : 'warn'}`}>{t(VERDICT_LABEL[v.verdict])}</span>
+          {v.counts.corrected > 0 && <span className="rv-chip warn">{t('사람이 정정한 판정 {n}건 포함', { n: v.counts.corrected })}</span>}
+        </div>
+        {data.goal && <p className="rv-goal"><b>{t('목표')}</b> {data.goal}</p>}
+        {data.summary && <p>{data.summary}</p>}
+        {v.tally.length > 0 && (
+          <div className="rv-tally">
+            {v.tally.map((x) => (
+              <span key={x.key} className={`rv-chip ${x.tone}`}>{t(x.label)} <b>{x.count}</b></span>
+            ))}
+          </div>
+        )}
+      </section>
+      {v.attention.length > 0 ? (
+        <section className="rv-attn">
+          <b>{t('사람이 확인할 것 {n}건', { n: v.attention.length })}</b>
+          <ol>
+            {v.attention.map((a) => {
+              const why = a.reasons.map((x) => x.why).filter(Boolean).join(' ');
+              return (
+                <li key={a.index}>
+                  <button className="rv-link" onClick={() => jump(a.index)}>{t('{n}번째 단계', { n: a.no })} {a.title}</button> —{' '}
+                  {a.reasons.map((x) => t(x.label)).join(' · ')}
+                  {why && <span className="rv-why">{why}</span>}
+                </li>
+              );
+            })}
+          </ol>
+        </section>
+      ) : (
+        v.rows.length > 0 && data.finishedAt && <div className="rv-ok">{t('다시 볼 단계가 없습니다. 모든 단계가 기록대로 통과했습니다.')}</div>
+      )}
+      <div className="rv-filters">
+        <b>{t('단계 {n}개', { n: v.rows.length })}</b>
+        <div className="spacer" />
+        {v.attention.length > 0 && (
+          <>
+            <button className={`btn sm ${!onlyAttn ? 'primary' : ''}`} onClick={() => setOnlyAttn(false)}>{t('전체')}</button>
+            <button className={`btn sm ${onlyAttn ? 'primary' : ''}`} onClick={() => setOnlyAttn(true)}>{t('확인할 것만')}</button>
+          </>
+        )}
+      </div>
+      {v.rows
+        .filter((r) => !onlyAttn || r.reasons.length > 0)
+        .map((r) => {
+          const hasShot = !!(r.screenshot || r.corrected?.screenshot);
+          const quiet = r.how === 'action' || r.how === 'record';
+          return (
+            <article key={r.index} id={`rv-s${r.index}`} className={`rv-step ${r.tone} ${!hasShot && quiet ? 'wide' : ''}`}>
+              <div className="rv-body">
+                <div className="rv-head">
+                  <span className="rv-no">{r.no}</span>
+                  {r.corrected ? (
+                    <span className="rv-chip warn">{t('정정 → {s}', { s: t(STATUS_LABEL[r.status]) })}</span>
+                  ) : (
+                    <span className={`rv-chip ${STATUS_TONE[r.status]}`}>{t(STATUS_LABEL[r.status])}</span>
+                  )}
+                  {r.foreign && <span className="rv-chip fail">{t('다른 앱 화면')}</span>}
+                  <span className="rv-how">
+                    {r.corrected ? t('{how} 후 정정', { how: t(HOW_TEXT[r.how]) }) : t(HOW_TEXT[r.how])} · {time(r.at)}
+                  </span>
+                </div>
+                <dl className="rv-kv">
+                  {r.actions.length > 0 && (
+                    <>
+                      <dt>{t('조작 내역')}</dt>
+                      <dd>
+                        <ol>
+                          {r.actions.map((a, i) => (
+                            <li key={i}>{a.at && <span className="rv-t">{time(a.at)}</span>}{a.text}</li>
+                          ))}
+                        </ol>
+                      </dd>
+                    </>
+                  )}
+                  {r.check && (
+                    <>
+                      <dt>{t('확인')}</dt>
+                      <dd>{r.check}</dd>
+                    </>
+                  )}
+                </dl>
+                {r.expect !== undefined && (
+                  <div className="rv-ea">
+                    <div><b>{t('기대')}</b>{r.expect}</div>
+                    <div className={r.actualBad ? 'bad' : ''}><b>{r.corrected ? t('자동 검사 결과') : t('실제')}</b>{r.actual ?? '-'}</div>
+                  </div>
+                )}
+                {r.foreign && (
+                  <div className="rv-note"><b>{t('주의')}</b> {t('스샷 순간 앞 화면이 대상 앱이 아니라 {pkg} 입니다. 이 창이 판정에 영향을 줬을 수 있습니다.', { pkg: r.foreign })}</div>
+                )}
+                {r.corrected?.note && <div className="rv-note"><b>{t('정정')}</b> {r.corrected.note}</div>}
+                {r.corrected && (
+                  <div className="rv-history">
+                    {t('처음 판정')} <s>{t(STATUS_LABEL[r.corrected.from])}</s> · {t('정정 기록은 원래 {n}단계', { n: r.corrected.byIndex })}
+                  </div>
+                )}
+                {r.evidence && <div className="rv-evid">{r.evidence}</div>}
+                {r.baseline && <AcceptBaseline dir={data.dir} baseline={r.baseline} />}
+              </div>
+              {hasShot ? (
+                <div className="rv-shots">
+                  {r.screenshot && <Shot dir={data.dir} file={r.screenshot} tag={r.corrected?.screenshot ? t('처음') : r.foreign ? t('다른 앱') : undefined} />}
+                  {r.corrected?.screenshot && <Shot dir={data.dir} file={r.corrected.screenshot} tag={t('정정 근거')} />}
+                </div>
+              ) : quiet ? null : (
+                <div className="rv-noshot">{t('스샷 없음')}</div>
+              )}
+            </article>
+          );
+        })}
+      {data.actions && data.actions.length > 0 && (
+        <details className="rv-log">
+          <summary>{t('전체 조작 로그 {n}건', { n: data.actions.length })}</summary>
+          <ol>
+            {data.actions.map((a, i) => (
+              <li key={i}><span className="rv-t">{time(a.at)}</span>{a.text}</li>
+            ))}
+          </ol>
+        </details>
       )}
     </div>
   );

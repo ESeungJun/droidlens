@@ -1,7 +1,7 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import * as dl from '@droidlens/core';
-import { device, text, json, serialArg, readOnly, acts, recordStep } from '../common.js';
+import { device, text, json, serialArg, readOnly, acts, recordStep, logAction } from '../common.js';
 
 export function register(server: McpServer): void {
   // ---------- 앱 ----------
@@ -42,7 +42,7 @@ export function register(server: McpServer): void {
       } else {
         s = await dl.launchAndSettle(dev, packageName, { restart });
       }
-      recordStep({ launch: restart ? { restart: true } : null });
+      recordStep({ launch: restart ? { restart: true } : null }, `앱 ${restart ? '재시작' : '실행'} ${packageName}${activity ? ` (${activity})` : ''} → ${s.screen.activity.split('.').pop()}`);
       return text(`launched ${packageName} → ${s.screen.activity}`);
     },
   );
@@ -52,6 +52,7 @@ export function register(server: McpServer): void {
     { description: '앱 강제 종료', inputSchema: { ...serialArg, packageName: z.string() }, annotations: acts },
     async ({ serial, packageName }) => {
       await dl.stopApp(await device(serial), packageName);
+      logAction(`앱 강제 종료 ${packageName}`);
       return text(`stopped ${packageName}`);
     },
   );
@@ -65,6 +66,7 @@ export function register(server: McpServer): void {
     },
     async ({ serial, packageName }) => {
       await dl.clearAppData(await device(serial), packageName);
+      logAction(`앱 데이터 전체 삭제 ${packageName}`);
       return text(`cleared ${packageName}`);
     },
   );
@@ -74,7 +76,7 @@ export function register(server: McpServer): void {
     { description: '딥링크/URL을 VIEW 인텐트로 열기', inputSchema: { ...serialArg, uri: z.string(), packageName: z.string().optional() }, annotations: acts },
     async ({ serial, uri, packageName }) => {
       const out = await dl.openDeepLink(await device(serial), uri, packageName);
-      recordStep({ deeplink: uri });
+      recordStep({ deeplink: uri }, `딥링크 열기 ${dl.redactUrl(uri)}`);
       return text(out);
     },
   );

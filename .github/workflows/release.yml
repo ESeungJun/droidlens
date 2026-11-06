@@ -31,13 +31,21 @@ jobs:
         with:
           distribution: temurin
           java-version: 17
+          # Gradle 배포판(wrapper)과 의존성을 캐시한다. 매번 services.gradle.org 에서 받다가 504·시간 초과로 깨지던 것을 막는다
+          cache: gradle
       # 서명 Secrets 를 쓰는 작업이라 의존성 설치 스크립트는 돌리지 않는다 (Electron 은 electron-builder 가 직접 받는다)
       - run: pnpm install --frozen-lockfile --ignore-scripts
       - run: pnpm build
       - name: Build on-device agent APK
         working-directory: android
         shell: bash
-        run: ./gradlew :agent:assembleRelease --no-daemon
+        # 캐시가 없을 때 Gradle 배포판 다운로드가 일시적으로 실패하면 두 번까지 다시 시도한다
+        run: |
+          for i in 1 2 3; do
+            ./gradlew :agent:assembleRelease --no-daemon && exit 0
+            echo "::warning::Gradle 실패 ($i/3), 다시 시도"; sleep $((i * 20))
+          done
+          exit 1
       - name: Fetch scrcpy server (SHA256 검증)
         run: node scripts/fetch-scrcpy.mjs
       - name: Package
@@ -103,6 +111,9 @@ jobs:
     needs: desktop
     steps:
       - uses: actions/checkout@v4
+        with:
+          # 노트 대체 경로에서 이전 태그를 찾으려면 태그와 이력이 있어야 한다
+          fetch-depth: 0
       - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
         with:
@@ -112,11 +123,19 @@ jobs:
         with:
           distribution: temurin
           java-version: 17
+          # Gradle 배포판(wrapper)과 의존성을 캐시한다. 매번 services.gradle.org 에서 받다가 504·시간 초과로 깨지던 것을 막는다
+          cache: gradle
       - run: pnpm install --frozen-lockfile
       - run: pnpm build
       - name: Build on-device agent APK
         working-directory: android
-        run: ./gradlew :agent:assembleRelease --no-daemon
+        # 캐시가 없을 때 Gradle 배포판 다운로드가 일시적으로 실패하면 두 번까지 다시 시도한다
+        run: |
+          for i in 1 2 3; do
+            ./gradlew :agent:assembleRelease --no-daemon && exit 0
+            echo "::warning::Gradle 실패 ($i/3), 다시 시도"; sleep $((i * 20))
+          done
+          exit 1
       - uses: actions/download-artifact@v4
         with:
           pattern: desktop-*
@@ -135,9 +154,20 @@ jobs:
           sha256sum $files | sed -E 's#  .*/#  #' > SHA256SUMS
           cat SHA256SUMS
           files="$files SHA256SUMS"
-          if gh release view "${GITHUB_REF_NAME}" >/dev/null 2>&1; then
-            gh release upload "${GITHUB_REF_NAME}" $files --clobber
-            gh release edit "${GITHUB_REF_NAME}" --draft=false --latest
-          else
-            gh release create "${GITHUB_REF_NAME}" $files --title "${GITHUB_REF_NAME}" --generate-notes --latest
-          fi
+          TAG="${GITHUB_REF_NAME}"
+          # GitHub API 가 가끔 5xx 를 돌려준다 (v0.10.5 때 502·500). 각 호출을 몇 번 다시 시도한다
+          retry() { for i in 1 2 3 4; do "$@" && return 0; echo "::warning::실패 ($i/4): $1 $2 $3, 다시 시도"; sleep $((i * 15)); done; return 1; }
+          # 노트는 GitHub 자동 생성을 먼저 쓰고, 그 API 가 안 되면 이전 태그부터의 커밋 제목으로 만든다
+          notes() {
+            # 실패하면 gh 가 오류 JSON 을 stdout 에 찍으므로, 성공했을 때만 내보낸다
+            if body=$(gh api "repos/${GITHUB_REPOSITORY}/releases/generate-notes" -f tag_name="$TAG" -q .body 2>/dev/null) && [ -n "$body" ]; then echo "$body"; return; fi
+            prev=$(git describe --tags --abbrev=0 "$TAG^" 2>/dev/null || true)
+            echo "## What's Changed"
+            git log --first-parent --format='* %s' ${prev:+"$prev..$TAG"} | head -50
+            [ -n "$prev" ] && printf '\n\n**Full Changelog**: https://github.com/%s/compare/%s...%s\n' "$GITHUB_REPOSITORY" "$prev" "$TAG"
+          }
+          # 초안으로 먼저 만들고, 파일을 다 올린 뒤에 공개한다 (파일 없는 '최신' 릴리스를 업데이터가 보지 않게)
+          ensure_release() { gh release view "$TAG" >/dev/null 2>&1 || gh release create "$TAG" --draft --title "$TAG" --notes "$(notes)"; }
+          retry ensure_release
+          retry gh release upload "$TAG" $files --clobber
+          retry gh release edit "$TAG" --draft=false --latest
