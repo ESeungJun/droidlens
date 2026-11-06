@@ -196,10 +196,10 @@ handle('stop', (s: string, pkg: string) => dl.stopApp(dev(s), pkg));
 handle('bringToFront', (s: string, pkg: string) => dl.bringToFront(dev(s), pkg));
 handle('deeplink', (s: string, uri: string, pkg?: string) => dl.openDeepLink(dev(s), uri, pkg));
 handle('analyzeLibraries', async (s: string, pkg: string) => {
-  send('progress', { kind: 'libs', message: 'APK 내려받는 중…' });
+  send('progress', { kind: 'libs', message: 'APK 내려받는 중…', pkg });
   const dir = await dl.ensureDir('apks', dl.safeName(pkg));
   const apks = await dl.pullApk(dev(s), pkg, dir);
-  send('progress', { kind: 'libs', message: 'DEX 분석 중…' });
+  send('progress', { kind: 'libs', message: 'DEX 분석 중…', pkg });
   return dl.analyzeApk(apks, pkg);
 });
 handle('crashes', (s: string, pkg?: string) => dl.recentCrashes(dev(s), pkg));

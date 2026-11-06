@@ -110,6 +110,8 @@ export type ScriptProgress =
 export interface Progress {
   kind: 'libs' | 'explore' | 'avd';
   message: string;
+  /** libs: 분석 중인 앱 */
+  pkg?: string;
   step?: number;
   screen?: string;
 }
