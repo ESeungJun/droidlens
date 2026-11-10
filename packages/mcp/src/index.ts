@@ -14,7 +14,7 @@ import * as screen from './tools/screen.js';
 import * as perf from './tools/perf.js';
 import * as sdk from './tools/sdk.js';
 
-export const VERSION = '0.11.0';
+export const VERSION = '0.12.0';
 
 /**
  * 클라이언트(에이전트)에게 주는 사용 안내. 도구 설명에 흩어져 있으면 첫 호출부터 맞는 도구를 고르기 어려워 순서를 한곳에 적는다
