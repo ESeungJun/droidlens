@@ -17,7 +17,8 @@ export interface A11yIssue {
 /** Android 접근성 지침의 최소 터치 영역 */
 export const MIN_TOUCH_DP = 48;
 
-const actionable = (n: ViewNode) => n.depth > 0 && n.enabled && (n.clickable || n.longClickable || n.checkable);
+// 체크만 되는 요소(행 안의 라디오·체크박스 표시)는 행 전체가 터치 대상이라 보지 않는다
+const actionable = (n: ViewNode) => n.depth > 0 && n.enabled && (n.clickable || n.longClickable);
 
 /** 요소나 그 안의 글자·설명. 스크린리더가 읽을 것이 있는지 본다 */
 function hasLabel(n: ViewNode): boolean {
