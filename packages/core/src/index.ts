@@ -17,3 +17,6 @@ export * from './script.js';
 export * from './emulator.js';
 export * from './perf.js';
 export * from './visual.js';
+export * from './report-junit.js';
+export * from './a11y.js';
+export * from './confirm.js';

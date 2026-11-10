@@ -1,7 +1,27 @@
 // 리포트 문구 비밀값 가리기 규칙 (packages/core/src/redact.ts). 빌드 결과(dist)를 시험한다.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { isSecretName, redactValue, redactUrl, redactSql, MASK } from '../dist/redact.js';
+import { readFileSync } from 'node:fs';
+import { isSecretName, looksSecret, redactValue, redactUrl, redactSql, MASK } from '../dist/redact.js';
+
+// 자바 Redactor(android/sdk)와 같이 읽는 사례표. 두 구현이 갈리지 않게 한다
+const CASES = JSON.parse(readFileSync(new URL('./fixtures/redact-cases.json', import.meta.url), 'utf8'));
+
+test('공유 사례표: 이름 판정', () => {
+  assert.ok(CASES.names.secret.length >= 40 && CASES.names.plain.length >= 20);
+  for (const n of CASES.names.secret) assert.equal(isSecretName(n), true, n);
+  for (const n of CASES.names.plain) assert.equal(isSecretName(n), false, n);
+});
+
+test('공유 사례표: 값 모양', () => {
+  for (const v of CASES.looksSecret.secret) assert.equal(looksSecret(v), true, v);
+  for (const v of CASES.looksSecret.plain) assert.equal(looksSecret(v), false, v);
+});
+
+test('공유 사례표: URL', () => {
+  assert.ok(CASES.urls.length >= 20);
+  for (const [input, want] of CASES.urls) assert.equal(redactUrl(input), want.replaceAll('<MASK>', MASK), input);
+});
 
 test('isSecretName: 비밀 칸 이름은 잡고, 단어 안에 섞인 짧은 말은 잡지 않는다', () => {
   for (const n of ['password', 'userPassword', 'auth_code', 'authCode', 'api-key', 'pin', 'session_id', '휴대폰번호', 'cardNumber']) {

@@ -17,6 +17,8 @@ export class LocalHttpClient {
     const qs = q.length ? '?' + new URLSearchParams(q).toString() : '';
     const res = await fetch(`http://127.0.0.1:${this.port}${path}${qs}`, {
       method,
+      // 기기 쪽 서버는 이 헤더가 없는 요청을 거부한다 (브라우저의 웹 페이지가 forward 된 포트로 보낸 요청을 가리기 위함)
+      headers: { 'X-DroidLens': '1' },
       body: opts.body,
       signal: AbortSignal.timeout(opts.timeoutMs ?? 10_000),
     });

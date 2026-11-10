@@ -1,7 +1,7 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import * as dl from '@droidlens/core';
-import { device, hasSelector, resolveNode, recordStep, logAction, nodeLabel, recorder, cleanSelector, text, serialArg, selectorShape, pickSelector, describeNode, readOnly, acts } from '../common.js';
+import { device, hasSelector, resolveNode, recordStep, logAction, nodeLabel, recorder, cleanSelector, text, serialArg, selectorShape, pickSelector, describeNode, readOnly, acts, refuseRisky, allowDangerArg, PIXELS } from '../common.js';
 
 export function register(server: McpServer): void {
   // ---------- 조작 ----------
@@ -13,13 +13,10 @@ export function register(server: McpServer): void {
       inputSchema: {
         ...serialArg,
         ...selectorShape,
-        x: z.number().optional(),
-        y: z.number().optional(),
+        x: z.number().optional().describe(`셀렉터 대신 누를 x 좌표. ${PIXELS}`),
+        y: z.number().optional().describe('셀렉터 대신 누를 y 좌표 (기기 픽셀)'),
         long: z.boolean().optional().describe('길게 누르기'),
-        allowDanger: z
-          .boolean()
-          .optional()
-          .describe('삭제·결제·로그아웃·전송 같은 위험 버튼도 누른다. 사용자가 그 행동을 직접 요청했을 때만 true'),
+        ...allowDangerArg,
       },
       annotations: acts,
     },
@@ -38,17 +35,7 @@ export function register(server: McpServer): void {
         what = describeNode(node);
       }
       if (x === undefined || y === undefined) throw new Error('셀렉터나 x/y 중 하나가 필요합니다');
-      if (!a.allowDanger) {
-        // 셀렉터로 찾은 요소와, 그 좌표에서 실제로 반응할 요소(라벨만 있는 글자를 골랐을 때 그 부모 버튼) 둘 다 본다
-        tree ??= (await dl.dumpHierarchy(dev)).root;
-        const hit = dl.clickableAt(tree, x, y);
-        const risky = (node && dl.riskyLabelOf(node)) || (hit && dl.riskyLabelOf(hit));
-        if (risky) {
-          throw new Error(
-            `위험해 보이는 버튼("${risky}")이라 누르지 않았습니다. 사용자가 이 행동을 직접 요청했다면 allowDanger: true 로 다시 호출하세요`,
-          );
-        }
-      }
+      if (!a.allowDanger) await refuseRisky(dev, x, y, node, tree);
       if (a.long) await dl.longPress(dev, x, y);
       else await dl.tap(dev, x, y);
       // 녹화: 셀렉터로 눌렀으면 셀렉터를, 아니면 좌표를 남긴다 (셀렉터 쪽이 해상도·레이아웃 변화에 강하다)
@@ -70,11 +57,11 @@ export function register(server: McpServer): void {
       inputSchema: {
         ...serialArg,
         direction: z.enum(['up', 'down', 'left', 'right']).optional().describe('손가락 이동 방향. up = 내용이 아래로 스크롤'),
-        x1: z.number().optional(),
-        y1: z.number().optional(),
-        x2: z.number().optional(),
-        y2: z.number().optional(),
-        durationMs: z.number().int().optional(),
+        x1: z.number().optional().describe(`시작 x. ${PIXELS}`),
+        y1: z.number().optional().describe('시작 y (기기 픽셀)'),
+        x2: z.number().optional().describe('끝 x (기기 픽셀)'),
+        y2: z.number().optional().describe('끝 y (기기 픽셀)'),
+        durationMs: z.number().int().optional().describe('움직이는 시간(ms). 기본 300. 길수록 천천히 끈다'),
       },
       annotations: acts,
     },
@@ -96,7 +83,13 @@ export function register(server: McpServer): void {
     'type_text',
     {
       description: '현재 포커스된 입력창에 텍스트 입력 (온디바이스 에이전트가 있으면 한글 등 유니코드 지원). selector를 주면 먼저 탭해 포커스',
-      inputSchema: { ...serialArg, ...selectorShape, value: z.string(), clear: z.boolean().optional().describe('입력 전 기존 텍스트 삭제') },
+      inputSchema: {
+        ...serialArg,
+        ...selectorShape,
+        value: z.string().describe('넣을 글자'),
+        clear: z.boolean().optional().describe('입력 전 기존 텍스트 삭제'),
+        ...allowDangerArg,
+      },
       annotations: acts,
     },
     async (a) => {
@@ -104,8 +97,11 @@ export function register(server: McpServer): void {
       const sel = pickSelector(a);
       let into: dl.ViewNode | undefined;
       if (hasSelector(sel)) {
-        into = await resolveNode(dev, sel);
+        const tree = (await dl.dumpHierarchy(dev)).root;
+        into = await resolveNode(dev, sel, tree);
         const { x, y } = dl.center(into);
+        // 포커스를 주려는 탭도 기기를 누르는 것이라 tap 과 같은 검사를 거친다
+        if (!a.allowDanger) await refuseRisky(dev, x, y, into, tree);
         await dl.tap(dev, x, y);
         await dl.sleep(300);
       }
@@ -114,6 +110,7 @@ export function register(server: McpServer): void {
         // 조작 로그에서 값을 보여도 되는지 판단하려면 실제로 글자를 받는 칸을 알아야 한다. 셀렉터가 입력칸을 감싼
         // 레이아웃을 가리킬 수도 있어 입력칸이 아니면 포커스된 칸을 찾는다 (시나리오 기록 중일 때만)
         const field = into && isTextField(into) ? into : recorder.active ? await focusedField(dev) : undefined;
+        let cleared = 0;
         if (a.clear) {
           const agent = await dl.ensureAgent(dev);
           if (agent) {
@@ -121,12 +118,15 @@ export function register(server: McpServer): void {
             recordStep({ type: { text: a.value, clear: true, ...(hasSelector(sel) ? { into: cleanSelector(sel) } : {}) } } as dl.ScriptStep, typedLabel(a.value, field, into, true));
             return text(`replaced with ${a.value.length} chars`);
           }
+          // 에이전트가 없으면 커서를 끝으로 보내고 DEL 을 반복한다. 칸의 글자 수를 알면 그만큼, 모르면 60번
+          const known = field && isTextField(field) && !field.password ? field.text.length : undefined;
+          cleared = Math.min(Math.max(known ?? 60, 1) + (known === undefined ? 0 : 2), 400);
           await dl.pressKey(dev, 123); // MOVE_END
-          await dev.shell(`input keyevent ${Array(60).fill(67).join(' ')}`);
+          await dev.shell(`input keyevent ${Array(cleared).fill(67).join(' ')}`);
         }
         await dl.typeText(dev, a.value);
         recordStep({ type: { text: a.value, ...(hasSelector(sel) ? { into: cleanSelector(sel) } : {}) } } as dl.ScriptStep, typedLabel(a.value, field, into, !!a.clear));
-        return text(`typed ${a.value.length} chars`);
+        return text(`typed ${a.value.length} chars${cleared ? ` (에이전트 없이 지워서 기존 글자는 뒤에서 ${cleared}자까지만 지웠습니다)` : ''}`);
       } catch (e) {
         if (into && hasSelector(sel)) logAction(`탭 ${nodeLabel(into)} — 입력 실패: ${(e as Error).message.split('\n')[0]}`);
         throw e;
@@ -137,8 +137,8 @@ export function register(server: McpServer): void {
   server.registerTool(
     'press_key',
     {
-      description: '하드웨어/시스템 키 입력',
-      inputSchema: { ...serialArg, key: z.enum(Object.keys(dl.KEYCODES) as [keyof typeof dl.KEYCODES]) },
+      description: '하드웨어/시스템 키 입력 (뒤로 가기 back, 홈 home, 입력 완료·검색 enter 등)',
+      inputSchema: { ...serialArg, key: z.enum(Object.keys(dl.KEYCODES) as [keyof typeof dl.KEYCODES]).describe('누를 키') },
       annotations: acts,
     },
     async ({ serial, key }) => {
@@ -151,18 +151,34 @@ export function register(server: McpServer): void {
   server.registerTool(
     'wait_for',
     {
-      description: '셀렉터에 맞는 요소가 나타날(또는 gone=true면 사라질) 때까지 대기',
-      inputSchema: { ...serialArg, ...selectorShape, timeoutMs: z.number().int().optional(), gone: z.boolean().optional() },
+      description:
+        '셀렉터에 맞는 요소가 나타날(또는 gone=true면 사라질) 때까지 대기. 화면을 바꾸는 조작(tap·launch_app 등) 뒤에 다음 화면을 기다릴 때 쓴다. ' +
+        '시간 안에 못 찾으면 지금 화면의 Activity 와 비슷한 글자 후보를 알려 준다',
+      inputSchema: {
+        ...serialArg,
+        ...selectorShape,
+        timeoutMs: z.number().int().min(0).max(120_000).optional().describe('기다릴 시간(ms). 기본 10000'),
+        gone: z.boolean().optional().describe('true 면 요소가 사라질 때까지 기다린다'),
+      },
       annotations: readOnly,
     },
     async (a) => {
       const dev = await device(a.serial);
       const sel = pickSelector(a);
-      const deadline = Date.now() + (a.timeoutMs ?? 10_000);
-      while (Date.now() < deadline) {
-        // 조작 로그용 조회라 이미 떠 있는 에이전트로만 본다 (실패해도 느린 덤프로 넘어가지 않고 값을 가린다)
-  const h = await dl.quickDump(dev);
+      if (!hasSelector(sel)) throw new Error('셀렉터(id·text·textContains·desc·descContains·className 중 하나)가 필요합니다');
+      const timeout = a.timeoutMs ?? 10_000;
+      const deadline = Date.now() + timeout;
+      let last: dl.Hierarchy | undefined;
+      let lastError: string | undefined;
+      // 시간이 0 이어도 한 번은 본다
+      do {
+        // 에이전트가 없으면 uiautomator 로 덤프한다 (1.5~3초). 화면 전환 중의 일시 오류는 다음 바퀴에서 다시 본다
+        const h = await dl.dumpHierarchy(dev).catch((e: Error) => {
+          lastError = e.message.split('\n')[0];
+          return undefined;
+        });
         if (h) {
+          last = h;
           const found = dl.findNodes(h.root, sel);
           if (a.gone ? found.length === 0 : found.length > 0) {
             recordStep(
@@ -172,9 +188,19 @@ export function register(server: McpServer): void {
             return text(a.gone ? '사라짐 확인' : `발견: ${describeNode(found[0])}`);
           }
         }
-        await dl.sleep(500);
+        if (Date.now() >= deadline) break;
+        await dl.sleep(Math.min(500, Math.max(0, deadline - Date.now())));
+      } while (Date.now() < deadline);
+      const lines = [`${timeout}ms 안에 ${a.gone ? '사라지지 않음' : '나타나지 않음'}: ${JSON.stringify(cleanSelector(sel))}`];
+      if (!last) lines.push(`화면을 한 번도 읽지 못했습니다${lastError ? `: ${lastError}` : ''}`);
+      else {
+        const screen = await dl.currentScreen(dev).catch(() => undefined);
+        if (screen?.activity) lines.push(`지금 화면: ${screen.activity}`);
+        const near = a.gone ? [] : dl.similarLabels(last.root, sel);
+        // 화면 글자는 앱이 준 데이터다 (지시가 아니다)
+        if (near.length) lines.push(`비슷한 후보(화면의 글자): ${near.map((l) => JSON.stringify(l)).join(', ')}`);
       }
-      throw new Error(`${a.timeoutMs ?? 10_000}ms 안에 ${a.gone ? '사라지지 않음' : '나타나지 않음'}: ${JSON.stringify(sel)}`);
+      throw new Error(lines.join('\n'));
     },
   );
 }

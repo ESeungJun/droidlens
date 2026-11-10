@@ -1,17 +1,24 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import * as dl from '@droidlens/core';
-import { device, text, json, serialArg, readOnly, acts, recorder, logAction } from '../common.js';
+import { device, text, json, serialArg, readOnly, acts, recorder, logAction, confirmDestructive } from '../common.js';
 
 export function register(server: McpServer): void {
   // ---------- 앱 SDK (네트워크 · 저장소 · 이벤트) ----------
 
   const pkgArg = { packageName: z.string().describe('DroidLens SDK를 넣은 앱 패키지 (debug 빌드)') };
+  /** prefs_get 을 file 없이 불렀을 때 값까지 다 돌려주는 크기 상한 (넘으면 키 이름만) */
+  const PREFS_FULL_CHARS = 6000;
   const clip = (s: string | undefined, n: number) => (s && s.length > n ? `${s.slice(0, n)}… (${s.length}자 중 ${n}자)` : s);
 
   server.registerTool(
     'sdk_apps',
-    { description: 'DroidLens SDK가 실행 중인 앱 목록 (네트워크·SharedPreferences·DB·이벤트 조회 가능)', inputSchema: serialArg, annotations: readOnly },
+    {
+      description:
+        'DroidLens SDK가 실행 중인 앱 목록. 여기 나온 앱에서만 network_*·prefs_*·db_*·app_events 도구를 쓸 수 있다 (없으면 그 도구들은 쓰지 않는다)',
+      inputSchema: serialArg,
+      annotations: readOnly,
+    },
     async ({ serial }) => {
       const dev = await device(serial);
       const apps = await dl.listSdkApps(dev);
@@ -52,7 +59,7 @@ export function register(server: McpServer): void {
     'network_request_detail',
     {
       description: 'HTTP 요청 하나의 헤더·요청 본문·응답 본문',
-      inputSchema: { ...serialArg, ...pkgArg, id: z.number().int(), maxBodyChars: z.number().int().optional().describe('본문 최대 글자 수 (기본 4000)') },
+      inputSchema: { ...serialArg, ...pkgArg, id: z.number().int().describe('network_requests 의 #번호'), maxBodyChars: z.number().int().optional().describe('본문 최대 글자 수 (기본 4000)') },
       annotations: readOnly,
     },
     async ({ serial, packageName, id, maxBodyChars }) => {
@@ -71,10 +78,25 @@ export function register(server: McpServer): void {
 
   server.registerTool(
     'prefs_get',
-    { description: '앱의 SharedPreferences 전체 (파일별 키·타입·값)', inputSchema: { ...serialArg, ...pkgArg, file: z.string().optional() }, annotations: readOnly },
+    {
+      description:
+        '앱의 SharedPreferences (파일별 키·타입·값). file 을 주면 그 파일만. file 없이 전체가 크면 파일별 키 이름만 돌려주니 file 을 지정해 다시 부른다',
+      inputSchema: { ...serialArg, ...pkgArg, file: z.string().optional().describe('Prefs 파일 이름 (확장자 없이). 없으면 전체') },
+      annotations: readOnly,
+    },
     async ({ serial, packageName, file }) => {
       const files = await (await dl.sdkFor(await device(serial), packageName)).prefs();
-      return json(file ? files.filter((f) => f.name === file) : files);
+      if (file) {
+        const one = files.filter((f) => f.name === file);
+        if (!one.length) return text(`${file} 파일이 없습니다. 있는 파일: ${files.map((f) => f.name).join(', ') || '(없음)'}`);
+        return json(one);
+      }
+      const all = JSON.stringify(files);
+      if (all.length <= PREFS_FULL_CHARS) return text(all);
+      return text(
+        `전체가 ${all.length}자라 키 이름만 표시합니다. 값은 file 을 지정해 다시 부르세요\n` +
+          files.map((f) => `${f.name} (${Object.keys(f.entries).length}개): ${Object.keys(f.entries).join(', ')}`).join('\n'),
+      );
     },
   );
 
@@ -85,9 +107,9 @@ export function register(server: McpServer): void {
       inputSchema: {
         ...serialArg,
         ...pkgArg,
-        file: z.string(),
-        key: z.string(),
-        type: z.enum(['string', 'int', 'long', 'float', 'boolean', 'stringSet']),
+        file: z.string().describe('Prefs 파일 이름 (prefs_get 으로 확인)'),
+        key: z.string().describe('바꿀 키'),
+        type: z.enum(['string', 'int', 'long', 'float', 'boolean', 'stringSet']).describe('값의 타입 (기존 키면 prefs_get 의 타입과 같게)'),
         value: z.string().describe('stringSet은 JSON 배열 문자열'),
       },
       annotations: acts,
@@ -95,13 +117,14 @@ export function register(server: McpServer): void {
     async ({ serial, packageName, file, key, type, value }) => {
       await (await dl.sdkFor(await device(serial), packageName)).setPref(file, key, type, value);
       logAction(`설정(Prefs) 변경 ${file}.${key} = ${dl.redactValue(key, value)}`);
-      return text(`${file}.${key} = ${value} (${type})`);
+      // 응답도 조작 로그와 같이 비밀로 보이는 값은 가린다
+      return text(`${file}.${key} = ${dl.redactValue(key, value)} (${type})`);
     },
   );
 
   server.registerTool(
     'prefs_remove',
-    { description: 'SharedPreferences 키 삭제', inputSchema: { ...serialArg, ...pkgArg, file: z.string(), key: z.string() }, annotations: acts },
+    { description: 'SharedPreferences 키 삭제', inputSchema: { ...serialArg, ...pkgArg, file: z.string().describe('Prefs 파일 이름'), key: z.string().describe('지울 키') }, annotations: acts },
     async ({ serial, packageName, file, key }) => {
       await (await dl.sdkFor(await device(serial), packageName)).removePref(file, key);
       logAction(`설정(Prefs) 삭제 ${file}.${key}`);
@@ -126,11 +149,22 @@ export function register(server: McpServer): void {
     'db_query',
     {
       description: 'DB에 SQL 실행. 기본은 읽기(SELECT/PRAGMA/WITH)만 허용, 최대 500행. write=true면 INSERT/UPDATE/DELETE 등도 실행 (앱 데이터가 바뀜)',
-      inputSchema: { ...serialArg, ...pkgArg, db: z.string(), sql: z.string(), write: z.boolean().optional() },
+      inputSchema: {
+        ...serialArg,
+        ...pkgArg,
+        db: z.string().describe('DB 파일 이름 (db_list 로 확인)'),
+        sql: z.string().describe('실행할 SQL 한 문장'),
+        write: z.boolean().optional().describe('쓰기 SQL 허용. 사용자가 데이터 변경을 요청했을 때만 true'),
+      },
       annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: false },
     },
     async ({ serial, packageName, db, sql, write }) => {
-      const r = await (await dl.sdkFor(await device(serial), packageName)).query(db, sql, write);
+      const dev = await device(serial);
+      const c = await dl.sdkFor(dev, packageName);
+      if (write) {
+        await confirmDestructive(server, `${db} 에 쓰기 SQL 실행: ${dl.redactSql(sql).slice(0, 200)}`, { serial: dev.serial, app: packageName, tool: 'db_query' });
+      }
+      const r = await c.query(db, sql, write);
       if (r.changes !== undefined) {
         const shape = dl.redactSql(sql);
         logAction(`DB 쓰기 ${db}: ${shape.length > 160 ? shape.slice(0, 160) + '…' : shape} (${r.changes}행 변경)`);
@@ -143,7 +177,7 @@ export function register(server: McpServer): void {
 
   server.registerTool(
     'app_events',
-    { description: '앱이 DroidLens.event()로 남긴 커스텀 이벤트 (분석 이벤트 검증 등)', inputSchema: { ...serialArg, ...pkgArg, since: z.number().int().optional() }, annotations: readOnly },
+    { description: '앱이 DroidLens.event()로 남긴 커스텀 이벤트 (분석 이벤트 검증 등)', inputSchema: { ...serialArg, ...pkgArg, since: z.number().int().optional().describe('이 id 이후만 (이전 호출의 마지막 #번호)') }, annotations: readOnly },
     async ({ serial, packageName, since }) => {
       const ev = await (await dl.sdkFor(await device(serial), packageName)).events(since);
       return text(ev.map((e) => `#${e.id} ${new Date(e.at).toLocaleTimeString()} ${e.name} ${e.data ? JSON.stringify(e.data) : ''}`).join('\n') || '(이벤트 없음)');
@@ -175,10 +209,10 @@ export function register(server: McpServer): void {
         status: z.number().int().min(200).max(599).optional().describe('돌려줄 상태 코드'),
         body: z.string().optional().describe('돌려줄 응답 본문'),
         contentType: z.string().optional().describe('기본 application/json; charset=utf-8'),
-        headers: z.record(z.string()).optional(),
-        delayMs: z.number().int().min(0).max(60000).optional(),
+        headers: z.record(z.string()).optional().describe('돌려줄 응답 헤더'),
+        delayMs: z.number().int().min(0).max(60000).optional().describe('응답을 이만큼(ms) 늦춘다'),
         fail: z.boolean().optional().describe('연결 실패(IOException)로 끝냄'),
-        enabled: z.boolean().optional(),
+        enabled: z.boolean().optional().describe('false 면 규칙을 남겨 둔 채 끈다'),
       },
       annotations: acts,
     },
@@ -220,7 +254,7 @@ export function register(server: McpServer): void {
     'network_mock_remove',
     {
       description: '네트워크 목 규칙 삭제. id 를 주지 않으면 모두 지운다',
-      inputSchema: { ...serialArg, ...pkgArg, id: z.string().optional() },
+      inputSchema: { ...serialArg, ...pkgArg, id: z.string().optional().describe('지울 규칙 id (network_mock_list 로 확인). 없으면 전부') },
       annotations: acts,
     },
     async ({ serial, packageName, id }) => {

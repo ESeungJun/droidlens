@@ -23,11 +23,24 @@ android {
     publishing {
         singleVariant('release') { withSourcesJar() }
     }
+
+    testOptions {
+        unitTests.all {
+            // 가리기 사례표는 TS 와 같이 쓰는 한 벌(packages/core/test/fixtures/redact-cases.json)이라 저장소 루트를 넘긴다
+            def repoRoot = rootProject.projectDir.parentFile
+            systemProperty 'droidlens.repoRoot', repoRoot.absolutePath
+            inputs.file(new File(repoRoot, 'packages/core/test/fixtures/redact-cases.json'))
+        }
+    }
 }
 
 dependencies {
     // 앱이 OkHttp를 쓸 때만 네트워크 인스펙터를 붙인다 (SDK가 버전을 강제하지 않음)
     compileOnly 'com.squareup.okhttp3:okhttp:4.12.0'
+
+    testImplementation 'junit:junit:4.13.2'
+    // 사례표(JSON) 읽기용. android.jar 의 org.json 은 단위 테스트에서 빈 껍데기라 실제 구현을 쓴다
+    testImplementation 'org.json:json:20240303'
 }
 
 afterEvaluate {

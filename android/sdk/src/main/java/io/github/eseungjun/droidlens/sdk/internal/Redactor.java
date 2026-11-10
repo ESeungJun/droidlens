@@ -20,7 +20,9 @@ import java.util.regex.Pattern;
  *
  * <p>키 판정: 이름을 소문자 + 영숫자만 남긴 뒤 비교한다 (access_token = accessToken = access-token).
  * password·token·secret 처럼 흔한 단어는 키 이름에 들어 있기만 하면 가리고 (newPassword, fcmToken, X-Refresh-Token),
- * jwt·otp·pin 처럼 짧은 단어는 오탐을 줄이려고 정확히 같을 때만 가린다.
+ * jwt·otp·pin 처럼 짧은 단어는 오탐을 줄이려고 단어 단위로 같을 때만 가린다 (auth_code·authCode 는 잡고 author·spinner 는 잡지 않는다).
+ * 이름·값 모양·URL 규칙은 리포트용 TS 규칙(packages/core/src/redact.ts)과 같다. 두 쪽이 같은 사례표
+ * (packages/core/test/fixtures/redact-cases.json)를 읽어 시험하므로 한쪽만 고치면 시험이 깨진다.
  *
  * <p>본문: JSON 은 파싱하지 않고 직접 훑어 값 범위(문자열·객체·배열·숫자)를 통째로 바꾼다 (잘린 본문도 처리).
  * 문자열 값 안에 다시 들어 있는 JSON 과 GraphQL 인자, 폼, multipart 텍스트 파트, XML 요소·속성도 가린다.
@@ -37,6 +39,54 @@ public final class Redactor {
     /** 헤더 이름에 들어 있으면 가린다 */
     private static final List<String> DEFAULT_HEADERS = Arrays.asList(
             "authorization", "cookie", "token", "secret", "apikey", "session", "password", "credential", "signature");
+
+    /** 이름 어디에 있어도 비밀 칸으로 보는 말 (TS 의 SECRET_PART 와 같다) */
+    private static final Pattern SECRET_PART = Pattern.compile(
+            "password|passwd|passcode|passphrase|secret|token|credential|session|cookie|bearer|private|authorization"
+                    + "|비밀|암호|인증|카드|주민|계좌|휴대|전화",
+            Pattern.CASE_INSENSITIVE);
+    /** 짧아서 다른 말 속에 섞이기 쉬운 것은 단어 단위로만 본다 (TS 의 SECRET_WORD 와 같다) */
+    private static final Set<String> SECRET_WORD = new java.util.HashSet<>(Arrays.asList(
+            "pw", "pwd", "pin", "otp", "cvc", "cvv", "ssn", "key", "sig", "auth", "card", "jwt", "nonce", "code",
+            "email", "phone", "tel", "mobile", "account", "birth"));
+    private static final Pattern CAMEL = Pattern.compile("([a-z0-9])([A-Z])");
+    private static final Pattern NOT_WORD = Pattern.compile("[^a-z0-9]+");
+
+    /** 이름(키·헤더)이 비밀값·개인정보 칸을 뜻하는지. TS 의 isSecretName 과 같은 판정 */
+    static boolean secretName(String name) {
+        if (name == null || name.isEmpty()) return false;
+        if (SECRET_PART.matcher(name).find()) return true;
+        // auth_code · authCode · api-key → 단어로 나눠 본다
+        for (String w : NOT_WORD.split(CAMEL.matcher(name).replaceAll("$1 $2").toLowerCase(Locale.ROOT))) {
+            if (SECRET_WORD.contains(w)) return true;
+        }
+        return false;
+    }
+
+    private static final Pattern JWT_HEAD = Pattern.compile("^eyJ[\\w-]+\\.");
+
+    /** 값 모양이 토큰 같은지 (JWT, 긴 무공백 문자열, JSON). TS 의 looksSecret 과 같은 판정 */
+    static boolean looksSecret(String value) {
+        String v = strip(value);
+        if (v.isEmpty()) return false;
+        if (JWT_HEAD.matcher(v).find()) return true;
+        if (v.charAt(0) == '{' || v.charAt(0) == '[') return true;
+        if (v.length() < 24) return false;
+        for (int i = 0; i < v.length(); i++) if (isSpace(v.charAt(i))) return false;
+        return true;
+    }
+
+    private static boolean isSpace(char c) {
+        return Character.isWhitespace(c) || Character.isSpaceChar(c) || c == '\uFEFF';
+    }
+
+    private static String strip(String s) {
+        int a = 0;
+        int b = s.length();
+        while (a < b && isSpace(s.charAt(a))) a++;
+        while (b > a && isSpace(s.charAt(b - 1))) b--;
+        return s.substring(a, b);
+    }
 
     private static final Redactor INSTANCE = new Redactor();
 
@@ -92,6 +142,7 @@ public final class Redactor {
     boolean sensitiveKey(String raw) {
         if (raw == null) return false;
         if (keyMatch(norm(raw))) return true;
+        if (defaults && secretName(raw)) return true;
         for (String part : raw.split("[\\[\\]]+")) if (!part.isEmpty() && keyMatch(norm(part))) return true;
         return false;
     }
@@ -102,7 +153,7 @@ public final class Redactor {
         if (userMatch(userHeaders, n)) return true;
         if (!defaults) return false;
         for (String c : DEFAULT_HEADERS) if (n.contains(c)) return true;
-        return false;
+        return secretName(name);
     }
 
     public Map<String, List<String>> headers(Map<String, List<String>> in) {
@@ -120,13 +171,51 @@ public final class Redactor {
         return out;
     }
 
+    private static final Pattern URL_USERINFO = Pattern.compile("^([a-z][\\w+.-]*://)([^/]*@)", Pattern.CASE_INSENSITIVE);
+    private static final Pattern URL_HEAD = Pattern.compile("^[a-z][\\w+.-]*://[^/]*", Pattern.CASE_INSENSITIVE);
+    private static final Pattern URL_SEGMENT = Pattern.compile("([/:;])([^/:;]+)");
+
+    /**
+     * URL 의 사용자 정보·fragment, 토큰처럼 보이는 경로 조각, 매트릭스 파라미터(;jsessionid=…)를 가리고 (TS 의 redactUrl 과 같다),
+     * 쿼리는 비밀 키의 값과 토큰처럼 보이는 값을 가린다. 네트워크 기록은 요청을 구분해야 해서 page=2 같은 평범한 쿼리 값은 남긴다
+     * (리포트용 TS 는 쿼리 값을 전부 가린다). 기본 규칙을 끄면 앱이 추가한 키의 쿼리 값만 가린다
+     */
     public String url(String url) {
         if (url == null) return null;
+        int hash = url.indexOf('#');
         int q = url.indexOf('?');
-        if (q < 0) return url;
-        int hash = url.indexOf('#', q);
-        int end = hash < 0 ? url.length() : hash;
-        return url.substring(0, q + 1) + pairs(url.substring(q + 1, end)) + url.substring(end);
+        if (hash >= 0 && q > hash) q = -1;
+        int baseEnd = q >= 0 ? q : hash >= 0 ? hash : url.length();
+        String base = url.substring(0, baseEnd);
+        String query = q < 0 ? null : url.substring(q + 1, hash < 0 ? url.length() : hash);
+        String fragment = hash < 0 ? "" : url.substring(hash);
+        if (defaults) {
+            base = urlBase(base);
+            if (!fragment.isEmpty()) fragment = "#" + MASK;
+        }
+        return base + (query == null ? "" : "?" + pairs(query, defaults)) + fragment;
+    }
+
+    /** scheme://사용자@호스트/경로 에서 사용자 정보와 경로 조각을 가린다 */
+    private static String urlBase(String base) {
+        // 비밀번호에 @ 가 있어도 마지막 @ 까지 가린다
+        String userless = URL_USERINFO.matcher(base).replaceFirst("$1" + Matcher.quoteReplacement(MASK) + "@");
+        Matcher h = URL_HEAD.matcher(userless);
+        String head = h.find() ? h.group() : "";
+        Matcher m = URL_SEGMENT.matcher(userless.substring(head.length()));
+        StringBuffer out = new StringBuffer(head);
+        while (m.find()) {
+            String sep = m.group(1);
+            String seg = m.group(2);
+            String rep;
+            if (sep.equals(";")) {
+                int eq = seg.indexOf('=');
+                rep = ";" + (eq >= 0 ? seg.substring(0, eq + 1) + MASK : MASK);
+            } else rep = seg.indexOf('@') >= 0 || looksSecret(seg) ? sep + MASK : m.group();
+            m.appendReplacement(out, Matcher.quoteReplacement(rep));
+        }
+        m.appendTail(out);
+        return out.toString();
     }
 
     private static final Pattern URL_IN_TEXT = Pattern.compile("https?://[^\\s\"'<>]++");
@@ -143,6 +232,11 @@ public final class Redactor {
 
     /** key=value&... 에서 민감 키의 값을 가린다 (키는 URL 디코딩해서 비교) */
     String pairs(String s) {
+        return pairs(s, false);
+    }
+
+    /** tokenValues: 키와 상관없이 토큰처럼 보이는 값도 가린다 (URL 쿼리) */
+    String pairs(String s, boolean tokenValues) {
         StringBuilder out = new StringBuilder(s.length());
         int i = 0;
         while (true) {
@@ -150,7 +244,9 @@ public final class Redactor {
             int stop = amp < 0 ? s.length() : amp;
             String part = s.substring(i, stop);
             int eq = part.indexOf('=');
-            if (eq > 0 && sensitiveKey(decode(part.substring(0, eq)))) out.append(part, 0, eq + 1).append(MASK);
+            if (eq > 0 && (sensitiveKey(decode(part.substring(0, eq))) || (tokenValues && looksSecret(part.substring(eq + 1))))) {
+                out.append(part, 0, eq + 1).append(MASK);
+            }
             else out.append(part);
             if (amp < 0) break;
             out.append('&');

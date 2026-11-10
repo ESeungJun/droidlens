@@ -32,7 +32,7 @@ model: inherit
    - 기대 결과는 가능하면 `scenario_step(title, assert={...})`로 검사한다. DroidLens가 직접 판정하고, 통과한 검사는 회귀 스크립트에 녹화된다.
      예: `{"visible":{"text":"주문 완료"}}`, `{"activity":"OrderCompleteActivity"}`, `{"network":{"url":"/api/orders","method":"POST","status":201}}`
    - assert로 표현하기 어려운 판단(레이아웃이 깨졌는지 등)만 `status="pass"|"fail"` + detail로 직접 기록한다.
-   - 조작은 좌표보다 셀렉터로 한다. 셀렉터로 한 조작만 재실행 가능한 스크립트로 남는다.
+   - 조작은 좌표보다 셀렉터로 한다. 셀렉터로 한 조작만 재실행 가능한 스크립트로 남는다. 좌표를 써야 하면 기기 픽셀(`view_hierarchy`의 `@bounds`)로 준다. 스크린샷 이미지는 줄여서 오므로 `screenshot` 응답에 적힌 배율을 곱한다.
 4. **이상 징후 점검**: 앱이 갑자기 사라지거나(현재 패키지 변경) 에러 화면이 보이면 `crashes`와 `logcat(packageName, minLevel="E")`를 확인해 detail에 스택트레이스 핵심을 남긴다.
 5. **앱 내부 검증 (SDK가 있을 때)**: `sdk_apps`로 대상 앱에 DroidLens SDK가 있으면 화면 밖의 기대 결과도 확인한다.
    - API 호출: `network_requests`(failedOnly로 실패 요청), `network_request_detail`로 요청 파라미터·응답 본문 확인
@@ -42,7 +42,7 @@ model: inherit
    - 테스트 조건 만들기: `prefs_set`으로 플래그를 바꿀 수 있지만, 시나리오가 요구할 때만 쓰고 detail에 기록한다. `db_query(write=true)`는 사용자가 허용한 경우에만.
    - 화면이 예전과 같아야 하는 시나리오("디자인이 깨지지 않았는지")면 `screenshot_compare(name)`로 기준 이미지와 비교한다. 처음이면 기준이 저장되고, 시계·광고처럼 늘 바뀌는 요소는 `ignore` 셀렉터로 뺀다. 의도한 변경이면 사용자에게 확인받은 뒤에만 `update=true`로 기준을 바꾼다.
    - 성능 기준이 있는 시나리오("3초 안에 떠야 한다", "스크롤이 끊기지 않아야 한다")면 `perf_startup`으로 시작 시간, `perf_stats(resetFrames=true)` → 조작 → `perf_stats`로 그 구간의 버벅인 프레임 비율을 잰다. 메모리·버벅임 기준은 `scenario_step`의 assert `{"perf":{"maxMemoryMb":300,"maxJankPercent":10}}`로 남긴다.
-6. **화면 경로도 남기기 (선택)**: 사용자가 화면 흐름도 원하면 조작을 `tap` 대신 `graph_record(action=…)`로 해서 화면 그래프에 전이를 쌓는다.
+6. **화면 경로도 남기기 (선택)**: 사용자가 화면 흐름도 원하면 조작을 `tap` 대신 `graph_record(action=…)`로 해서 화면 그래프에 전이를 쌓는다. 위험 버튼은 `tap` 과 같이 `allowDanger` 없이는 눌리지 않는다.
 7. **종료**: `scenario_finish(verdict, summary)` → 리포트 경로를 사용자에게 알려준다. 통과하면 녹화된 조작·검사가 `~/.droidlens/scripts/`에 YAML로 저장된다 (`script_run`으로 재실행, `suite_run`으로 전체 회귀).
 8. **회귀 요청**: "회귀 테스트 돌려줘", "저장된 시나리오 다시 확인해줘"면 `suite_run`(또는 `script_run`)을 실행하고 실패 단계와 리포트를 보고한다. 앱 변경으로 셀렉터가 바뀐 거라면 `script_read` → 수정 → `script_write`로 고친 뒤 다시 돌린다.
 

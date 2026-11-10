@@ -1,5 +1,6 @@
 import { execFile, spawn, type ChildProcess } from 'node:child_process';
 import { mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { randomBytes } from 'node:crypto';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
 import * as dl from '@droidlens/core';
@@ -75,7 +76,11 @@ export type ChatEvent =
   | { kind: 'tool'; id: string; name: string; input: unknown }
   | { kind: 'toolResult'; id: string; text: string; isError: boolean }
   | { kind: 'done'; sessionId?: string; costUsd?: number; durationMs?: number; error?: string }
-  | { kind: 'stderr'; text: string };
+  | { kind: 'stderr'; text: string }
+  /** 에이전트가 되돌릴 수 없는 조작을 하려 한다. 사용자가 승인·거부를 눌러야 한다 (confirmChat) */
+  | { kind: 'confirm'; id: string; what: string; serial?: string; app?: string; tool?: string; timeoutMs: number }
+  /** 확인 요청이 답 없이 끝났다 (시간 초과로 거부됐거나 실행이 멈춤) */
+  | { kind: 'confirmClosed'; id: string; reason: dl.ConfirmClosed };
 
 export interface ChatRequest {
   /** 렌더러가 정한 실행 번호. 이 실행의 모든 이벤트에 실어 보내 이전 실행의 늦은 이벤트와 구분하게 한다 */
@@ -88,6 +93,13 @@ export interface ChatRequest {
 }
 
 let current: ChildProcess | null = null;
+// 지금 실행의 확인 통로. 실행마다 새 소켓·새 토큰을 쓰고 실행이 끝나면 닫는다
+let broker: dl.ConfirmBroker | null = null;
+
+/** 대화창의 승인·거부 버튼. 지금 실행의 요청이 아니거나 이미 답한 요청이면 false */
+export function confirmChat(id: string, approve: boolean): boolean {
+  return typeof id === 'string' && !!broker && broker.answer(id, approve === true);
+}
 // 실행 세대. claude 를 찾고 에이전트를 불러오는 동안(프로세스가 아직 없을 때) 누른 중지도 반영하려고 쓴다
 let generation = 0;
 
@@ -95,6 +107,9 @@ export function stopChat(): void {
   generation++;
   if (current) killTree(current);
   current = null;
+  // 기다리던 확인은 모두 거부로 끝난다
+  broker?.close();
+  broker = null;
 }
 
 /**
@@ -126,18 +141,49 @@ export async function sendChat(
     return;
   }
 
+  // 되돌릴 수 없는 조작의 확인 통로: 헤드리스 실행은 MCP elicitation 을 쓸 수 없어 MCP 서버가 이 소켓으로 묻고,
+  // 대화창이 승인·거부 버튼을 보여 준다. 소켓 경로와 토큰은 이 실행의 MCP 서버 환경 변수로만 넘긴다
+  const cwd = await dl.ensureDir('chat');
+  const runDir = await mkdtemp(join(cwd, 'run-'));
+  const confirmSocket = process.platform === 'win32' ? `\\\\.\\pipe\\droidlens-confirm-${randomBytes(12).toString('hex')}` : join(runDir, 'c.sock');
+  const confirmToken = randomBytes(24).toString('hex');
+  const runBroker = new dl.ConfirmBroker({
+    token: confirmToken,
+    onRequest: (r) => emit({ kind: 'confirm', ...r, timeoutMs: dl.CONFIRM_TIMEOUT_MS }),
+    onClosed: (id, reason) => emit({ kind: 'confirmClosed', id, reason }),
+  });
+  // 통로를 열지 못하면 MCP 서버는 확인을 받을 수 없다고 보고 그 조작을 실행하지 않는다 (안전한 쪽)
+  const confirmReady = await runBroker.listen(confirmSocket).then(() => true, () => false);
+  if (mine !== generation) {
+    runBroker.close();
+    await rm(runDir, { recursive: true, force: true }).catch(() => undefined);
+    emit({ kind: 'done', sessionId: req.sessionId });
+    return;
+  }
+  broker = runBroker;
+
   const mcpConfig = {
     mcpServers: {
       droidlens: {
         command: ctx.execPath,
         args: [ctx.mcpScript],
-        env: { ELECTRON_RUN_AS_NODE: '1', ...(req.serial ? { DROIDLENS_SERIAL: req.serial } : {}) },
+        // 도구를 미리 허용해 두고 호출마다 사람이 승인하지 않는 대화라, 되돌릴 수 없는 조작(앱 데이터 삭제·DB 쓰기·앱 밖 URI)은
+        // MCP 서버가 사용자 확인을 요구하게 한다. 확인은 위의 소켓으로 대화창의 승인·거부 버튼이 받는다
+        env: {
+          ELECTRON_RUN_AS_NODE: '1',
+          DROIDLENS_CONFIRM: '1',
+          ...(confirmReady ? { DROIDLENS_CONFIRM_SOCKET: confirmSocket, DROIDLENS_CONFIRM_TOKEN: confirmToken } : {}),
+          ...(req.serial ? { DROIDLENS_SERIAL: req.serial } : {}),
+          // 사용자가 고른 앱: 이 앱의 커스텀 스킴 딥링크만 확인 없이 연다
+          ...(req.packageName ? { DROIDLENS_APP: req.packageName } : {}),
+        },
       },
     },
   };
   const context = [
     '이 대화는 DroidLens 데스크톱 앱의 에이전트 대화창에서 진행된다. 사용자는 같은 화면에서 기기 미러링을 보고 있다.',
     req.serial ? `연결된 기기 serial: ${req.serial}` : '연결된 기기 없음',
+    '앱 데이터 삭제·DB 쓰기·앱 밖 URI 열기는 호출하면 대화창에 승인·거부 버튼이 떠서 사용자가 직접 정한다. 거부되거나 시간이 지나면 같은 호출을 되풀이하지 않는다.',
     req.packageName ? `사용자가 선택한 앱: ${req.packageName}` : '',
     '답변은 한국어로, 짧고 구체적으로.',
   ]
@@ -146,8 +192,6 @@ export async function sendChat(
 
   // 복잡한 인자(JSON·여러 줄 프롬프트)는 파일과 표준 입력으로 넘긴다. Windows 에서 claude.cmd 는 셸로 실행해야 하는데
   // cmd.exe 가 JSON 의 따옴표·공백을 망가뜨리므로, 셸에는 공백 없는 단순 토큰과 따옴표로 감싼 파일 경로만 남긴다.
-  const cwd = await dl.ensureDir('chat');
-  const runDir = await mkdtemp(join(cwd, 'run-'));
   const mcpFile = join(runDir, 'mcp.json');
   const agentsFile = join(runDir, 'agents.json');
   const promptFile = join(runDir, 'system.txt');
@@ -190,7 +234,11 @@ export async function sendChat(
   });
   // 사용자 메시지는 표준 입력으로 (-p 는 인자가 없으면 stdin 을 프롬프트로 읽는다)
   child.stdin!.end(req.message);
-  child.on('close', () => rm(runDir, { recursive: true, force: true }).catch(() => undefined));
+  child.on('close', () => {
+    runBroker.close();
+    if (broker === runBroker) broker = null;
+    void rm(runDir, { recursive: true, force: true }).catch(() => undefined);
+  });
   current = child;
 
   let buf = '';

@@ -82,7 +82,9 @@ export type ChatEvent =
   | { kind: 'tool'; id: string; name: string; input: unknown }
   | { kind: 'toolResult'; id: string; text: string; isError: boolean }
   | { kind: 'done'; sessionId?: string; costUsd?: number; durationMs?: number; error?: string }
-  | { kind: 'stderr'; text: string };
+  | { kind: 'stderr'; text: string }
+  | { kind: 'confirm'; id: string; what: string; serial?: string; app?: string; tool?: string; timeoutMs: number }
+  | { kind: 'confirmClosed'; id: string; reason: 'timeout' | 'cancelled' };
 /** 메인이 보내는 대화 이벤트. run 은 보낼 때 준 실행 번호 */
 export type ChatMessage = ChatEvent & { run: number };
 
@@ -198,6 +200,8 @@ export const api = {
   chatStatus: () => call<{ version: string }>('chatStatus'),
   chatSend: (req: { runId: number; message: string; agent: string; sessionId?: string; serial?: string; packageName?: string }) => call<boolean>('chatSend', req),
   chatStop: () => call<void>('chatStop'),
+  /** 되돌릴 수 없는 조작의 승인(true)·거부(false). 이미 끝난 요청이면 false */
+  chatConfirm: (id: string, approve: boolean) => call<boolean>('chatConfirm', id, approve),
   onChatEvent: (fn: (e: ChatMessage) => void) => window.dl.on('chat:event', (p) => fn(p as ChatMessage)),
   sdkApps: (s: string) => call<string[]>('sdkApps', s),
   sdk: <T,>(s: string, pkg: string, method: string, ...args: unknown[]) => call<T>('sdk', s, pkg, method, ...args),

@@ -8,6 +8,7 @@ Inspect <b>any app</b> with just adb, no SDK required, and let Claude Code agent
 <p align="center"><a href="https://github.com/ESeungJun/droidlens/releases/latest"><b>⬇ Download the latest release</b></a></p>
 
 <p align="center"><b>English</b> · <a href="README.ko.md">한국어</a></p>
+<p align="center">📝 Story behind it: <a href="https://medium.com/@haul/38a63a512ed8">Medium</a> · <a href="https://velog.io/@haul/droidlens-flipper-alternative-in-a-day">velog (Korean)</a></p>
 
 <p align="center"><a href="docs/video/droidlens-demo.mp4"><img src="docs/images/demo.gif" width="100%" alt="DroidLens demo: mirroring, 3D view hierarchy, screen flow, library detection and Claude Code agents"></a><br>
 <sub>▶ <a href="docs/video/droidlens-demo.mp4">Watch the full-quality video (MP4, 28s)</a></sub></p>
@@ -83,7 +84,7 @@ Then enable **Developer options → USB debugging** on your device and connect i
 
 ## App SDK (optional)
 
-Information that only lives inside the app — network traffic, storage — is visible only in **your own app's debug build** with the SDK added. Release builds get a no-op implementation of the same API (`sdk-noop`).
+Information that only lives inside the app — network traffic, storage — is visible only in **your own app's debug build** with the SDK added. Release builds get a no-op implementation of the same API (`sdk-noop`). The SDK also refuses to start unless the app is a debuggable build (`android:debuggable`), so adding it with `implementation` by mistake does not expose a release app.
 
 ```kotlin
 // settings.gradle.kts
@@ -91,10 +92,10 @@ dependencyResolutionManagement {
     repositories { maven { url = uri("https://jitpack.io") } }
 }
 
-// app/build.gradle.kts
+// app/build.gradle.kts — use the same release tag as the DroidLens app (network mocks need v0.10.0+)
 dependencies {
-    debugImplementation("com.github.ESeungJun.droidlens:sdk:v0.5.0")
-    releaseImplementation("com.github.ESeungJun.droidlens:sdk-noop:v0.5.0")
+    debugImplementation("com.github.ESeungJun.droidlens:sdk:v0.12.0")
+    releaseImplementation("com.github.ESeungJun.droidlens:sdk-noop:v0.12.0")
 }
 
 // Network inspector (if you use OkHttp)
@@ -108,9 +109,9 @@ DroidLens.event("purchase_clicked", JSONObject().put("itemId", 42))
 ```
 
 - No initialization code needed (starts automatically via a ContentProvider)
-- Communicates only over an in-app Unix socket (`localabstract:droidlens_sdk_<package>`), so no INTERNET permission is required; it checks the peer UID and rejects any connection other than adb and the app itself (e.g. other apps on the same device)
+- Communicates only over an in-app Unix socket (`localabstract:droidlens_sdk_<package>`), so no INTERNET permission is required; it also rejects requests that look like they came from a web page through the forwarded port (non-local `Host`, an `Origin` header, or a missing `X-DroidLens` header); it checks the peer UID and rejects any connection other than adb and the app itself (e.g. other apps on the same device)
 - Request and response bodies are capped at 256KB each; the latest 500 entries are kept in memory only
-- Sensitive values are masked **on the device, before they are stored** — in headers, URL queries, `Location` redirects, JSON bodies (including nested objects/arrays and JSON inside strings), GraphQL arguments, form, multipart and XML bodies, error messages and custom events. Keys match regardless of case and separators, and common words match anywhere in the name (`newPassword`, `fcmToken`, `X-Refresh-Token`); short ones like `jwt`, `otp`, `pin` match exactly. Add your own with `DroidLens.redactHeaders("X-Session")` / `DroidLens.redactKeys("phone")`, or call `DroidLens.clearDefaultRedaction()` to use only your list. Compressed bodies the app requested itself (`Content-Encoding`) are not recorded
+- Sensitive values are masked **on the device, before they are stored** — in headers, URL queries, `Location` redirects, JSON bodies (including nested objects/arrays and JSON inside strings), GraphQL arguments, form, multipart and XML bodies, error messages and custom events. Keys match regardless of case and separators, and common words match anywhere in the name (`newPassword`, `fcmToken`, `X-Refresh-Token`). Short words like `otp`, `pin`, `code`, `key` match only as whole words (`auth_code` and `authCode` are masked, `pinned` and `keyboard` are not). URLs also get user info (`user:pass@`), tokens in the path, `;jsessionid=`, and everything after `#` masked. The name rules are tested against the same case table as report-text masking. Add your own with `DroidLens.redactHeaders("X-Session")` / `DroidLens.redactKeys("phone")`, or call `DroidLens.clearDefaultRedaction()` to use only your list. Compressed bodies the app requested itself (`Content-Encoding`) are not recorded
 - DB write SQL runs only when explicitly allowed
 - **Network mocking**: requests whose URL contains a given string can be answered with any status code and body without reaching the server, failed as a connection error, or delayed (**Mock rules** in the Network tab, or **Mock this** on a recorded request). Rules are kept in the app's private storage and survive restarts; while any are on, a warning is written to logcat
 
@@ -118,7 +119,7 @@ DroidLens.event("purchase_clicked", JSONObject().put("itemId", 42))
 
 Just press two buttons in the app's **Settings** tab.
 
-1. **Register MCP** — registers the app's built-in MCP server (50 tools) with `claude mcp add --scope user`. No separate Node install needed.
+1. **Register MCP** — registers the app's built-in MCP server (52 tools) with `claude mcp add --scope user`. No separate Node install needed.
 2. **Install agents** — copies the bundled agents to `~/.claude/agents/`.
 
 | Agent | What it does |
@@ -131,7 +132,9 @@ Restart Claude Code, then ask:
 >
 > Use droidlens-analyst to analyze this app's tech stack and screen structure
 
-To use only the MCP server without the app, download `droidlens-mcp.mjs` (Node 20+) from Releases and register it with `claude mcp add --scope user droidlens -- node /path/to/droidlens-mcp.mjs`.
+Set `DROIDLENS_TOOLS=core,graph` (any of `core`, `perf`, `graph`, `sdk`, `scenario`; default all) in the MCP server's environment to register only those tool groups and shrink the tool list — e.g. drop `sdk` when the app has no DroidLens SDK.
+
+To use only the MCP server without the app, download `droidlens-mcp.mjs` (Node 20+) from Releases and register it with `claude mcp add --scope user droidlens -- node /path/to/droidlens-mcp.mjs`. Put `droidlens-agent.apk` from the same release next to `droidlens-mcp.mjs` to get the on-device agent (Unicode text input and fast view-hierarchy dumps, 0.1–0.3 s). Without it everything still works, but dumps fall back to `uiautomator dump` (1.5–3 s) and only ASCII text can be typed.
 
 ## Scenario scripts (regression tests)
 
@@ -170,7 +173,7 @@ steps:
 How to run:
 - Desktop: **Scenarios → Scripts** tab to edit, run, and run the full regression suite
 - Claude Code: `script_run`, `suite_run`, `script_write`
-- CI/terminal: `node droidlens-mcp.mjs run <file|folder> [--serial <device>]` (exit code 1 on failure)
+- CI/terminal: `node droidlens-mcp.mjs run <file|folder> [--serial <device>] [--junit out.xml] [--summary out.md]` (exit code 1 on failure). `--junit` writes per-step results as JUnit XML and `--summary` writes Markdown for a PR comment. See [examples/ci/android-emulator.yml](examples/ci/android-emulator.yml) for a workflow that runs scripts on an emulator
 
 See [examples/scripts](examples/scripts) for examples.
 
@@ -185,6 +188,22 @@ Everything is saved under `~/.droidlens/` (override with `DROIDLENS_HOME`).
 | `scenarios/<id>/` | Scenario verification `report.html`, `scenario.json`, recorded `script.yaml`, per-step screenshots |
 | `scripts/` | Regression test scripts (YAML) |
 | `apks/<package>/` | APKs pulled for analysis |
+
+## Version compatibility (from the next release)
+
+The on-device servers (app SDK and on-device agent) now reject requests without the `X-DroidLens` header. The new desktop app and MCP server send it.
+
+| Desktop / MCP | App SDK / agent | Result |
+| --- | --- | --- |
+| New | New | Works |
+| New | Old SDK | Works (one extra header) |
+| New | Old agent (v4) | The agent is replaced with v5 once, automatically. Standalone MCP needs `droidlens-agent.apk` from the same release next to it; if it is missing or old, the error says which side to update |
+| Old (v0.11.0 or earlier) | New SDK | SDK features (network, storage, mocks) return 403 with "update the desktop app / MCP" → **update the desktop app / MCP** |
+| Old (v0.11.0 or earlier) | New agent (v5) | The old desktop reinstalls its own agent (v4). Mixing desktop and MCP versions makes them replace each other's agent, so **keep both on the same version** |
+
+The SDK does not start unless the app is a debuggable build. To use it in an internal QA build with debuggable off, call `DroidLens.allowNonDebuggable()` and then `DroidLens.init(context)` yourself.
+
+When the agent in the chat panel tries to clear app data, write to a DB, or open a URI outside the target app, Approve / Deny buttons appear. It is denied after 60 seconds without an answer, and an approval applies to that one call only.
 
 ## On-device agent
 

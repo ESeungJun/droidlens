@@ -9,7 +9,7 @@ export function register(server: McpServer): void {
 
   server.registerTool(
     'devices',
-    { description: '연결된 Android 기기/에뮬레이터 목록', annotations: readOnly },
+    { description: '연결된 Android 기기/에뮬레이터 목록 (serial·상태·모델). 가장 먼저 부른다. 여러 대면 이후 도구에 serial 을 준다', annotations: readOnly },
     async () => json(await dl.listDevices(adb)),
   );
 
@@ -22,14 +22,17 @@ export function register(server: McpServer): void {
   server.registerTool(
     'screenshot',
     {
-      description: '현재 화면 스크린샷. 이미지와 저장 경로를 반환',
+      description:
+        '현재 화면 스크린샷. 줄인 이미지(긴 변 900px)와 원본 저장 경로, 이미지 좌표를 tap·swipe 좌표(기기 픽셀)로 바꾸는 배율을 반환. ' +
+        '요소 위치는 view_hierarchy 의 @bounds 가 정확하니 셀렉터가 안 잡히는 화면(WebView·게임)에서만 이미지 좌표를 쓴다',
       inputSchema: { ...serialArg, label: z.string().optional().describe('파일 이름에 붙일 라벨') },
       annotations: readOnly,
     },
     async ({ serial, label }) => {
       const png = await dl.screenshot(await device(serial));
       const path = await saveShot(png, label);
-      return { content: [await imageContent(png), { type: 'text', text: `saved: ${path}` }] };
+      const { image, note } = await imageContent(png);
+      return { content: [image, { type: 'text', text: `saved: ${path}\n${note}` }] };
     },
   );
 
@@ -39,7 +42,7 @@ export function register(server: McpServer): void {
     'record_start',
     {
       description: '화면 녹화 시작 (최대 180초). record_stop으로 종료하면 mp4 경로를 반환',
-      inputSchema: { ...serialArg, maxSeconds: z.number().int().min(1).max(180).optional() },
+      inputSchema: { ...serialArg, maxSeconds: z.number().int().min(1).max(180).optional().describe('이 시간이 지나면 자동으로 멈춘다 (기본·최대 180)') },
       annotations: acts,
     },
     async ({ serial, maxSeconds }) => {
@@ -52,7 +55,7 @@ export function register(server: McpServer): void {
 
   server.registerTool(
     'record_stop',
-    { description: '화면 녹화 종료 후 mp4를 로컬에 저장', inputSchema: { ...serialArg, label: z.string().optional() }, annotations: acts },
+    { description: '화면 녹화 종료 후 mp4를 로컬에 저장', inputSchema: { ...serialArg, label: z.string().optional().describe('파일 이름에 붙일 라벨') }, annotations: acts },
     async ({ serial, label }) => {
       const dev = await device(serial);
       const rec = recordings.get(dev.serial);
@@ -68,7 +71,7 @@ export function register(server: McpServer): void {
     'agent_status',
     {
       description: '온디바이스 에이전트 상태 (설치 버전, 실행 여부). start=true면 설치·실행을 시도한다. 에이전트가 있으면 뷰 계층이 10배 이상 빠르고 한글 입력이 된다',
-      inputSchema: { ...serialArg, start: z.boolean().optional() },
+      inputSchema: { ...serialArg, start: z.boolean().optional().describe('true 면 에이전트 설치·실행을 시도') },
       annotations: acts,
     },
     async ({ serial, start }) => {
