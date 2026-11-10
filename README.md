@@ -109,7 +109,7 @@ DroidLens.event("purchase_clicked", JSONObject().put("itemId", 42))
 ```
 
 - No initialization code needed (starts automatically via a ContentProvider)
-- Communicates only over an in-app Unix socket (`localabstract:droidlens_sdk_<package>`), so no INTERNET permission is required; it checks the peer UID and rejects any connection other than adb and the app itself (e.g. other apps on the same device)
+- Communicates only over an in-app Unix socket (`localabstract:droidlens_sdk_<package>`), so no INTERNET permission is required; it also rejects requests that look like they came from a web page through the forwarded port (non-local `Host`, an `Origin` header, or a missing `X-DroidLens` header); it checks the peer UID and rejects any connection other than adb and the app itself (e.g. other apps on the same device)
 - Request and response bodies are capped at 256KB each; the latest 500 entries are kept in memory only
 - Sensitive values are masked **on the device, before they are stored** — in headers, URL queries, `Location` redirects, JSON bodies (including nested objects/arrays and JSON inside strings), GraphQL arguments, form, multipart and XML bodies, error messages and custom events. Keys match regardless of case and separators, and common words match anywhere in the name (`newPassword`, `fcmToken`, `X-Refresh-Token`); short ones like `jwt`, `otp`, `pin` match exactly. Add your own with `DroidLens.redactHeaders("X-Session")` / `DroidLens.redactKeys("phone")`, or call `DroidLens.clearDefaultRedaction()` to use only your list. Compressed bodies the app requested itself (`Content-Encoding`) are not recorded
 - DB write SQL runs only when explicitly allowed
@@ -119,7 +119,7 @@ DroidLens.event("purchase_clicked", JSONObject().put("itemId", 42))
 
 Just press two buttons in the app's **Settings** tab.
 
-1. **Register MCP** — registers the app's built-in MCP server (50 tools) with `claude mcp add --scope user`. No separate Node install needed.
+1. **Register MCP** — registers the app's built-in MCP server (51 tools) with `claude mcp add --scope user`. No separate Node install needed.
 2. **Install agents** — copies the bundled agents to `~/.claude/agents/`.
 
 | Agent | What it does |
@@ -131,6 +131,8 @@ Restart Claude Code, then ask:
 > Use droidlens-verifier to verify the search → product detail → add to wishlist scenario in the shopping app
 >
 > Use droidlens-analyst to analyze this app's tech stack and screen structure
+
+Set `DROIDLENS_TOOLS=core,graph` (any of `core`, `perf`, `graph`, `sdk`, `scenario`; default all) in the MCP server's environment to register only those tool groups and shrink the tool list — e.g. drop `sdk` when the app has no DroidLens SDK.
 
 To use only the MCP server without the app, download `droidlens-mcp.mjs` (Node 20+) from Releases and register it with `claude mcp add --scope user droidlens -- node /path/to/droidlens-mcp.mjs`. Put `droidlens-agent.apk` from the same release next to `droidlens-mcp.mjs` to get the on-device agent (Unicode text input and fast view-hierarchy dumps, 0.1–0.3 s). Without it everything still works, but dumps fall back to `uiautomator dump` (1.5–3 s) and only ASCII text can be typed.
 
@@ -171,7 +173,7 @@ steps:
 How to run:
 - Desktop: **Scenarios → Scripts** tab to edit, run, and run the full regression suite
 - Claude Code: `script_run`, `suite_run`, `script_write`
-- CI/terminal: `node droidlens-mcp.mjs run <file|folder> [--serial <device>]` (exit code 1 on failure)
+- CI/terminal: `node droidlens-mcp.mjs run <file|folder> [--serial <device>] [--junit out.xml] [--summary out.md]` (exit code 1 on failure). `--junit` writes per-step results as JUnit XML and `--summary` writes Markdown for a PR comment. See [examples/ci/android-emulator.yml](examples/ci/android-emulator.yml) for a workflow that runs scripts on an emulator
 
 See [examples/scripts](examples/scripts) for examples.
 

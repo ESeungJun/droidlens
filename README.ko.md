@@ -109,7 +109,7 @@ DroidLens.event("purchase_clicked", JSONObject().put("itemId", 42))
 ```
 
 - 초기화 코드는 필요 없습니다 (ContentProvider로 자동 시작)
-- 앱 내부 유닉스 소켓(`localabstract:droidlens_sdk_<패키지>`)으로만 통신하므로 INTERNET 권한이 필요 없고, 접속 UID를 검사해 adb·앱 자신 외의 연결(같은 기기의 다른 앱 등)은 거부합니다
+- 앱 내부 유닉스 소켓(`localabstract:droidlens_sdk_<패키지>`)으로만 통신하므로 INTERNET 권한이 필요 없고, 접속 UID를 검사해 adb·앱 자신 외의 연결(같은 기기의 다른 앱 등)은 거부합니다. adb forward 로 열린 PC 포트로 웹 페이지가 보낸 것으로 보이는 요청(`Host` 가 로컬이 아니거나 `Origin` 이 있거나 `X-DroidLens` 헤더가 없는 요청)도 거부합니다
 - 요청·응답 본문은 각 256KB까지, 최근 500건을 메모리에만 보관합니다
 - 민감 정보는 **기기 안에서 저장하기 전에** 가립니다 — 헤더, URL 쿼리, `Location` 리다이렉트, JSON 본문(중첩 객체·배열, 문자열 안의 JSON 포함), GraphQL 인자, 폼·multipart·XML 본문, 오류 메시지, 커스텀 이벤트. 키는 대소문자·구분자와 상관없이 맞추고, 흔한 단어는 이름에 들어 있기만 해도 가립니다(`newPassword`, `fcmToken`, `X-Refresh-Token`). `jwt`·`otp`·`pin` 같은 짧은 이름은 정확히 같을 때만 가립니다. `DroidLens.redactHeaders("X-Session")`, `DroidLens.redactKeys("phone")` 로 추가하고, `DroidLens.clearDefaultRedaction()` 으로 기본 규칙을 끌 수 있습니다. 앱이 직접 압축을 요청한 본문(`Content-Encoding`)은 기록하지 않습니다
 - DB 쓰기 SQL은 명시적으로 허용했을 때만 실행됩니다
@@ -119,7 +119,7 @@ DroidLens.event("purchase_clicked", JSONObject().put("itemId", 42))
 
 앱의 **설정** 탭에서 버튼 두 개만 누르면 됩니다.
 
-1. **MCP 자동 등록** — 앱에 내장된 MCP 서버(도구 50개)를 `claude mcp add --scope user`로 등록합니다. Node를 따로 설치할 필요가 없습니다.
+1. **MCP 자동 등록** — 앱에 내장된 MCP 서버(도구 51개)를 `claude mcp add --scope user`로 등록합니다. Node를 따로 설치할 필요가 없습니다.
 2. **에이전트 설치** — 전용 에이전트를 `~/.claude/agents/`에 복사합니다.
 
 | 에이전트 | 하는 일 |
@@ -131,6 +131,8 @@ Claude Code를 재시작한 뒤 이렇게 요청하세요.
 > droidlens-verifier로 쇼핑 앱에서 검색 → 상품 상세 → 찜하기 시나리오 검증해줘
 >
 > droidlens-analyst로 이 앱 기술 스택이랑 화면 구조 분석해줘
+
+MCP 서버 환경 변수 `DROIDLENS_TOOLS=core,graph` (`core`·`perf`·`graph`·`sdk`·`scenario` 중 골라 쉼표로, 기본은 전부)로 등록할 도구 묶음을 고르면 도구 목록이 줄어듭니다. 예: 앱에 DroidLens SDK 가 없으면 `sdk` 를 뺍니다.
 
 앱 없이 MCP만 쓰려면 Releases의 `droidlens-mcp.mjs`(Node 20+)를 받아 `claude mcp add --scope user droidlens -- node /path/to/droidlens-mcp.mjs`로 등록하세요. 같은 릴리스의 `droidlens-agent.apk` 를 `droidlens-mcp.mjs` 와 같은 폴더에 두면 온디바이스 에이전트가 설치되어 한글 입력과 빠른 뷰 계층 조회(0.1~0.3초)가 됩니다. 없어도 동작하지만 뷰 계층 조회가 `uiautomator dump`(1.5~3초)로 돌고 영문·숫자만 입력할 수 있습니다.
 
@@ -171,7 +173,7 @@ steps:
 실행 방법:
 - 데스크톱 **시나리오 → 스크립트** 탭에서 편집·실행·전체 회귀 실행
 - Claude Code: `script_run`, `suite_run`, `script_write`
-- CI/터미널: `node droidlens-mcp.mjs run <파일|폴더> [--serial <기기>]` (실패 시 종료 코드 1)
+- CI/터미널: `node droidlens-mcp.mjs run <파일|폴더> [--serial <기기>] [--junit out.xml] [--summary out.md]` (실패 시 종료 코드 1). `--junit` 은 단계별 결과를 JUnit XML 로, `--summary` 는 PR 댓글에 붙일 Markdown 으로 씁니다. 에뮬레이터에서 돌리는 워크플로 예시는 [examples/ci/android-emulator.yml](examples/ci/android-emulator.yml)
 
 예시는 [examples/scripts](examples/scripts).
 

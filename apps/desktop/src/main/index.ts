@@ -60,7 +60,8 @@ function createWindow(): void {
 const dev = (serial: string) => adb.device(serial);
 const debug = process.env.DROIDLENS_DEBUG ? (...a: unknown[]) => console.log('[droidlens]', ...a) : () => undefined;
 const send = (channel: string, payload: unknown) => {
-  if (channel !== 'mirror:packet') debug('send', channel, JSON.stringify(payload)?.slice(0, 200));
+  // 디버그가 꺼져 있을 때는 직렬화하지 않는다 (logcat 묶음·대화 이벤트마다 JSON.stringify 가 한 번씩 더 돌았다)
+  if (process.env.DROIDLENS_DEBUG && channel !== 'mirror:packet') debug('send', channel, JSON.stringify(payload)?.slice(0, 200));
   win?.webContents.send(channel, payload);
 };
 
