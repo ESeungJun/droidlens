@@ -177,6 +177,16 @@ async function stillAgent(dev: DeviceAdb, c: AgentClient): Promise<boolean> {
   if (clients.get(c.serial) === c) clients.delete(c.serial);
   return false;
 }
+/**
+ * 에이전트 APK 와 호스트(데스크톱·MCP)의 버전이 다를 때의 안내: 낮은 쪽을 올리라고 말한다.
+ * apkVersion: 설치한 APK 의 버전, apk: 그 파일
+ */
+export function agentMismatch(apkVersion: number, apk: string): string {
+  return apkVersion < AGENT_VERSION
+    ? `에이전트 APK(${apk})가 v${apkVersion} 로 이 DroidLens 가 쓰는 v${AGENT_VERSION} 보다 낮습니다. 에이전트 APK 를 올려야 합니다: 같은 릴리스의 droidlens-agent.apk 로 바꾸세요`
+    : `에이전트 APK(${apk})가 v${apkVersion} 로 이 DroidLens 가 쓰는 v${AGENT_VERSION} 보다 높습니다. DroidLens 데스크톱·MCP(droidlens-mcp.mjs)를 최신 버전으로 올려야 합니다`;
+}
+
 const IMPOSTOR = '에이전트 소켓을 에이전트가 아닌 프로세스가 열고 있어 연결하지 않습니다';
 
 /**
@@ -206,8 +216,18 @@ export async function ensureAgent(dev: DeviceAdb, opts: { force?: boolean } = {}
       const apk = agentApkPath();
       const ver = await installedVersion(dev);
       if (ver !== AGENT_VERSION) {
-        if (!apk) throw new Error('에이전트 APK를 찾지 못했습니다 (앱을 다시 설치하거나 DROIDLENS_AGENT_APK 지정)');
+        if (!apk) {
+          throw new Error(
+            ver === undefined
+              ? '에이전트 APK를 찾지 못했습니다 (앱을 다시 설치하거나 DROIDLENS_AGENT_APK 지정)'
+              : `기기의 에이전트(v${ver})가 이 DroidLens 가 쓰는 버전(v${AGENT_VERSION})과 달라 바꿔야 하는데 APK 를 찾지 못했습니다. ` +
+                '같은 릴리스의 droidlens-agent.apk 를 droidlens-mcp.mjs 옆에 두거나 DROIDLENS_AGENT_APK 로 지정하세요',
+          );
+        }
         await installAgent(dev, apk);
+        // 가진 APK 가 다른 버전이면 설치해도 맞지 않는다. 25초 기다리다 "응답 없음"으로 끝내지 않고 무엇을 올려야 하는지 알린다
+        const now = await installedVersion(dev);
+        if (now !== undefined && now !== AGENT_VERSION) throw new Error(agentMismatch(now, apk));
       }
       await dev.shell(`am force-stop ${AGENT_PACKAGE}`).catch(() => undefined);
       await dev.shell(`setsid am instrument -w ${INSTRUMENT} </dev/null >/dev/null 2>&1 &`);

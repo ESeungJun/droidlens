@@ -111,7 +111,7 @@ DroidLens.event("purchase_clicked", JSONObject().put("itemId", 42))
 - 초기화 코드는 필요 없습니다 (ContentProvider로 자동 시작)
 - 앱 내부 유닉스 소켓(`localabstract:droidlens_sdk_<패키지>`)으로만 통신하므로 INTERNET 권한이 필요 없고, 접속 UID를 검사해 adb·앱 자신 외의 연결(같은 기기의 다른 앱 등)은 거부합니다. adb forward 로 열린 PC 포트로 웹 페이지가 보낸 것으로 보이는 요청(`Host` 가 로컬이 아니거나 `Origin` 이 있거나 `X-DroidLens` 헤더가 없는 요청)도 거부합니다
 - 요청·응답 본문은 각 256KB까지, 최근 500건을 메모리에만 보관합니다
-- 민감 정보는 **기기 안에서 저장하기 전에** 가립니다 — 헤더, URL 쿼리, `Location` 리다이렉트, JSON 본문(중첩 객체·배열, 문자열 안의 JSON 포함), GraphQL 인자, 폼·multipart·XML 본문, 오류 메시지, 커스텀 이벤트. 키는 대소문자·구분자와 상관없이 맞추고, 흔한 단어는 이름에 들어 있기만 해도 가립니다(`newPassword`, `fcmToken`, `X-Refresh-Token`). `jwt`·`otp`·`pin` 같은 짧은 이름은 정확히 같을 때만 가립니다. `DroidLens.redactHeaders("X-Session")`, `DroidLens.redactKeys("phone")` 로 추가하고, `DroidLens.clearDefaultRedaction()` 으로 기본 규칙을 끌 수 있습니다. 앱이 직접 압축을 요청한 본문(`Content-Encoding`)은 기록하지 않습니다
+- 민감 정보는 **기기 안에서 저장하기 전에** 가립니다 — 헤더, URL 쿼리, `Location` 리다이렉트, JSON 본문(중첩 객체·배열, 문자열 안의 JSON 포함), GraphQL 인자, 폼·multipart·XML 본문, 오류 메시지, 커스텀 이벤트. 키는 대소문자·구분자와 상관없이 맞추고, 흔한 단어는 이름에 들어 있기만 해도 가립니다(`newPassword`, `fcmToken`, `X-Refresh-Token`). `otp`·`pin`·`code`·`key` 같은 짧은 말은 단어 단위로 맞을 때만 가립니다(`auth_code`·`authCode` 는 가리고 `pinned`·`keyboard` 는 두고). URL 은 사용자 정보(`user:pass@`), 경로 속 토큰, `;jsessionid=`, `#` 뒤도 가립니다. 이름 규칙은 리포트 문구 가리기와 같은 사례표로 시험합니다. `DroidLens.redactHeaders("X-Session")`, `DroidLens.redactKeys("phone")` 로 추가하고, `DroidLens.clearDefaultRedaction()` 으로 기본 규칙을 끌 수 있습니다. 앱이 직접 압축을 요청한 본문(`Content-Encoding`)은 기록하지 않습니다
 - DB 쓰기 SQL은 명시적으로 허용했을 때만 실행됩니다
 - **네트워크 목**: URL에 정한 문자열이 들어 있는 요청을 서버에 보내지 않고 원하는 상태 코드·본문으로 응답하거나, 연결 실패로 끝내거나, 늦춰 보낼 수 있습니다(네트워크 탭의 **목 규칙**, 기록된 요청에서 **목 만들기**). 규칙은 앱 내부 저장소에 남아 앱을 다시 시작해도 적용되고, 켜져 있으면 logcat에 경고가 남습니다
 
@@ -188,6 +188,22 @@ steps:
 | `scenarios/<id>/` | 시나리오 검증 `report.html`, `scenario.json`, 녹화된 `script.yaml`, 단계별 스크린샷 |
 | `scripts/` | 회귀 테스트 스크립트 (YAML) |
 | `apks/<패키지>/` | 분석용 APK |
+
+## 버전 호환 (다음 릴리스부터)
+
+기기 쪽 서버(앱 SDK, 온디바이스 에이전트)가 `X-DroidLens` 헤더가 없는 요청을 받지 않게 바뀌었습니다. 헤더는 새 데스크톱·MCP 가 붙입니다.
+
+| 데스크톱·MCP | 앱 SDK / 에이전트 | 결과 |
+| --- | --- | --- |
+| 새 버전 | 새 버전 | 동작 |
+| 새 버전 | 예전 SDK | 동작 (헤더를 더 보낼 뿐) |
+| 새 버전 | 예전 에이전트(v4) | 에이전트를 v5 로 한 번 자동 교체. MCP 단독 사용은 같은 릴리스의 `droidlens-agent.apk` 가 옆에 있어야 하고, 없거나 예전 파일이면 무엇을 올려야 하는지 오류로 알려 줍니다 |
+| 예전 버전 (v0.11.0 이하) | 새 SDK | SDK 기능(네트워크·저장소·목)이 403. 응답에 "데스크톱·MCP 쪽을 최신 버전으로 올리세요"가 나옵니다 → **데스크톱·MCP 를 올리세요** |
+| 예전 버전 (v0.11.0 이하) | 새 에이전트(v5) | 예전 데스크톱이 자기 버전(v4)으로 다시 설치합니다. 데스크톱과 MCP 를 섞어 쓰면 서로 번갈아 교체하니 **둘 다 같은 버전으로** 맞추세요 |
+
+SDK 는 앱이 디버그 빌드가 아니면 켜지지 않습니다. debuggable 을 끈 사내 QA 빌드에서 쓰려면 `DroidLens.allowNonDebuggable()` 을 부른 뒤 `DroidLens.init(context)` 를 직접 부릅니다.
+
+대화창에서 에이전트가 앱 데이터 삭제·DB 쓰기·앱 밖 URI 열기를 하려 하면 승인·거부 버튼이 뜹니다. 60초 안에 누르지 않으면 거부되고, 승인은 그 호출 한 번에만 적용됩니다.
 
 ## 온디바이스 에이전트
 

@@ -111,7 +111,7 @@ DroidLens.event("purchase_clicked", JSONObject().put("itemId", 42))
 - No initialization code needed (starts automatically via a ContentProvider)
 - Communicates only over an in-app Unix socket (`localabstract:droidlens_sdk_<package>`), so no INTERNET permission is required; it also rejects requests that look like they came from a web page through the forwarded port (non-local `Host`, an `Origin` header, or a missing `X-DroidLens` header); it checks the peer UID and rejects any connection other than adb and the app itself (e.g. other apps on the same device)
 - Request and response bodies are capped at 256KB each; the latest 500 entries are kept in memory only
-- Sensitive values are masked **on the device, before they are stored** — in headers, URL queries, `Location` redirects, JSON bodies (including nested objects/arrays and JSON inside strings), GraphQL arguments, form, multipart and XML bodies, error messages and custom events. Keys match regardless of case and separators, and common words match anywhere in the name (`newPassword`, `fcmToken`, `X-Refresh-Token`); short ones like `jwt`, `otp`, `pin` match exactly. Add your own with `DroidLens.redactHeaders("X-Session")` / `DroidLens.redactKeys("phone")`, or call `DroidLens.clearDefaultRedaction()` to use only your list. Compressed bodies the app requested itself (`Content-Encoding`) are not recorded
+- Sensitive values are masked **on the device, before they are stored** — in headers, URL queries, `Location` redirects, JSON bodies (including nested objects/arrays and JSON inside strings), GraphQL arguments, form, multipart and XML bodies, error messages and custom events. Keys match regardless of case and separators, and common words match anywhere in the name (`newPassword`, `fcmToken`, `X-Refresh-Token`). Short words like `otp`, `pin`, `code`, `key` match only as whole words (`auth_code` and `authCode` are masked, `pinned` and `keyboard` are not). URLs also get user info (`user:pass@`), tokens in the path, `;jsessionid=`, and everything after `#` masked. The name rules are tested against the same case table as report-text masking. Add your own with `DroidLens.redactHeaders("X-Session")` / `DroidLens.redactKeys("phone")`, or call `DroidLens.clearDefaultRedaction()` to use only your list. Compressed bodies the app requested itself (`Content-Encoding`) are not recorded
 - DB write SQL runs only when explicitly allowed
 - **Network mocking**: requests whose URL contains a given string can be answered with any status code and body without reaching the server, failed as a connection error, or delayed (**Mock rules** in the Network tab, or **Mock this** on a recorded request). Rules are kept in the app's private storage and survive restarts; while any are on, a warning is written to logcat
 
@@ -188,6 +188,22 @@ Everything is saved under `~/.droidlens/` (override with `DROIDLENS_HOME`).
 | `scenarios/<id>/` | Scenario verification `report.html`, `scenario.json`, recorded `script.yaml`, per-step screenshots |
 | `scripts/` | Regression test scripts (YAML) |
 | `apks/<package>/` | APKs pulled for analysis |
+
+## Version compatibility (from the next release)
+
+The on-device servers (app SDK and on-device agent) now reject requests without the `X-DroidLens` header. The new desktop app and MCP server send it.
+
+| Desktop / MCP | App SDK / agent | Result |
+| --- | --- | --- |
+| New | New | Works |
+| New | Old SDK | Works (one extra header) |
+| New | Old agent (v4) | The agent is replaced with v5 once, automatically. Standalone MCP needs `droidlens-agent.apk` from the same release next to it; if it is missing or old, the error says which side to update |
+| Old (v0.11.0 or earlier) | New SDK | SDK features (network, storage, mocks) return 403 with "update the desktop app / MCP" → **update the desktop app / MCP** |
+| Old (v0.11.0 or earlier) | New agent (v5) | The old desktop reinstalls its own agent (v4). Mixing desktop and MCP versions makes them replace each other's agent, so **keep both on the same version** |
+
+The SDK does not start unless the app is a debuggable build. To use it in an internal QA build with debuggable off, call `DroidLens.allowNonDebuggable()` and then `DroidLens.init(context)` yourself.
+
+When the agent in the chat panel tries to clear app data, write to a DB, or open a URI outside the target app, Approve / Deny buttons appear. It is denied after 60 seconds without an answer, and an approval applies to that one call only.
 
 ## On-device agent
 

@@ -38,7 +38,7 @@ final class RequestGuard {
             }
         }
         if (!host) return "Host 헤더가 없습니다";
-        if (!marker) return HEADER + ": 1 헤더가 없습니다. DroidLens 데스크톱·MCP 를 최신 버전으로 올리세요";
+        if (!marker) return HEADER + ": 1 헤더가 없습니다. 기기 쪽 에이전트 가 더 새 버전입니다. DroidLens 데스크톱·MCP(droidlens-mcp.mjs) 쪽을 최신 버전으로 올리세요";
         return null;
     }
 
