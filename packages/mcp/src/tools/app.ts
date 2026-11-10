@@ -5,7 +5,7 @@ import { existsSync } from 'node:fs';
 import { realpath, stat } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { extname, resolve } from 'node:path';
-import { device, text, json, serialArg, appArg, readOnly, acts, recordStep, logAction, confirmDestructive, capList, within, isProjectDir } from '../common.js';
+import { device, text, json, serialArg, appArg, readOnly, acts, recordStep, logAction, recorder, confirmDestructive, capList, within, isProjectDir } from '../common.js';
 
 export function register(server: McpServer): void {
   // ---------- 앱 ----------
@@ -138,8 +138,10 @@ export function register(server: McpServer): void {
     },
     async ({ serial, uri, packageName }) => {
       const dev = await device(serial);
-      // http(s) 가 아닌 스킴(tel:·sms:·intent: 등)은 앱 밖 동작을 일으킬 수 있다
-      if (!/^https?:/i.test(uri) && !packageName) await confirmDestructive(server, `URI 열기 ${dl.redactUrl(uri)}`);
+      // http(s) 와 시험 대상 앱의 커스텀 스킴 딥링크만 확인 없이 연다 (tel:·intent: 나 다른 앱 지정은 packageName 을 줘도 확인)
+      if (dl.deepLinkNeedsConfirm(uri, packageName, recorder.app ?? process.env.DROIDLENS_APP)) {
+        await confirmDestructive(server, `URI 열기 ${dl.redactUrl(uri)}${packageName ? ` (${packageName})` : ''}`);
+      }
       const out = await dl.openDeepLink(dev, uri, packageName);
       recordStep({ deeplink: uri }, `딥링크 열기 ${dl.redactUrl(uri)}`);
       return text(out);

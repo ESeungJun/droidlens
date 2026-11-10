@@ -2,7 +2,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { describeAdbFailure, describeAdbArgs, quoteShell } from '../dist/adb.js';
-import { installFailure, assertPackage } from '../dist/app.js';
+import { installFailure, assertPackage, deepLinkNeedsConfirm } from '../dist/app.js';
 
 const S = ['-s', 'R5X', 'shell', 'input tap 1 2'];
 
@@ -52,4 +52,28 @@ test('installFailure: 덮어쓸 수 없으면 지우지 않았다고 알린다',
   assert.match(installFailure('adb: failed to install a.apk: Failure [INSTALL_FAILED_UPDATE_INCOMPATIBLE: Existing package ...]'), /INSTALL_FAILED_UPDATE_INCOMPATIBLE\): .*서명이 달라/);
   assert.match(installFailure('Failure [INSTALL_FAILED_VERSION_DOWNGRADE]'), /버전이 낮습니다/);
   assert.match(installFailure('Performing Streamed Install\nsomething odd'), /설치 실패: something odd/);
+});
+
+test('deepLinkNeedsConfirm: http(s)와 대상 앱의 커스텀 스킴만 확인 없이 연다', () => {
+  const T = 'com.example.app';
+  assert.equal(deepLinkNeedsConfirm('https://example.com/a', undefined, undefined), false);
+  assert.equal(deepLinkNeedsConfirm('HTTP://example.com', 'com.other', T), false);
+  assert.equal(deepLinkNeedsConfirm('myapp://item/1', T, T), false);
+  // packageName 만으로는 건너뛰지 못한다
+  for (const [uri, pkg, target] of [
+    ['tel:0101234', T, T],
+    ['TEL:0101234', T, T],
+    ['sms:0101234?body=x', T, T],
+    ['intent://x#Intent;end', T, T],
+    ['file:///sdcard/a', T, T],
+    ['content://x/y', T, T],
+    ['market://details?id=x', T, T],
+    ['otherapp://pay', 'com.other.app', T],
+    ['myapp://item/1', T, undefined],
+    ['myapp://item/1', undefined, T],
+    ['no-scheme', T, T],
+    ['', T, T],
+  ]) {
+    assert.equal(deepLinkNeedsConfirm(uri, pkg, target), true, `${uri} ${pkg} ${target}`);
+  }
 });

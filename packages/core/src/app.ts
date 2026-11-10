@@ -245,6 +245,22 @@ export function installFailure(output: string): string {
   return `설치 실패${code ? ` (${code})` : ''}: ${(code && hints[code]) || first.slice(0, 300) || '원인을 알 수 없습니다'}`;
 }
 
+/** 어느 앱으로 열든 앱 밖 동작(전화·문자·메일·임의 인텐트·파일 접근·스토어)으로 이어지는 스킴 */
+const SYSTEM_SCHEMES = new Set(['tel', 'sms', 'smsto', 'mms', 'mmsto', 'mailto', 'intent', 'android-app', 'market', 'geo', 'file', 'content', 'javascript', 'data', 'about', 'blob']);
+
+/**
+ * URI 를 열기 전에 사용자 확인이 필요한지 (확인 모드에서만 쓴다).
+ * 확인 없이 여는 것은 http(s) 링크와, 시험 대상 앱(targetApp)을 지정해 그 앱의 커스텀 스킴으로 여는 딥링크뿐이다.
+ * packageName 을 주는 것만으로는 건너뛰지 않는다: 다른 앱을 지정하거나 tel:·intent: 같은 스킴이면 확인한다
+ */
+export function deepLinkNeedsConfirm(uri: string, packageName: string | undefined, targetApp: string | undefined): boolean {
+  const scheme = /^\s*([a-zA-Z][a-zA-Z0-9+.-]*):/.exec(uri)?.[1].toLowerCase();
+  if (!scheme) return true;
+  if (scheme === 'http' || scheme === 'https') return false;
+  if (SYSTEM_SCHEMES.has(scheme)) return true;
+  return !packageName || !targetApp || packageName !== targetApp;
+}
+
 export async function openDeepLink(dev: DeviceAdb, uri: string, pkg?: string): Promise<string> {
   if (pkg) assertPackage(pkg);
   const out = await dev.shell(`am start -W -a android.intent.action.VIEW -d ${quoteShell(uri)}${pkg ? ` ${pkg}` : ''}`);

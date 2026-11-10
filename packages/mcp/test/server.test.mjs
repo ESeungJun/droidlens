@@ -138,7 +138,7 @@ test('clear_app_data: 기본은 실행, DROIDLENS_CONFIRM=1 이고 확인을 받
   s.clearLog();
   assert.equal((await s.call('clear_app_data', { packageName: 'com.example.app' })).isError, false);
   assert.ok(s.log().includes('pm clear com.example.app'));
-  const c = await start({ DROIDLENS_CONFIRM: '1' });
+  const c = await start({ DROIDLENS_CONFIRM: '1', DROIDLENS_APP: 'com.example.app' });
   try {
     const r = await c.call('clear_app_data', { packageName: 'com.example.app' });
     assert.equal(r.isError, true);
@@ -149,6 +149,19 @@ test('clear_app_data: 기본은 실행, DROIDLENS_CONFIRM=1 이고 확인을 받
     // http(s) 링크와 앱을 지정한 딥링크는 그대로 열린다
     assert.equal((await c.call('open_deeplink', { uri: 'https://example.com/a' })).isError, false);
     assert.equal((await c.call('open_deeplink', { uri: 'myapp://item/1', packageName: 'com.example.app' })).isError, false);
+    // packageName 을 주는 것만으로는 확인을 건너뛰지 못한다: 위험 스킴, 대상이 아닌 앱
+    c.clearLog();
+    for (const a of [
+      { uri: 'tel:01012345678', packageName: 'com.example.app' },
+      { uri: 'intent://x#Intent;component=a/.B;end', packageName: 'com.example.app' },
+      { uri: 'otherapp://pay', packageName: 'com.other.app' },
+      { uri: 'myapp://item/1' },
+    ]) {
+      const r = await c.call('open_deeplink', a);
+      assert.equal(r.isError, true, JSON.stringify(a));
+      assert.match(r.text, /사용자 확인이 필요한 조작/);
+    }
+    assert.deepEqual(c.log().filter((l) => l.startsWith('am start')), []);
   } finally {
     await c.close();
   }

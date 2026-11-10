@@ -133,7 +133,11 @@ export async function sendChat(
         args: [ctx.mcpScript],
         // 도구를 미리 허용해 두고 호출마다 사람이 승인하지 않는 대화라, 되돌릴 수 없는 조작(앱 데이터 삭제·DB 쓰기·앱 밖 URI)은
         // MCP 서버가 사용자 확인을 요구하게 한다. 헤드리스 실행은 확인을 받을 수 없어 그 조작은 실행되지 않는다
-        env: { ELECTRON_RUN_AS_NODE: '1', DROIDLENS_CONFIRM: '1', ...(req.serial ? { DROIDLENS_SERIAL: req.serial } : {}) },
+        env: { ELECTRON_RUN_AS_NODE: '1', DROIDLENS_CONFIRM: '1',
+          ...(req.serial ? { DROIDLENS_SERIAL: req.serial } : {}),
+          // 사용자가 고른 앱: 이 앱의 커스텀 스킴 딥링크만 확인 없이 연다
+          ...(req.packageName ? { DROIDLENS_APP: req.packageName } : {}),
+        },
       },
     },
   };
