@@ -134,6 +134,13 @@ public final class SdkServer {
             String[] req = lines[0].split(" ");
             String method = req[0];
             String target = req.length > 1 ? req[1] : "/";
+            // forward 된 호스트 포트로 들어온 요청은 전부 shell UID 로 보인다. 웹 페이지가 보낸 요청은 헤더로 거른다
+            String denied = RequestGuard.reject(method, java.util.Arrays.copyOfRange(lines, 1, lines.length));
+            if (denied != null) {
+                Log.w(TAG, "rejected request: " + denied);
+                write(sock.getOutputStream(), 403, new JSONObject().put("error", denied).toString());
+                return;
+            }
             int contentLength = 0;
             for (int i = 1; i < lines.length; i++) {
                 int idx = lines[i].indexOf(':');

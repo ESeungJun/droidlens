@@ -72,6 +72,13 @@ final class AgentServer {
         String[] parts = lines[0].split(" ");
         String method = parts[0];
         String target = parts.length > 1 ? parts[1] : "/";
+        // forward 된 호스트 포트로 들어온 요청은 전부 shell UID 로 보인다. 웹 페이지가 보낸 요청은 헤더로 거른다 (/ping 포함)
+        String denied = RequestGuard.reject(method, java.util.Arrays.copyOfRange(lines, 1, lines.length));
+        if (denied != null) {
+            Log.w(AgentInstrumentation.TAG, "rejected request: " + denied);
+            write(s.getOutputStream(), 403, "application/json; charset=utf-8", "{\"error\":" + json(denied) + "}");
+            return;
+        }
         int contentLength = 0;
         for (int i = 1; i < lines.length; i++) {
             int idx = lines[i].indexOf(':');
