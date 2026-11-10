@@ -159,8 +159,11 @@ export function register(server: McpServer): void {
       annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: false },
     },
     async ({ serial, packageName, db, sql, write }) => {
-      const c = await dl.sdkFor(await device(serial), packageName);
-      if (write) await confirmDestructive(server, `${packageName} 의 ${db} 에 쓰기 SQL 실행 (${dl.redactSql(sql).slice(0, 120)})`);
+      const dev = await device(serial);
+      const c = await dl.sdkFor(dev, packageName);
+      if (write) {
+        await confirmDestructive(server, `${db} 에 쓰기 SQL 실행: ${dl.redactSql(sql).slice(0, 200)}`, { serial: dev.serial, app: packageName, tool: 'db_query' });
+      }
       const r = await c.query(db, sql, write);
       if (r.changes !== undefined) {
         const shape = dl.redactSql(sql);

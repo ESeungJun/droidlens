@@ -195,3 +195,86 @@ test('install_apk: 프로젝트 폴더 안의 .apk 만 설치한다', async () =
     rmSync(outside, { recursive: true, force: true });
   }
 });
+
+// ---------- 데스크톱 대화창의 승인·거부 버튼 (확인 소켓) ----------
+
+async function withBroker(opts, fn) {
+  const { ConfirmBroker } = await import('@droidlens/core');
+  const dir = realpathSync(mkdtempSync(join(tmpdir(), 'dl-ask-')));
+  const path = process.platform === 'win32' ? `\\\\.\\pipe\\dl-ask-${Date.now()}` : join(dir, 'c.sock');
+  const asks = [];
+  const closed = [];
+  const broker = new ConfirmBroker({ token: 'tok-1', onRequest: (r) => asks.push(r), onClosed: (id, reason) => closed.push(reason), ...opts });
+  await broker.listen(path);
+  const c = await start({ DROIDLENS_CONFIRM: '1', DROIDLENS_CONFIRM_SOCKET: path, DROIDLENS_CONFIRM_TOKEN: opts.clientToken ?? 'tok-1', DROIDLENS_APP: 'com.example.app' });
+  const waitAsk = async (n) => {
+    for (let i = 0; i < 300 && asks.length < n; i++) await new Promise((r) => setTimeout(r, 10));
+    assert.equal(asks.length, n, '확인 요청이 오지 않았다');
+    return asks[n - 1];
+  };
+  try {
+    await fn({ c, broker, asks, closed, waitAsk });
+  } finally {
+    await c.close();
+    broker.close();
+    rmSync(dir, { recursive: true, force: true });
+  }
+}
+const cleared = (c) => c.log().filter((l) => l.startsWith('pm clear'));
+
+test('확인 버튼 승인: 무엇을 어느 기기·앱에 하는지 보여 주고, 승인하면 그 호출만 실행된다', async () => {
+  await withBroker({}, async ({ c, broker, waitAsk }) => {
+    const p = c.call('clear_app_data', { packageName: 'com.example.app' });
+    const ask = await waitAsk(1);
+    assert.match(ask.what, /com\.example\.app 의 앱 데이터 전체 삭제/);
+    assert.equal(ask.serial, 'fake');
+    assert.equal(ask.app, 'com.example.app');
+    assert.equal(ask.tool, 'clear_app_data');
+    assert.deepEqual(cleared(c), [], '답하기 전에는 실행하지 않는다');
+    broker.answer(ask.id, true);
+    assert.equal((await p).isError, false);
+    assert.deepEqual(cleared(c), ['pm clear com.example.app']);
+    // 승인은 한 번뿐: 같은 호출을 다시 하면 다시 묻고, 거부하면 실행되지 않는다
+    const again = c.call('clear_app_data', { packageName: 'com.example.app' });
+    const ask2 = await waitAsk(2);
+    assert.notEqual(ask2.id, ask.id);
+    assert.equal(broker.answer(ask.id, true), false, '앞 요청의 승인을 다시 쓸 수 없다');
+    assert.deepEqual(cleared(c).length, 1);
+    broker.answer(ask2.id, false);
+    const r = await again;
+    assert.equal(r.isError, true);
+    assert.match(r.text, /사용자가 거부해 실행하지 않았습니다/);
+    assert.deepEqual(cleared(c).length, 1);
+  });
+});
+
+test('확인 버튼 거부 뒤 늦은 승인: 실행되지 않는다', async () => {
+  await withBroker({}, async ({ c, broker, waitAsk }) => {
+    const p = c.call('open_deeplink', { uri: 'tel:01012345678' });
+    const ask = await waitAsk(1);
+    assert.match(ask.what, /URI 열기 tel:/);
+    assert.equal(broker.answer(ask.id, false), true);
+    assert.equal(broker.answer(ask.id, true), false);
+    assert.equal((await p).isError, true);
+    assert.deepEqual(c.log().filter((l) => l.startsWith('am start')), []);
+  });
+});
+
+test('확인 버튼 시간 초과: 누르지 않으면 거부로 끝난다', async () => {
+  await withBroker({ timeoutMs: 150 }, async ({ c, closed }) => {
+    const r = await c.call('clear_app_data', { packageName: 'com.example.app' });
+    assert.equal(r.isError, true);
+    assert.match(r.text, /시간 안에 확인하지 않아 실행하지 않았습니다/);
+    assert.deepEqual(closed, ['timeout']);
+    assert.deepEqual(cleared(c), []);
+  });
+});
+
+test('확인 소켓의 토큰이 틀리면 묻지도 실행하지도 않는다', async () => {
+  await withBroker({ clientToken: 'wrong' }, async ({ c, asks }) => {
+    const r = await c.call('clear_app_data', { packageName: 'com.example.app' });
+    assert.equal(r.isError, true);
+    assert.equal(asks.length, 0);
+    assert.deepEqual(cleared(c), []);
+  });
+});

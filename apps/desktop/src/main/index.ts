@@ -6,7 +6,7 @@ import { homedir } from 'node:os';
 import { basename, isAbsolute, join, resolve, sep } from 'node:path';
 import { promisify } from 'node:util';
 import * as dl from '@droidlens/core';
-import { resolveClaude, sendChat, stopChat, type ChatRequest } from './chat';
+import { confirmChat, resolveClaude, sendChat, stopChat, type ChatRequest } from './chat';
 import { checkForUpdate, cleanupOldUpdates, currentVersion, installUpdate, type UpdateInfo } from './updater';
 
 let adb = new dl.Adb();
@@ -452,6 +452,7 @@ handle('chatSend', async (req: ChatRequest) => {
   return true;
 });
 handle('chatStop', async () => stopChat());
+handle('chatConfirm', async (id: string, approve: boolean) => confirmChat(id, approve));
 
 // ---------- 기타 ----------
 /** 렌더러가 넘긴 경로는 DroidLens 데이터 폴더 안쪽만 허용 (openPath는 실행 파일도 열 수 있으므로) */

@@ -107,10 +107,18 @@ export async function resolveNode(dev: dl.DeviceAdb, sel: dl.Selector, root?: dl
 
 /**
  * 되돌릴 수 없는 조작 전 확인. DROIDLENS_CONFIRM=1 일 때만 동작한다 (데스크톱 앱의 대화창처럼 도구를 미리 허용해 두고
- * 사람이 호출마다 승인하지 않는 환경). 클라이언트가 MCP elicitation 을 지원하면 사용자에게 묻고, 아니면 실행하지 않는다.
- * 에이전트는 앱 화면의 글자를 읽으므로 화면에 심긴 지시로 이런 도구를 부를 수 있다 — 지침 문장이 아니라 여기서 막는다
+ * 사람이 호출마다 승인하지 않는 환경). 에이전트는 앱 화면의 글자를 읽으므로 화면에 심긴 지시로 이런 도구를 부를 수 있다 —
+ * 지침 문장이 아니라 여기서 막는다. 확인 경로는 순서대로:
+ *  1. 클라이언트가 MCP elicitation 을 지원하면 그것으로 묻는다
+ *  2. 데스크톱 대화창이 연 확인 소켓(DROIDLENS_CONFIRM_SOCKET)이 있으면 대화창의 승인·거부 버튼으로 묻는다
+ *  3. 둘 다 없으면 실행하지 않는다
+ * 승인은 이 호출 한 번에만 유효하다. 거부·시간 초과·응답 없음은 모두 실행하지 않는다
  */
-export async function confirmDestructive(server: McpServer, what: string): Promise<void> {
+export async function confirmDestructive(
+  server: McpServer,
+  what: string,
+  ctx: { serial?: string; app?: string; tool?: string } = {},
+): Promise<void> {
   if (process.env.DROIDLENS_CONFIRM !== '1') return;
   if (server.server.getClientCapabilities()?.elicitation) {
     const r = await server.server
@@ -121,6 +129,14 @@ export async function confirmDestructive(server: McpServer, what: string): Promi
       .catch(() => undefined);
     if (r?.action === 'accept' && r.content?.confirm === true) return;
     throw new Error(`사용자가 승인하지 않아 실행하지 않았습니다: ${what}`);
+  }
+  const socket = process.env.DROIDLENS_CONFIRM_SOCKET;
+  const token = process.env.DROIDLENS_CONFIRM_TOKEN;
+  if (socket && token) {
+    const outcome = await dl.requestConfirm(socket, token, { what, ...ctx });
+    if (outcome === 'approved') return;
+    if (outcome === 'denied') throw new Error(`사용자가 거부해 실행하지 않았습니다: ${what}. 다시 시도하지 말고 사용자에게 어떻게 할지 물으세요`);
+    if (outcome === 'timeout') throw new Error(`사용자가 시간 안에 확인하지 않아 실행하지 않았습니다: ${what}. 필요하면 사용자에게 알리고 다시 요청받으세요`);
   }
   throw new Error(
     `사용자 확인이 필요한 조작이라 실행하지 않았습니다: ${what}. 이 대화에서는 확인을 받을 수 없으니, 사용자에게 DroidLens 앱 화면이나 터미널의 Claude Code 에서 직접 하도록 안내하세요`,

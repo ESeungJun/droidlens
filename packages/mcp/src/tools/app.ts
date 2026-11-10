@@ -96,7 +96,7 @@ export function register(server: McpServer): void {
     },
     async ({ serial, packageName }) => {
       const dev = await device(serial);
-      await confirmDestructive(server, `${packageName} 의 앱 데이터 전체 삭제`);
+      await confirmDestructive(server, `${packageName} 의 앱 데이터 전체 삭제 (로그인·설정이 모두 사라집니다)`, { serial: dev.serial, app: packageName, tool: 'clear_app_data' });
       await dl.clearAppData(dev, packageName);
       logAction(`앱 데이터 전체 삭제 ${packageName}`);
       return text(`cleared ${packageName}`);
@@ -140,7 +140,7 @@ export function register(server: McpServer): void {
       const dev = await device(serial);
       // http(s) 와 시험 대상 앱의 커스텀 스킴 딥링크만 확인 없이 연다 (tel:·intent: 나 다른 앱 지정은 packageName 을 줘도 확인)
       if (dl.deepLinkNeedsConfirm(uri, packageName, recorder.app ?? process.env.DROIDLENS_APP)) {
-        await confirmDestructive(server, `URI 열기 ${dl.redactUrl(uri)}${packageName ? ` (${packageName})` : ''}`);
+        await confirmDestructive(server, `URI 열기 ${dl.redactUrl(uri)}`, { serial: dev.serial, app: packageName, tool: 'open_deeplink' });
       }
       const out = await dl.openDeepLink(dev, uri, packageName);
       recordStep({ deeplink: uri }, `딥링크 열기 ${dl.redactUrl(uri)}`);

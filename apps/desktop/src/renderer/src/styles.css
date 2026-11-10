@@ -292,9 +292,9 @@ label.chk { display: inline-flex; gap: 6px; align-items: center; color: var(--fg
 .toast.err { border-color: var(--err); color: var(--err); }
 
 /* 에이전트 대화 */
-.chat { border-left: 1px solid var(--line); background: var(--panel); display: grid; grid-template-rows: auto 1fr auto; min-height: 0; min-width: 0; }
+.chat { border-left: 1px solid var(--line); background: var(--panel); display: flex; flex-direction: column; min-height: 0; min-width: 0; }
 .chat-head { display: flex; gap: 8px; align-items: center; padding: 8px 10px; border-bottom: 1px solid var(--line); }
-.chat-body { overflow: auto; padding: 12px; display: flex; flex-direction: column; gap: 8px; }
+.chat-body { flex: 1; min-height: 0; overflow: auto; padding: 12px; display: flex; flex-direction: column; gap: 8px; }
 .chat-empty { margin: auto 0; text-align: center; padding: 20px; }
 .msg { padding: 8px 11px; border-radius: 10px; white-space: pre-wrap; word-break: break-word; line-height: 1.5; max-width: 92%; }
 .msg.user { align-self: flex-end; background: var(--accent-dim); border: 1px solid color-mix(in srgb, var(--accent) 35%, transparent); }
@@ -306,6 +306,10 @@ label.chk { display: inline-flex; gap: 6px; align-items: center; color: var(--fg
 .tool pre { white-space: pre-wrap; word-break: break-all; max-height: 260px; overflow: auto; margin: 6px 0 2px; color: var(--fg-dim); }
 .chat-note { font-size: 12px; color: var(--fg-faint); text-align: center; white-space: pre-wrap; }
 .chat-note.error { color: var(--err); text-align: left; }
+.chat-ask { margin: 0 10px 8px; padding: 10px; border: 1px solid var(--err); border-radius: 8px; display: flex; flex-direction: column; gap: 6px; font-size: 12px; }
+.chat-ask-title { font-weight: 600; color: var(--err); }
+.chat-ask-what { white-space: pre-wrap; word-break: break-all; }
+.chat-ask-actions { display: flex; gap: 8px; align-items: center; margin-top: 4px; }
 .chat-input { display: grid; grid-template-columns: 1fr auto; gap: 8px; padding: 10px; border-top: 1px solid var(--line); align-items: end; }
 .chat-input textarea { resize: none; }
 

@@ -9,6 +9,14 @@ type Item =
   | { kind: 'tool'; id: string; name: string; input: unknown; result?: string; isError?: boolean }
   | { kind: 'note'; text: string; vars?: Vars; error?: boolean };
 
+interface Ask {
+  id: string;
+  what: string;
+  serial?: string;
+  app?: string;
+  timeoutMs: number;
+}
+
 const AGENTS = [
   { id: 'droidlens-verifier', label: '시나리오 검증', hint: '예: 메모 추가 버튼을 누르면 목록에 새 메모가 생기는지 확인해줘' },
   { id: 'droidlens-analyst', label: '앱 분석', hint: '예: 이 앱 기술 스택이랑 화면 구조 분석해줘' },
@@ -41,6 +49,8 @@ export function ChatPanel({ onClose }: { onClose(): void }) {
   // 지금 실행을 사용자가 멈췄는지 (끝났을 때 "중지했습니다"로 보여 준다)
   const stopped = useRef(false);
   const [confirm, setConfirm] = useState<null | (() => void)>(null);
+  // 에이전트가 요청한 되돌릴 수 없는 조작. 사용자가 승인·거부를 누를 때까지 떠 있다 (여러 개면 온 순서대로 하나씩)
+  const [asks, setAsks] = useState<Ask[]>([]);
 
   useEffect(() => {
     api.chatStatus().then((c) => setClaude({ version: c.version })).catch((e) => setClaude({ error: (e as Error).message }));
@@ -62,6 +72,13 @@ export function ChatPanel({ onClose }: { onClose(): void }) {
           setItems((cur) => [...cur, { kind: 'note', text: '중지했습니다' }]);
           return;
         }
+        if (e.kind === 'confirm') return setAsks((cur) => [...cur, { id: e.id, what: e.what, serial: e.serial, app: e.app, timeoutMs: e.timeoutMs }]);
+        if (e.kind === 'confirmClosed') {
+          setAsks((cur) => cur.filter((a) => a.id !== e.id));
+          if (e.reason === 'timeout') setItems((cur) => [...cur, { kind: 'note', text: '확인하지 않아 실행하지 않았습니다' }]);
+          return;
+        }
+        if (e.kind === 'done') setAsks([]);
         if (e.kind === 'session') setSessionId(e.sessionId);
         else if (e.kind === 'text') setItems((cur) => [...cur, { kind: 'assistant', text: e.text }]);
         else if (e.kind === 'tool') setItems((cur) => [...cur, { kind: 'tool', id: e.id, name: e.name, input: e.input }]);
@@ -111,6 +128,7 @@ export function ChatPanel({ onClose }: { onClose(): void }) {
     runRef.current = null;
     stopped.current = false;
     setConfirm(null);
+    setAsks([]);
     setItems([]);
     setSessionId(undefined);
     setBusy(false);
@@ -118,6 +136,15 @@ export function ChatPanel({ onClose }: { onClose(): void }) {
 
   /** 작업 중이면 진행 중인 작업을 버려도 되는지 먼저 묻는다 */
   const guard = (action: () => void) => (busyRef.current ? setConfirm(() => action) : action());
+
+  /** 승인·거부. 답은 그 요청 한 번에만 쓰인다 (메인이 이미 끝난 요청이면 버린다) */
+  const answer = (ask: Ask, approve: boolean) => {
+    setAsks((cur) => cur.filter((a) => a.id !== ask.id));
+    api
+      .chatConfirm(ask.id, approve)
+      .then((ok) => setItems((cur) => [...cur, { kind: 'note', text: !ok ? '이미 끝난 요청입니다' : approve ? '승인했습니다: {what}' : '거부했습니다: {what}', vars: { what: ask.what } }]))
+      .catch(() => undefined);
+  };
 
   const hint = t(AGENTS.find((a) => a.id === agent)!.hint);
 
@@ -191,6 +218,24 @@ export function ChatPanel({ onClose }: { onClose(): void }) {
         {busy && <div className="chat-note">{t('작업 중…')}</div>}
         <div ref={bottom} />
       </div>
+
+      {asks[0] && (
+        // key 를 요청 번호로 둬서 다음 요청이 오면 새로 그려지고 포커스가 다시 거부 버튼으로 간다
+        <div key={asks[0].id} className="chat-ask" role="alertdialog" aria-labelledby="chat-ask-title" aria-describedby="chat-ask-what">
+          <div id="chat-ask-title" className="chat-ask-title">{t('에이전트가 되돌릴 수 없는 조작을 하려고 합니다')}</div>
+          <div id="chat-ask-what" className="chat-ask-what">{asks[0].what}</div>
+          <div className="faint">
+            {t('기기 {serial}', { serial: asks[0].serial ?? '-' })}
+            {asks[0].app ? ` · ${asks[0].app}` : ''}
+          </div>
+          <div className="faint">{t('{s}초 안에 누르지 않으면 거부됩니다. 승인은 이번 한 번에만 적용됩니다.', { s: Math.round(asks[0].timeoutMs / 1000) })}</div>
+          <div className="chat-ask-actions">
+            <button className="btn" autoFocus onClick={() => answer(asks[0], false)}>{t('거부')}</button>
+            <button className="btn danger" onClick={() => answer(asks[0], true)}>{t('승인')}</button>
+            {asks.length > 1 && <span className="faint">{t('뒤에 {n}건 더', { n: asks.length - 1 })}</span>}
+          </div>
+        </div>
+      )}
 
       <div className="chat-input">
         <textarea
