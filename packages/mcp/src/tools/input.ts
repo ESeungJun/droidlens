@@ -1,7 +1,7 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import * as dl from '@droidlens/core';
-import { device, hasSelector, resolveNode, recordStep, logAction, nodeLabel, recorder, cleanSelector, text, serialArg, selectorShape, pickSelector, describeNode, readOnly, acts, refuseRisky, allowDangerArg } from '../common.js';
+import { device, hasSelector, resolveNode, recordStep, logAction, nodeLabel, recorder, cleanSelector, text, serialArg, selectorShape, pickSelector, describeNode, readOnly, acts, refuseRisky, allowDangerArg, PIXELS } from '../common.js';
 
 export function register(server: McpServer): void {
   // ---------- 조작 ----------
@@ -13,8 +13,8 @@ export function register(server: McpServer): void {
       inputSchema: {
         ...serialArg,
         ...selectorShape,
-        x: z.number().optional(),
-        y: z.number().optional(),
+        x: z.number().optional().describe(`셀렉터 대신 누를 x 좌표. ${PIXELS}`),
+        y: z.number().optional().describe('셀렉터 대신 누를 y 좌표 (기기 픽셀)'),
         long: z.boolean().optional().describe('길게 누르기'),
         ...allowDangerArg,
       },
@@ -57,11 +57,11 @@ export function register(server: McpServer): void {
       inputSchema: {
         ...serialArg,
         direction: z.enum(['up', 'down', 'left', 'right']).optional().describe('손가락 이동 방향. up = 내용이 아래로 스크롤'),
-        x1: z.number().optional(),
-        y1: z.number().optional(),
-        x2: z.number().optional(),
-        y2: z.number().optional(),
-        durationMs: z.number().int().optional(),
+        x1: z.number().optional().describe(`시작 x. ${PIXELS}`),
+        y1: z.number().optional().describe('시작 y (기기 픽셀)'),
+        x2: z.number().optional().describe('끝 x (기기 픽셀)'),
+        y2: z.number().optional().describe('끝 y (기기 픽셀)'),
+        durationMs: z.number().int().optional().describe('움직이는 시간(ms). 기본 300. 길수록 천천히 끈다'),
       },
       annotations: acts,
     },
@@ -137,8 +137,8 @@ export function register(server: McpServer): void {
   server.registerTool(
     'press_key',
     {
-      description: '하드웨어/시스템 키 입력',
-      inputSchema: { ...serialArg, key: z.enum(Object.keys(dl.KEYCODES) as [keyof typeof dl.KEYCODES]) },
+      description: '하드웨어/시스템 키 입력 (뒤로 가기 back, 홈 home, 입력 완료·검색 enter 등)',
+      inputSchema: { ...serialArg, key: z.enum(Object.keys(dl.KEYCODES) as [keyof typeof dl.KEYCODES]).describe('누를 키') },
       annotations: acts,
     },
     async ({ serial, key }) => {

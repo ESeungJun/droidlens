@@ -1,7 +1,7 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import * as dl from '@droidlens/core';
-import { device, text, json, serialArg, selectorShape, pickSelector, readOnly, acts, hasSelector, resolveNode, logAction, refuseRisky, allowDangerArg } from '../common.js';
+import { device, text, json, serialArg, appArg, PIXELS, selectorShape, pickSelector, readOnly, acts, hasSelector, resolveNode, logAction, refuseRisky, allowDangerArg } from '../common.js';
 
 export function register(server: McpServer): void {
   // ---------- 화면 그래프 ----------
@@ -14,15 +14,15 @@ export function register(server: McpServer): void {
         'tap·longpress 는 tap 도구와 같이 삭제·결제·로그아웃·전송 같은 위험 버튼을 allowDanger 없이는 누르지 않는다',
       inputSchema: {
         ...serialArg,
-        packageName: z.string(),
+        ...appArg,
         action: z
           .object({
             type: z.enum(['tap', 'longpress', 'key', 'swipe']),
             ...selectorShape,
-            x: z.number().optional(),
-            y: z.number().optional(),
-            key: z.string().optional(),
-            direction: z.enum(['up', 'down', 'left', 'right']).optional(),
+            x: z.number().optional().describe(`셀렉터 대신 누를 x. ${PIXELS}`),
+            y: z.number().optional().describe('셀렉터 대신 누를 y (기기 픽셀)'),
+            key: z.string().optional().describe('type=key 일 때 누를 키 (기본 back)'),
+            direction: z.enum(['up', 'down', 'left', 'right']).optional().describe('type=swipe 일 때 손가락 이동 방향 (기본 up)'),
           })
           .optional()
           .describe('기록하면서 실행할 조작. tap·longpress 는 셀렉터나 x/y(기기 픽셀), key 는 key, swipe 는 direction'),
@@ -73,10 +73,10 @@ export function register(server: McpServer): void {
     {
       description: '앱 화면 그래프 조회 (format: summary | mermaid | json). from/to를 주면 두 화면 사이 최단 경로',
       inputSchema: {
-        packageName: z.string(),
-        format: z.enum(['summary', 'mermaid', 'json']).optional(),
-        from: z.string().optional(),
-        to: z.string().optional(),
+        ...appArg,
+        format: z.enum(['summary', 'mermaid', 'json']).optional().describe('summary(기본): 화면별 한 줄과 나가는 연결. mermaid: 흐름도. json: 요소 key 까지 든 전체 (크다)'),
+        from: z.string().optional().describe('경로를 찾을 출발 화면 id'),
+        to: z.string().optional().describe('경로를 찾을 도착 화면 id'),
       },
       annotations: readOnly,
     },
@@ -109,11 +109,11 @@ export function register(server: McpServer): void {
         'startScreen 과 only 를 주면 그 화면(기록된 경로로 이동)에서 지정한 동작만 먼저 실행하고, 열린 화면부터 maxDepth 까지 탐색한다',
       inputSchema: {
         ...serialArg,
-        packageName: z.string(),
+        ...appArg,
         maxSteps: z.number().int().min(1).max(500).optional().describe('누르는 횟수 안전 상한 (기본 500). 범위는 maxDepth 로 정한다'),
         maxDepth: z.number().int().min(1).max(10).optional().describe('기본 4'),
         avoid: z.string().optional().describe('추가로 피할 라벨 정규식'),
-        relaunch: z.boolean().optional(),
+        relaunch: z.boolean().optional().describe('탐색 전에 앱을 다시 실행해 첫 화면부터 시작 (기본 true)'),
         startScreen: z.string().optional().describe('지도의 화면 id (graph_get 으로 확인). 기기가 다른 화면이면 기록된 경로로 이동해서 시작'),
         only: z
           .array(
@@ -168,7 +168,7 @@ export function register(server: McpServer): void {
     {
       description:
         '앱 화면 지도에 기록된 경로를 따라 기기를 지정한 화면으로 옮긴다. 이미 그 화면이면 그대로 두고, 아니면 앱을 다시 실행해 첫 화면부터 최단 경로를 따라간다. 특정 화면을 검증하기 전 준비 단계로 사용',
-      inputSchema: { ...serialArg, packageName: z.string(), screen: z.string().describe('지도의 화면 id (graph_get 으로 확인)') },
+      inputSchema: { ...serialArg, ...appArg, screen: z.string().describe('지도의 화면 id (graph_get 으로 확인)') },
       annotations: acts,
     },
     async ({ serial, packageName, screen }) => {

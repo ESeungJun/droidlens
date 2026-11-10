@@ -2,28 +2,12 @@ import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { lstat, readFile, realpath, stat, writeFile } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { homedir } from 'node:os';
-import { basename, dirname, extname, isAbsolute, join, relative, resolve, sep } from 'node:path';
+import { basename, dirname, extname, join, resolve } from 'node:path';
 import { z } from 'zod';
 import * as dl from '@droidlens/core';
-import { device, text, serialArg, acts, readOnly, recorder, allowDangerArg } from '../common.js';
+import { device, text, serialArg, acts, readOnly, recorder, allowDangerArg, within, isProjectDir } from '../common.js';
 
 const isYaml = (p: string) => ['.yaml', '.yml'].includes(extname(p).toLowerCase());
-
-/** p 가 root 안(같은 곳 포함)인지 */
-const within = (root: string, p: string) => {
-  const r = relative(root, p);
-  return r === '' || (!r.startsWith('..') && !isAbsolute(r));
-};
-
-/**
- * cwd 가 프로젝트 폴더로 보이는지: git 저장소 루트이거나 홈 아래 두 단계 이상(~/Desktop/app).
- * 홈·루트와 얕은 폴더(~/Desktop, /Users, /tmp)는 다른 파일이 너무 많이 들어 있어 허용 범위로 쓰지 않는다
- */
-function isProjectDir(cwd: string, home: string): boolean {
-  if (within(cwd, home)) return false; // 홈 자체이거나 홈을 품은 폴더(/Users, /)
-  const underHome = within(home, cwd) ? relative(home, cwd).split(sep).length : 0;
-  return underHome >= 2 || existsSync(join(cwd, '.git'));
-}
 
 /** 허용하는 폴더: scripts 폴더 + 실행이면 MCP 서버를 띄운 프로젝트 폴더(cwd) */
 async function allowedRoots(run: boolean): Promise<string[]> {
@@ -95,8 +79,8 @@ export function register(server: McpServer): void {
         'scenario_step의 assert도 함께 녹화된다. scenario_finish에서 통과하면 재실행 가능한 YAML 스크립트로 저장된다.',
       inputSchema: {
         ...serialArg,
-        name: z.string(),
-        goal: z.string().optional(),
+        name: z.string().describe('시나리오 이름 (리포트 제목, 저장되는 스크립트 이름)'),
+        goal: z.string().optional().describe('무엇을 검증하는지 한 줄'),
         packageName: z.string().optional().describe('대상 앱. 스크립트로 저장하려면 필요'),
       },
       annotations: acts,
@@ -180,8 +164,11 @@ export function register(server: McpServer): void {
       // 조작(tap 등)은 입력만 보내고 바로 끝나고, assert 는 요소가 나타나는 즉시 통과한다. 화면이 아직 움직이는 중이라
       // 바로 찍으면 전환 중간이 찍히므로 멈출 때까지 기다린다. 실패한 검사는 실패한 그 순간을 남긴다
       if (screenshot !== false && finalStatus !== 'fail') await dl.waitScreenSettled(dev);
-      const png = screenshot === false ? undefined : await dl.screenshot(dev);
-      const screen = await dl.currentScreen(dev, { fragments: true }).catch(() => undefined);
+      // Fragment 조회는 기기에 따라 1~7초 걸려서 스크린샷과 같이 보낸다
+      const [png, screen] = await Promise.all([
+        screenshot === false ? Promise.resolve(undefined) : dl.screenshot(dev),
+        dl.currentScreen(dev, { fragments: true }).catch(() => undefined),
+      ]);
       const foreign = png ? dl.foreignPackage(screen, recorder.app ?? scenario.data.packageName) : undefined;
       // 직전 단계 이후 한 조작을 이 단계에 붙이고 비운다
       const actions = recorder.actions;
@@ -210,9 +197,9 @@ export function register(server: McpServer): void {
         '시나리오 종료 및 HTML 리포트 생성. verdict: pass | fail | blocked. 통과(pass)하고 녹화된 조작이 있으면 ' +
         'YAML 스크립트로 저장해 script_run으로 다시 돌릴 수 있게 한다 (saveScript=false로 끔).',
       inputSchema: {
-        verdict: z.enum(['pass', 'fail', 'blocked']),
-        summary: z.string(),
-        saveScript: z.boolean().optional(),
+        verdict: z.enum(['pass', 'fail', 'blocked']).describe('전체 판정. blocked = 앱·환경 문제로 끝까지 가지 못함'),
+        summary: z.string().describe('결과 요약 (리포트 맨 위에 나온다)'),
+        saveScript: z.boolean().optional().describe('false 면 통과해도 스크립트로 저장하지 않는다 (기본 true)'),
         scriptName: z.string().optional().describe('저장할 스크립트 이름 (기본: 시나리오 이름)'),
       },
       annotations: acts,
@@ -246,11 +233,11 @@ export function register(server: McpServer): void {
         await writeFile(join(d.dir, 'script.yaml'), yaml);
         if (verdict === 'pass' && saveScript !== false) {
           const p = await dl.saveScript(script);
-          lines.push(`스크립트 저장: ${p} (${steps.length}단계) — script_run("${basename(p, '.yaml')}")으로 재실행`);
+          lines.push(`스크립트 저장: ${p} (${steps.length}단계) — script_run("${basename(p, '.yaml')}")으로 재실행, 내용은 script_read`);
         } else {
           lines.push(`녹화된 스크립트: ${join(d.dir, 'script.yaml')} (저장하지 않음)`);
         }
-        lines.push('', yaml);
+        // YAML 전문은 붙이지 않는다 (방금 한 조작의 반복이라 응답만 길어진다). 볼 일이 있으면 script_read
       }
       return text(lines.join('\n'));
     },
@@ -281,7 +268,7 @@ export function register(server: McpServer): void {
 
   server.registerTool(
     'script_read',
-    { description: '스크립트 YAML 내용', inputSchema: { script: z.string().describe('이름 또는 경로') }, annotations: readOnly },
+    { description: '저장된 스크립트의 YAML 내용과 파일 경로. 고치기 전에 읽는다', inputSchema: { script: z.string().describe('이름 또는 경로') }, annotations: readOnly },
     async ({ script }) => {
       const p = await scriptPath(script);
       return text(`${p}\n\n${await readFile(p, 'utf8')}`);
@@ -295,7 +282,7 @@ export function register(server: McpServer): void {
         '스크립트 YAML 작성·수정 (형식 검증 후 저장). 단계: tap/longPress/tapAt/type/swipe/key/wait/sleep/launch/deeplink/screenshot/assert/startup/matchScreenshot. ' +
         'setup 에는 restart/clearData/prefs/mocks(실행하는 동안만 켤 네트워크 목). ' +
         '기존 스크립트를 고칠 때는 script_read로 읽고 수정한 전체 YAML을 넘긴다.',
-      inputSchema: { yaml: z.string(), name: z.string().optional().describe('파일 이름 (기본: 스크립트 name)') },
+      inputSchema: { yaml: z.string().describe('스크립트 전체 YAML (name·app·steps 필수)'), name: z.string().optional().describe('파일 이름 (기본: 스크립트 name)') },
       annotations: acts,
     },
     async ({ yaml, name }) => {
@@ -337,7 +324,7 @@ export function register(server: McpServer): void {
     {
       description: '폴더 안의 모든 스크립트(*.yaml)를 차례로 실행하는 회귀 테스트. path를 생략하면 ~/.droidlens/scripts. ' +
         '그 폴더나 MCP 서버를 띄운 프로젝트 폴더 안만 실행할 수 있다. 위험 버튼 단계는 script_run 과 같이 allowDanger 없이는 누르지 않는다',
-      inputSchema: { ...serialArg, path: z.string().optional(), ...allowDangerArg },
+      inputSchema: { ...serialArg, path: z.string().optional().describe('스크립트 폴더 또는 파일. 생략하면 ~/.droidlens/scripts'), ...allowDangerArg },
       annotations: acts,
     },
     async ({ serial, path, allowDanger }, extra) => {
