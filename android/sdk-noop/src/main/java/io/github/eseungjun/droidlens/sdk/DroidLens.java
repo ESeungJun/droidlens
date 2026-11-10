@@ -10,6 +10,8 @@ public final class DroidLens {
 
     public static void init(Context context) {}
 
+    public static void allowNonDebuggable() {}
+
     public static String version() {
         return "noop";
     }

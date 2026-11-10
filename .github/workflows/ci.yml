@@ -30,7 +30,7 @@ jobs:
         # 캐시가 없을 때 Gradle 배포판 다운로드가 일시적으로 실패하면 두 번까지 다시 시도한다
         run: |
           for i in 1 2 3; do
-            ./gradlew :agent:assembleRelease :sdk:assembleRelease :sdk-noop:assembleRelease :sample:assembleDebug --no-daemon && exit 0
+            ./gradlew :sdk:testDebugUnitTest :agent:testDebugUnitTest :agent:assembleRelease :sdk:assembleRelease :sdk-noop:assembleRelease :sample:assembleDebug --no-daemon && exit 0
             echo "::warning::Gradle 실패 ($i/3), 다시 시도"; sleep $((i * 20))
           done
           exit 1

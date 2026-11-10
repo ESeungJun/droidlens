@@ -1,7 +1,7 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import * as dl from '@droidlens/core';
-import { device, text, serialArg, acts, recordStep } from '../common.js';
+import { device, text, serialArg, appArg, acts, recordStep } from '../common.js';
 
 const mb = (kb: number | undefined) => (kb === undefined ? '-' : `${dl.kbToMb(kb)}MB`);
 
@@ -30,8 +30,8 @@ export function register(server: McpServer): void {
         '앱 시작 시간 측정 (런처 아이콘을 누른 것과 같은 실행, am start -W). cold=true(기본)면 매번 강제 종료 후 실행, false면 홈으로 나갔다가 다시 열기. 앱이 재시작된다',
       inputSchema: {
         ...serialArg,
-        packageName: z.string(),
-        cold: z.boolean().optional(),
+        ...appArg,
+        cold: z.boolean().optional().describe('true(기본) 콜드 스타트, false 홈으로 나갔다가 다시 열기'),
         runs: z.number().int().min(1).max(dl.MAX_STARTUP_RUNS).optional().describe('반복 횟수 (기본 3, 중앙값을 낸다)'),
       },
       annotations: acts,
@@ -56,7 +56,7 @@ export function register(server: McpServer): void {
     {
       description:
         '실행 중인 앱의 CPU 사용률(1초 간격), 메모리(PSS, 영역별), 프레임 통계(버벅인 프레임 비율, 프레임 시간 백분위). 프레임은 앱 시작 또는 resetFrames 이후 누적. 특정 조작 구간만 보려면 resetFrames=true 로 초기화하고 조작한 뒤 다시 부른다',
-      inputSchema: { ...serialArg, packageName: z.string(), resetFrames: z.boolean().optional().describe('읽은 뒤 프레임 통계를 0으로 초기화') },
+      inputSchema: { ...serialArg, ...appArg, resetFrames: z.boolean().optional().describe('읽은 뒤 프레임 통계를 0으로 초기화') },
       // resetFrames 는 기기 상태(프레임 누적 통계)를 바꾼다
       annotations: acts,
     },

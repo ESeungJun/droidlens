@@ -6,7 +6,7 @@ import { contextBridge, ipcRenderer } from 'electron';
  */
 const INVOKE = new Set([
   'adbStatus', 'agentStart', 'agentStatus', 'agentStop', 'analyzeLibraries', 'appInfo', 'appVersion', 'avds', 'avdStart', 'avdStop', 'baselineAccept',
-  'bringToFront', 'chatSend', 'chatStatus', 'chatStop', 'copy', 'crashes', 'currentScreen', 'deeplink', 'deviceInfo', 'devices',
+  'bringToFront', 'chatConfirm', 'chatSend', 'chatStatus', 'chatStop', 'copy', 'crashes', 'currentScreen', 'deeplink', 'deviceInfo', 'devices',
   'explore', 'exploreStop', 'graphExport', 'graphGet', 'graphImage', 'graphImport', 'graphNavigate', 'graphRecord', 'graphRecordHere',
   'graphReset', 'home', 'installAgents', 'integration', 'key', 'launch', 'logcatStart', 'logcatStop', 'longPress', 'mirrorStart',
   'mirrorStop', 'openExternal', 'openPath', 'packages', 'perfResetFrames', 'perfSample', 'perfStartup', 'platform', 'recordStart', 'recordStatus', 'recordStop', 'registerMcp', 'reveal',
