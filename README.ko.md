@@ -84,7 +84,7 @@ Linux    sudo apt install adb
 
 ## 앱 SDK (선택)
 
-네트워크·저장소처럼 앱 내부에서만 볼 수 있는 정보는 SDK를 넣은 **내 앱의 debug 빌드**에서만 보입니다. release 빌드에는 같은 API의 빈 구현(`sdk-noop`)이 들어갑니다.
+네트워크·저장소처럼 앱 내부에서만 볼 수 있는 정보는 SDK를 넣은 **내 앱의 debug 빌드**에서만 보입니다. release 빌드에는 같은 API의 빈 구현(`sdk-noop`)이 들어갑니다. SDK 는 앱이 디버그 빌드(`android:debuggable`)가 아니면 스스로 켜지지 않습니다(`implementation` 으로 잘못 넣어도 release 에서 열리지 않음).
 
 ```kotlin
 // settings.gradle.kts
@@ -92,10 +92,10 @@ dependencyResolutionManagement {
     repositories { maven { url = uri("https://jitpack.io") } }
 }
 
-// app/build.gradle.kts
+// app/build.gradle.kts — 버전은 DroidLens 앱과 같은 릴리스 태그를 쓴다 (네트워크 목은 v0.10.0 부터)
 dependencies {
-    debugImplementation("com.github.ESeungJun.droidlens:sdk:v0.5.0")
-    releaseImplementation("com.github.ESeungJun.droidlens:sdk-noop:v0.5.0")
+    debugImplementation("com.github.ESeungJun.droidlens:sdk:v0.11.0")
+    releaseImplementation("com.github.ESeungJun.droidlens:sdk-noop:v0.11.0")
 }
 
 // 네트워크 인스펙터 (OkHttp를 쓰는 경우)
@@ -132,7 +132,7 @@ Claude Code를 재시작한 뒤 이렇게 요청하세요.
 >
 > droidlens-analyst로 이 앱 기술 스택이랑 화면 구조 분석해줘
 
-앱 없이 MCP만 쓰려면 Releases의 `droidlens-mcp.mjs`(Node 20+)를 받아 `claude mcp add --scope user droidlens -- node /path/to/droidlens-mcp.mjs`로 등록하세요.
+앱 없이 MCP만 쓰려면 Releases의 `droidlens-mcp.mjs`(Node 20+)를 받아 `claude mcp add --scope user droidlens -- node /path/to/droidlens-mcp.mjs`로 등록하세요. 같은 릴리스의 `droidlens-agent.apk` 를 `droidlens-mcp.mjs` 와 같은 폴더에 두면 온디바이스 에이전트가 설치되어 한글 입력과 빠른 뷰 계층 조회(0.1~0.3초)가 됩니다. 없어도 동작하지만 뷰 계층 조회가 `uiautomator dump`(1.5~3초)로 돌고 영문·숫자만 입력할 수 있습니다.
 
 ## 시나리오 스크립트 (회귀 테스트)
 

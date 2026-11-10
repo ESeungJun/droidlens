@@ -84,7 +84,7 @@ Then enable **Developer options → USB debugging** on your device and connect i
 
 ## App SDK (optional)
 
-Information that only lives inside the app — network traffic, storage — is visible only in **your own app's debug build** with the SDK added. Release builds get a no-op implementation of the same API (`sdk-noop`).
+Information that only lives inside the app — network traffic, storage — is visible only in **your own app's debug build** with the SDK added. Release builds get a no-op implementation of the same API (`sdk-noop`). The SDK also refuses to start unless the app is a debuggable build (`android:debuggable`), so adding it with `implementation` by mistake does not expose a release app.
 
 ```kotlin
 // settings.gradle.kts
@@ -92,10 +92,10 @@ dependencyResolutionManagement {
     repositories { maven { url = uri("https://jitpack.io") } }
 }
 
-// app/build.gradle.kts
+// app/build.gradle.kts — use the same release tag as the DroidLens app (network mocks need v0.10.0+)
 dependencies {
-    debugImplementation("com.github.ESeungJun.droidlens:sdk:v0.5.0")
-    releaseImplementation("com.github.ESeungJun.droidlens:sdk-noop:v0.5.0")
+    debugImplementation("com.github.ESeungJun.droidlens:sdk:v0.11.0")
+    releaseImplementation("com.github.ESeungJun.droidlens:sdk-noop:v0.11.0")
 }
 
 // Network inspector (if you use OkHttp)
@@ -132,7 +132,7 @@ Restart Claude Code, then ask:
 >
 > Use droidlens-analyst to analyze this app's tech stack and screen structure
 
-To use only the MCP server without the app, download `droidlens-mcp.mjs` (Node 20+) from Releases and register it with `claude mcp add --scope user droidlens -- node /path/to/droidlens-mcp.mjs`.
+To use only the MCP server without the app, download `droidlens-mcp.mjs` (Node 20+) from Releases and register it with `claude mcp add --scope user droidlens -- node /path/to/droidlens-mcp.mjs`. Put `droidlens-agent.apk` from the same release next to `droidlens-mcp.mjs` to get the on-device agent (Unicode text input and fast view-hierarchy dumps, 0.1–0.3 s). Without it everything still works, but dumps fall back to `uiautomator dump` (1.5–3 s) and only ASCII text can be typed.
 
 ## Scenario scripts (regression tests)
 
