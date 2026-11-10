@@ -73,6 +73,39 @@ export function register(server: McpServer): void {
   );
 
   server.registerTool(
+    'a11y_audit',
+    {
+      description:
+        '지금 화면의 접근성 점검: 터치 영역이 48dp 보다 작은 버튼, 글자·설명이 없는 버튼(스크린리더가 읽을 것이 없음), 같은 설명이 여러 버튼에 붙은 경우, 크기 0·화면 밖 요소. ' +
+        '뷰 계층만 보므로 SDK 없이 아무 앱에나 쓴다 (색 대비는 보지 않는다)',
+      inputSchema: { ...serialArg, limit: z.number().int().min(1).max(200).optional().describe('종류별로 보여 줄 최대 개수 (기본 15)') },
+      annotations: readOnly,
+    },
+    async ({ serial, limit }) => {
+      const dev = await device(serial);
+      const [h, info, screen] = await Promise.all([dl.dumpHierarchy(dev), dl.getDeviceInfo(dev).catch(() => undefined), dl.screenSize(dev).catch(() => undefined)]);
+      const density = info?.screen.density || 0;
+      const issues = dl.auditA11y(h.root, { density: density || 420, screen });
+      if (!issues.length) return text(`접근성 문제를 찾지 못했습니다 (누를 수 있는 요소 기준, 색 대비 제외)${density ? '' : '\n화면 밀도를 읽지 못해 420dpi 로 가정했습니다'}`);
+      const titles: Record<dl.A11yIssueKind, string> = {
+        'small-target': '터치 영역이 작음',
+        'no-label': '라벨 없음',
+        'duplicate-label': '같은 설명 반복',
+        offscreen: '크기 0 또는 화면 밖',
+      };
+      const max = limit ?? 15;
+      const out = [`접근성 문제 ${issues.length}건${density ? '' : ' (화면 밀도를 읽지 못해 420dpi 로 가정)'}`];
+      for (const kind of Object.keys(titles) as dl.A11yIssueKind[]) {
+        const list = issues.filter((i) => i.kind === kind);
+        if (!list.length) continue;
+        out.push(`## ${titles[kind]} ${list.length}건`, ...list.slice(0, max).map((i) => `- ${i.detail} — ${describeNode(i.node)}`));
+        if (list.length > max) out.push(`  … 외 ${list.length - max}건 (limit 을 늘리세요)`);
+      }
+      return text(out.join('\n'));
+    },
+  );
+
+  server.registerTool(
     'screenshot_compare',
     {
       description:

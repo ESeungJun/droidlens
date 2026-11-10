@@ -88,6 +88,14 @@ export function register(server: McpServer): void {
     async ({ serial, name, goal, packageName }) => {
       const dev = await device(serial);
       const info = await dl.getDeviceInfo(dev).catch(() => undefined);
+      // 끝내지 않은 시나리오가 있으면 리포트 없이 버리지 않고 중단으로 마무리한다
+      let dropped = '';
+      if (scenario) {
+        const prev = scenario;
+        scenario = undefined;
+        const html = await prev.finish('blocked', '끝내지 않은 채 다음 시나리오를 시작해 중단됨', recorder.actions).catch(() => undefined);
+        dropped = `\n앞 시나리오 "${prev.data.name}" 는 scenario_finish 없이 남아 있어 중단(blocked)으로 마무리했습니다${html ? `: ${html}` : ''}`;
+      }
       scenario = await dl.Scenario.start(name, {
         goal,
         packageName,
@@ -106,7 +114,7 @@ export function register(server: McpServer): void {
       const warn = dl.isBlockingPackage(top?.packageName)
         ? `\n⚠ 시스템 창(${top!.packageName} ${top!.activity})이 화면을 가리고 있습니다. 기기에서 닫은 뒤 진행하세요 (그대로 두면 판정과 스크린샷이 이 창을 기준으로 남습니다)`
         : '';
-      return text(`시나리오 시작: ${scenario.data.id}\n폴더: ${scenario.data.dir}${packageName ? '\n조작 녹화 중' : ''}${warn}`);
+      return text(`시나리오 시작: ${scenario.data.id}\n폴더: ${scenario.data.dir}${packageName ? '\n조작 녹화 중' : ''}${warn}${dropped}`);
     },
   );
 
