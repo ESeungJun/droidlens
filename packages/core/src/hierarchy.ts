@@ -421,3 +421,58 @@ export function clickableAt(root: ViewNode, x: number, y: number): ViewNode | un
   }
   return best;
 }
+
+/**
+ * 좌표 (x, y)를 누르면 위험한 행동이 될 것 같은지: 셀렉터로 찾은 요소(node)와, 그 좌표에서 실제로 반응할 요소
+ * (라벨만 있는 글자를 골랐을 때 그 부모 버튼) 둘 다 본다. 위험하면 그 라벨, 아니면 undefined.
+ * MCP tap·graph_record·type_text 와 스크립트 러너가 같이 쓴다 ('어떤 경로로 눌렀나'가 아니라 '무엇이 눌리나'를 본다)
+ */
+export function riskyTapLabel(root: ViewNode, x: number, y: number, node?: ViewNode): string | undefined {
+  const hit = clickableAt(root, x, y);
+  return (node && riskyLabelOf(node)) || (hit && riskyLabelOf(hit)) || undefined;
+}
+
+/** 위험 버튼을 누르지 않았을 때의 안내. again: 다시 할 일 ('호출' | '실행') */
+export function riskyTapMessage(label: string, again: string): string {
+  return `위험해 보이는 버튼("${label}")이라 누르지 않았습니다. 사용자가 이 행동을 직접 요청했다면 allowDanger: true 로 다시 ${again}하세요`;
+}
+
+/** 두 글자씩 끊은 조각 집합 (비슷한 글자 찾기용) */
+function bigrams(s: string): Set<string> {
+  const t = s.toLowerCase().replace(/\s+/g, '');
+  const out = new Set<string>();
+  for (let i = 0; i < t.length - 1; i++) out.add(t.slice(i, i + 2));
+  if (t.length === 1) out.add(t);
+  return out;
+}
+
+/**
+ * 셀렉터가 아무것도 못 찾았을 때 보여 줄 후보: 지금 화면의 글자·설명·리소스 이름 중 셀렉터 값과 비슷한 것 (최대 max 개).
+ * 포함 관계가 있으면 먼저, 아니면 두 글자 조각이 겹치는 비율 순. 비슷한 것이 없으면 빈 배열
+ */
+export function similarLabels(root: ViewNode, sel: Selector, max = 3): string[] {
+  const wanted = [sel.text, sel.textContains, sel.desc, sel.descContains, sel.id].filter((v): v is string => !!v);
+  if (!wanted.length) return [];
+  const scores = new Map<string, number>();
+  for (const n of flatten(root)) {
+    for (const label of [n.text, n.contentDesc, n.resourceId.split(':id/')[1] ?? '']) {
+      if (!label || label.length > 80) continue;
+      let best = 0;
+      for (const w of wanted) {
+        if (label === w) continue;
+        const a = label.toLowerCase();
+        const b = w.toLowerCase();
+        if (a.includes(b) || b.includes(a)) best = Math.max(best, 1 + Math.min(a.length, b.length) / Math.max(a.length, b.length));
+        else {
+          const x = bigrams(a);
+          const y = bigrams(b);
+          let both = 0;
+          for (const g of x) if (y.has(g)) both++;
+          if (x.size && y.size) best = Math.max(best, (2 * both) / (x.size + y.size));
+        }
+      }
+      if (best >= 0.3) scores.set(label, Math.max(scores.get(label) ?? 0, best));
+    }
+  }
+  return [...scores.entries()].sort((a, b) => b[1] - a[1]).slice(0, max).map(([l]) => l);
+}

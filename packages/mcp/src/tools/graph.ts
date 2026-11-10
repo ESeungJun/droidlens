@@ -1,7 +1,7 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import * as dl from '@droidlens/core';
-import { device, text, json, serialArg, selectorShape, pickSelector, readOnly, acts, hasSelector, resolveNode, logAction } from '../common.js';
+import { device, text, json, serialArg, selectorShape, pickSelector, readOnly, acts, hasSelector, resolveNode, logAction, refuseRisky, allowDangerArg } from '../common.js';
 
 export function register(server: McpServer): void {
   // ---------- 화면 그래프 ----------
@@ -10,7 +10,8 @@ export function register(server: McpServer): void {
     'graph_record',
     {
       description:
-        '현재 화면을 앱의 화면 그래프에 기록. action을 주면 행동 전후 화면과 전이(edge)를 함께 기록한다. 시나리오를 진행하면서 화면 경로 지도를 만들 때 사용',
+        '현재 화면을 앱의 화면 그래프에 기록. action을 주면 그 조작을 실행하고 행동 전후 화면과 전이(edge)를 함께 기록한다. 시나리오를 진행하면서 화면 경로 지도를 만들 때 사용. ' +
+        'tap·longpress 는 tap 도구와 같이 삭제·결제·로그아웃·전송 같은 위험 버튼을 allowDanger 없이는 누르지 않는다',
       inputSchema: {
         ...serialArg,
         packageName: z.string(),
@@ -23,11 +24,13 @@ export function register(server: McpServer): void {
             key: z.string().optional(),
             direction: z.enum(['up', 'down', 'left', 'right']).optional(),
           })
-          .optional(),
+          .optional()
+          .describe('기록하면서 실행할 조작. tap·longpress 는 셀렉터나 x/y(기기 픽셀), key 는 key, swipe 는 direction'),
+        ...allowDangerArg,
       },
       annotations: acts,
     },
-    async ({ serial, packageName, action }) => {
+    async ({ serial, packageName, action, allowDanger }) => {
       const dev = await device(serial);
       const graph = await dl.ScreenGraph.open(packageName);
       if (!action) {
@@ -42,12 +45,15 @@ export function register(server: McpServer): void {
         const sel = pickSelector(action);
         let { x, y } = action;
         let label: string | undefined;
+        let n: dl.ViewNode | undefined;
         if (hasSelector(sel)) {
-          const n = await resolveNode(dev, sel, before.hierarchy.root);
+          n = await resolveNode(dev, sel, before.hierarchy.root);
           ({ x, y } = dl.center(n));
           label = dl.labelOf(n);
         }
         if (x === undefined || y === undefined) throw new Error(`${action.type}에는 셀렉터나 x/y가 필요합니다`);
+        // tap 도구와 같은 위험 버튼 검사 (이 경로로 보호를 지나치지 않게)
+        if (!allowDanger) await refuseRisky(dev, x, y, n, before.hierarchy.root);
         ga = { type: action.type, x, y, label, selector: sel };
       } else if (action.type === 'key') {
         ga = { type: 'key', key: action.key ?? 'back' };

@@ -7,7 +7,7 @@ import { checkedAgent, ensureAgent } from './agent.js';
 import { clearAppData, currentScreen, deviceTime, openDeepLink, recentCrashes, type CurrentScreen } from './app.js';
 import { KEYCODES, longPress, pressKey, replaceText, screenshot, swipeDirection, tap, typeText } from './device.js';
 import { FlowCollector, launchAndSettle } from './graph.js';
-import { center, clickableAt, dumpHierarchy, findNodes, riskyLabelOf, type Selector, type ViewNode } from './hierarchy.js';
+import { center, dumpHierarchy, findNodes, riskyTapLabel, riskyTapMessage, type Selector, type ViewNode } from './hierarchy.js';
 import { Scenario } from './scenario.js';
 import { MASK, redactUrl, redactValue } from './redact.js';
 import type { ScenarioAction, ScenarioData, ScenarioStep } from './scenario-view.js';
@@ -665,13 +665,8 @@ export async function runScript(dev: DeviceAdb, script: Script, opts: ScriptRunO
  * MCP tap 도구와 같은 검사다. 검사가 '어떤 경로로 눌렀나'가 아니라 '무엇이 눌리나'를 따라가게 한다
  */
 async function refuseRiskyTap(dev: DeviceAdb, x: number, y: number, node?: ViewNode): Promise<void> {
-  const hit = clickableAt((await dumpHierarchy(dev)).root, x, y);
-  const risky = (node && riskyLabelOf(node)) || (hit && riskyLabelOf(hit));
-  if (risky) {
-    throw new StepFailure(
-      `위험해 보이는 버튼("${risky}")이라 누르지 않았습니다. 사용자가 이 행동을 직접 요청했다면 allowDanger: true 로 다시 실행하세요`,
-    );
-  }
+  const risky = riskyTapLabel((await dumpHierarchy(dev)).root, x, y, node);
+  if (risky) throw new StepFailure(riskyTapMessage(risky, '실행'));
 }
 
 async function runStep(

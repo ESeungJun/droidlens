@@ -5,7 +5,7 @@ import { homedir } from 'node:os';
 import { basename, dirname, extname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { z } from 'zod';
 import * as dl from '@droidlens/core';
-import { device, text, serialArg, acts, readOnly, recorder } from '../common.js';
+import { device, text, serialArg, acts, readOnly, recorder, allowDangerArg } from '../common.js';
 
 const isYaml = (p: string) => ['.yaml', '.yml'].includes(extname(p).toLowerCase());
 
@@ -82,13 +82,6 @@ const assertionSchema = z
       '{"db":{"db":"app.db","sql":"SELECT COUNT(*) FROM cart","equals":1}}, {"event":"purchase"}, {"noCrash":true}, ' +
       '{"perf":{"maxMemoryMb":300,"maxJankPercent":10}}',
   );
-
-const allowDangerArg = {
-  allowDanger: z
-    .boolean()
-    .optional()
-    .describe('삭제·결제·로그아웃·전송 같은 위험 버튼 단계도 누른다. 사용자가 그 행동을 직접 요청했을 때만 true'),
-};
 
 export function register(server: McpServer): void {
   let scenario: dl.Scenario | undefined;

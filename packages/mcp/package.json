@@ -9,6 +9,7 @@
   "scripts": {
     "build": "tsc -p tsconfig.json && pnpm run bundle",
     "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "tsc -p tsconfig.json && node --test test/*.test.mjs",
     "bundle": "esbuild src/index.ts --bundle --platform=node --format=esm --target=node20 --outfile=dist/droidlens-mcp.mjs --banner:js=\"import { createRequire as __cr } from 'module'; const require = __cr(import.meta.url);\""
   },
   "dependencies": {
