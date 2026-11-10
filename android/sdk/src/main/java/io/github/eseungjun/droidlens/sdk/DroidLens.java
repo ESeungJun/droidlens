@@ -2,6 +2,7 @@ package io.github.eseungjun.droidlens.sdk;
 
 import android.app.Application;
 import android.content.Context;
+import android.content.pm.ApplicationInfo;
 import android.os.Build;
 import android.os.Process;
 import android.util.Log;
@@ -28,7 +29,24 @@ public final class DroidLens {
     static final String TAG = "DroidLens";
     private static volatile SdkServer server;
 
+    private static volatile boolean allowNonDebuggable;
+    private static boolean warnedNonDebuggable;
+
     private DroidLens() {}
+
+    /**
+     * 디버그 빌드가 아니어도 SDK 를 켠다 (debuggable 을 끈 사내 QA 빌드 등). {@link #init} 전에 불러야 하고,
+     * 자동 초기화({@link DroidLensInitProvider})는 Application.onCreate 보다 먼저 돌기 때문에 이것을 부른 뒤 init 을 직접 한 번 더 부른다.
+     * 스토어에 올리는 빌드에서는 부르지 않는다: 앱의 Prefs·DB·네트워크 기록이 adb 로 열린다
+     */
+    public static void allowNonDebuggable() {
+        allowNonDebuggable = true;
+    }
+
+    /** 서버를 열어도 되는 빌드인지: 앱이 debuggable 이거나 앱이 명시적으로 허용했을 때만 */
+    static boolean shouldStart(int applicationFlags, boolean allowNonDebuggable) {
+        return allowNonDebuggable || (applicationFlags & ApplicationInfo.FLAG_DEBUGGABLE) != 0;
+    }
 
     /**
      * 수동 초기화. 자동 초기화를 끈 경우(매니페스트에서 provider 제거)에만 호출하면 된다. 여러 번 불러도 안전하다.
@@ -37,6 +55,15 @@ public final class DroidLens {
      */
     public static synchronized void init(Context context) {
         if (server != null && server.isRunning()) return;
+        // implementation 으로 잘못 넣어 release 앱에 실려도 Prefs·DB·네트워크 기록을 adb 에 열지 않고 목도 적용하지 않는다
+        if (!shouldStart(context.getApplicationInfo().flags, allowNonDebuggable)) {
+            if (!warnedNonDebuggable) {
+                warnedNonDebuggable = true;
+                Log.w(TAG, "디버그 빌드(android:debuggable)가 아니라 DroidLens SDK 를 켜지 않습니다. release 에는 sdk-noop 을 쓰세요. "
+                        + "일부러 켜려면 init 전에 DroidLens.allowNonDebuggable() 을 부릅니다");
+            }
+            return;
+        }
         server = null;
         SdkServer s = null;
         try {
