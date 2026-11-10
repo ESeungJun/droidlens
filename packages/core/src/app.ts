@@ -214,6 +214,37 @@ export async function clearAppData(dev: DeviceAdb, pkg: string): Promise<void> {
   await dev.shell(`pm clear ${pkg}`);
 }
 
+/**
+ * APK 설치 (adb install -r: 같은 서명의 기존 앱은 데이터를 둔 채 덮어쓴다).
+ * 서명이 다르거나 버전이 낮아 덮어쓸 수 없으면 지우지 않고 실패한다 (지우면 앱 데이터가 사라진다)
+ */
+export async function installApk(dev: DeviceAdb, apkPath: string, opts: { grantPermissions?: boolean } = {}): Promise<void> {
+  const args = ['install', '-r', '-t', ...(opts.grantPermissions ? ['-g'] : []), apkPath];
+  let out: string;
+  try {
+    out = await dev.text(args, { timeoutMs: 180_000 });
+  } catch (e) {
+    throw new Error(installFailure((e as { stderr?: string }).stderr || (e as Error).message));
+  }
+  if (!/^Success/m.test(out)) throw new Error(installFailure(out));
+}
+
+/** adb install 의 실패 출력 → 원인과 할 일 */
+export function installFailure(output: string): string {
+  const code = /INSTALL_[A-Z_]+|DELETE_FAILED_[A-Z_]+/.exec(output)?.[0];
+  const hints: Record<string, string> = {
+    INSTALL_FAILED_UPDATE_INCOMPATIBLE: '기기에 있는 앱과 서명이 달라 덮어쓸 수 없습니다. 기존 앱을 지워야 설치되는데 그러면 앱 데이터가 사라지므로 하지 않았습니다',
+    INSTALL_FAILED_VERSION_DOWNGRADE: '기기에 있는 앱보다 버전이 낮습니다. 기존 앱을 지워야 설치되는데 그러면 앱 데이터가 사라지므로 하지 않았습니다',
+    INSTALL_FAILED_INSUFFICIENT_STORAGE: '기기 저장 공간이 부족합니다',
+    INSTALL_FAILED_NO_MATCHING_ABIS: '이 기기의 CPU(ABI)에 맞는 네이티브 라이브러리가 APK 에 없습니다',
+    INSTALL_FAILED_OLDER_SDK: '기기의 Android 버전이 앱의 minSdk 보다 낮습니다',
+    INSTALL_FAILED_USER_RESTRICTED: '기기에서 USB 를 통한 설치가 막혀 있습니다 (개발자 옵션의 "USB를 통해 설치" 확인)',
+    INSTALL_PARSE_FAILED_NO_CERTIFICATES: 'APK 가 서명되지 않았습니다',
+  };
+  const first = output.trim().split('\n').filter(Boolean).pop() ?? '';
+  return `설치 실패${code ? ` (${code})` : ''}: ${(code && hints[code]) || first.slice(0, 300) || '원인을 알 수 없습니다'}`;
+}
+
 export async function openDeepLink(dev: DeviceAdb, uri: string, pkg?: string): Promise<string> {
   if (pkg) assertPackage(pkg);
   const out = await dev.shell(`am start -W -a android.intent.action.VIEW -d ${quoteShell(uri)}${pkg ? ` ${pkg}` : ''}`);

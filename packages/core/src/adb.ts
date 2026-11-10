@@ -36,11 +36,57 @@ export function findAdb(): string {
   return adbCandidates().find((p) => existsSync(p)) ?? 'adb';
 }
 
+/** adb 실패 원인. 원인별로 사용자가 할 일이 달라 메시지를 다르게 쓴다 */
+export type AdbErrorKind = 'timeout' | 'unauthorized' | 'offline' | 'no-adb' | 'other';
+
 export class AdbError extends Error {
-  constructor(message: string, readonly args: string[], readonly stderr: string) {
+  constructor(message: string, readonly args: string[], readonly stderr: string, readonly kind: AdbErrorKind = 'other') {
     super(message);
     this.name = 'AdbError';
   }
+}
+
+/**
+ * 오류 메시지에 넣을 명령: 앞 80자만. 입력한 글자(input text …)는 메시지에 싣지 않는다
+ * (오류는 에이전트 응답·리포트로 나가므로 비밀번호가 따라가지 않게)
+ */
+export function describeAdbArgs(args: string[]): string {
+  const cmd = args.join(' ').replace(/\binput text .*/s, 'input text …');
+  return cmd.length > 80 ? `${cmd.slice(0, 80)}…` : cmd;
+}
+
+/**
+ * adb 실패를 원인별로 나눠 다음에 할 일을 알려 주는 메시지로 바꾼다.
+ * err: execFile 이 준 오류 (시간 초과면 killed, 실행 파일이 없으면 code ENOENT)
+ */
+export function describeAdbFailure(
+  args: string[],
+  stderr: string,
+  err: { message: string; killed?: boolean; code?: unknown },
+  timeoutMs: number,
+): { kind: AdbErrorKind; message: string } {
+  const cmd = describeAdbArgs(args);
+  const serial = args[0] === '-s' ? args[1] : undefined;
+  const who = serial ? `기기 ${serial}` : '기기';
+  if (err.code === 'ENOENT') {
+    return { kind: 'no-adb', message: 'adb 실행 파일을 찾지 못했습니다. Android platform-tools 를 설치하거나 ADB_PATH 로 경로를 지정하세요' };
+  }
+  // adb 자신이 낸 줄만 본다 (기기 셸 명령의 출력에 같은 말이 섞여도 연결 문제로 보지 않게)
+  if (/^(?:adb: |error: )+device unauthorized/im.test(stderr)) {
+    return { kind: 'unauthorized', message: `${who}가 이 PC 의 USB 디버깅을 허용하지 않았습니다. 기기 화면에서 "USB 디버깅 허용"을 누르세요` };
+  }
+  if (/^(?:adb: |error: )+(?:device offline|device '[^']*' not found|no devices\/emulators found|device still (?:connecting|authorizing))/im.test(stderr)) {
+    return { kind: 'offline', message: `${who} 연결이 끊겼습니다. 케이블·에뮬레이터를 확인하고 devices 로 연결된 기기를 다시 보세요` };
+  }
+  if (err.killed) {
+    return {
+      kind: 'timeout',
+      message: `adb ${cmd} 가 ${Math.round(timeoutMs / 1000)}초 안에 끝나지 않았습니다. 기기가 응답하는지 devices 로 확인하세요`,
+    };
+  }
+  // stderr 가 비면 execFile 의 메시지("Command failed: <명령 전체>")뿐이라 명령만 두 번 나온다. 종료 코드만 남긴다
+  const detail = stderr.trim() || (typeof err.code === 'number' ? `종료 코드 ${err.code}` : err.message.split('\n')[0].slice(0, 200));
+  return { kind: 'other', message: `adb ${cmd} 실패: ${detail}` };
 }
 
 export interface RunOptions {
@@ -57,14 +103,16 @@ export class Adb {
   /** adb 명령 실행 후 stdout을 Buffer로 반환 */
   raw(args: string[], opts: RunOptions = {}): Promise<Buffer> {
     return new Promise((resolve, reject) => {
+      const timeoutMs = opts.timeoutMs ?? 30_000;
       execFile(
         this.bin,
         args,
-        { encoding: 'buffer', maxBuffer: 256 * 1024 * 1024, timeout: opts.timeoutMs ?? 30_000 },
+        { encoding: 'buffer', maxBuffer: 256 * 1024 * 1024, timeout: timeoutMs },
         (err, stdout, stderr) => {
           if (err) {
-            const msg = stderr?.toString().trim() || err.message;
-            reject(new AdbError(`adb ${args.join(' ')} 실패: ${msg}`, args, stderr?.toString() ?? ''));
+            const text = stderr?.toString() ?? '';
+            const f = describeAdbFailure(args, text, err, timeoutMs);
+            reject(new AdbError(f.message, args, text, f.kind));
             return;
           }
           resolve(stdout);

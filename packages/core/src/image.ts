@@ -6,6 +6,21 @@ import jpeg from 'jpeg-js';
  * 에이전트에게 보낼 스크린샷 토큰을 줄이는 용도 (1080×2400 PNG ~2MB → 900px JPEG ~60KB).
  */
 export function downscaleToJpeg(png: Buffer, maxEdge = 900, quality = 70): Buffer {
+  return downscaleToJpegInfo(png, maxEdge, quality).data;
+}
+
+export interface DownscaledImage {
+  data: Buffer;
+  /** 줄인 이미지 크기 */
+  width: number;
+  height: number;
+  /** 원본(기기 픽셀) 크기 */
+  srcWidth: number;
+  srcHeight: number;
+}
+
+/** downscaleToJpeg 와 같되 원본·결과 크기를 같이 돌려준다 (이미지 좌표를 기기 좌표로 바꿀 배율을 알리기 위함) */
+export function downscaleToJpegInfo(png: Buffer, maxEdge = 900, quality = 70): DownscaledImage {
   const src = PNG.sync.read(png);
   const scale = Math.min(1, maxEdge / Math.max(src.width, src.height));
   const w = Math.max(1, Math.round(src.width * scale));
@@ -36,5 +51,17 @@ export function downscaleToJpeg(png: Buffer, maxEdge = 900, quality = 70): Buffe
       out[o + 3] = 255;
     }
   }
-  return Buffer.from(jpeg.encode({ data: out, width: w, height: h }, quality).data);
+  return { data: Buffer.from(jpeg.encode({ data: out, width: w, height: h }, quality).data), width: w, height: h, srcWidth: src.width, srcHeight: src.height };
+}
+
+/**
+ * 줄인 이미지에서 읽은 좌표를 기기 픽셀로 바꾸는 안내 한 줄. tap·swipe 의 x/y 는 기기 픽셀이라
+ * 이미지를 줄여 보냈으면 배율을 곱해야 한다. 줄이지 않았으면 그대로 쓴다고 알린다
+ */
+export function imageScaleNote(img: { width: number; height: number; srcWidth: number; srcHeight: number }): string {
+  if (img.width === img.srcWidth && img.height === img.srcHeight) {
+    return `이미지 ${img.width}x${img.height} = 기기 픽셀 (tap·swipe 좌표로 그대로 쓴다)`;
+  }
+  const scale = img.srcWidth / img.width;
+  return `원본 ${img.srcWidth}x${img.srcHeight} · 이미지 ${img.width}x${img.height} · tap·swipe 좌표(기기 픽셀) = 이미지 좌표 × ${scale.toFixed(3)}`;
 }
