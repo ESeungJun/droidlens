@@ -1,0 +1,64 @@
+{
+  "_": "비밀값 가리기 공유 사례표. TS(packages/core/src/redact.ts)와 자바(android/sdk Redactor)가 같은 파일을 읽어 시험한다. <MASK> 는 각 구현의 가림 표시로 바꿔 비교한다. 두 구현이 같게 판정해야 하는 것만 넣는다",
+  "names": {
+    "secret": [
+      "password", "userPassword", "newPassword", "passwd", "passcode", "passphrase",
+      "auth_code", "authCode", "auth", "Authorization", "X-Refresh-Token", "access_token", "fcmToken",
+      "api-key", "api_key", "apiKey", "apikey", "accessKey", "accesskey", "privateKey", "client_secret",
+      "pin", "otp", "cvc", "cvv", "ssn", "jwt", "pw", "pwd", "nonce", "sig",
+      "session_id", "sessionId", "cookie", "credential", "bearer",
+      "cardNumber", "cardnumber", "card_number", "card",
+      "email", "userEmail", "phone", "phone_number", "tel", "mobile", "account_id", "birth_date", "code", "key",
+      "user[password][]", "user[auth_code]",
+      "비밀번호", "암호", "인증코드", "카드번호", "주민등록번호", "계좌번호", "휴대폰번호", "전화번호"
+    ],
+    "plain": [
+      "", "theme", "nickname", "title", "page", "id", "userId", "name",
+      "spinner", "pinned", "opinion",
+      "keyword", "keyboard", "monkey",
+      "author", "authorName",
+      "display", "encode", "codec", "barcode_type",
+      "discount", "accounting",
+      "hotel", "mobility", "cardinal",
+      "닉네임", "주소"
+    ]
+  },
+  "looksSecret": {
+    "secret": [
+      "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxIn0.abc",
+      "0123456789abcdef01234567",
+      "sk_demo_abcdefghijklmnopqrstuvwxyz",
+      "{\"a\":1}",
+      "[1,2]",
+      "  eyJhbGciOiJIUzI1NiJ9.x.y  "
+    ],
+    "plain": [
+      "", "dark", "42", "hello world", "0123456789abcdef0123456",
+      "this is a long sentence with spaces in it", "eyJ", "eyJ.x", "detail"
+    ]
+  },
+  "urls": [
+    ["myapp://home/detail/42", "myapp://home/detail/42"],
+    ["https://a.com/p", "https://a.com/p"],
+    ["https://a.com:8443/v1/orders/42", "https://a.com:8443/v1/orders/42"],
+    ["myapp://reset/eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxIn0.abc", "myapp://reset/<MASK>"],
+    ["https://a.com/reset/0123456789abcdef01234567/done", "https://a.com/reset/<MASK>/done"],
+    ["https://u:p@host/x", "https://<MASK>@host/x"],
+    ["https://u:p@ss@host/x", "https://<MASK>@host/x"],
+    ["https://user@host:8080/x", "https://<MASK>@host:8080/x"],
+    ["mailto:a@b.com", "mailto:<MASK>"],
+    ["https://a.com/users/a@b.com/profile", "https://a.com/users/<MASK>/profile"],
+    ["https://a.com/x;jsessionid=AB12", "https://a.com/x;jsessionid=<MASK>"],
+    ["https://a.com/x;AB12/y", "https://a.com/x;<MASK>/y"],
+    ["https://a.com/p#frag", "https://a.com/p#<MASK>"],
+    ["https://a.com/p#access_token=abc&x=1", "https://a.com/p#<MASK>"],
+    ["https://a.com/p?access_token=abc", "https://a.com/p?access_token=<MASK>"],
+    ["https://a.com/cb?code=1&token=abc#frag", "https://a.com/cb?code=<MASK>&token=<MASK>#<MASK>"],
+    ["https://a.com/x;jsessionid=AB12?auth_code=1", "https://a.com/x;jsessionid=<MASK>?auth_code=<MASK>"],
+    ["https://u:p@a.com/reset/eyJhbGciOiJIUzI1NiJ9.x.y?password=1#f", "https://<MASK>@a.com/reset/<MASK>?password=<MASK>#<MASK>"],
+    ["https://a.com/p?user%5Bpassword%5D=x", "https://a.com/p?user%5Bpassword%5D=<MASK>"],
+    ["https://a.com/p?%ED%9C%B4%EB%8C%80%ED%8F%B0=010", "https://a.com/p?%ED%9C%B4%EB%8C%80%ED%8F%B0=<MASK>"],
+    ["https://a.com/p?t=eyJhbGciOiJIUzI1NiJ9.x.y", "https://a.com/p?t=<MASK>"],
+    ["", ""]
+  ]
+}

@@ -8,7 +8,9 @@
 export const MASK = '●●●●';
 
 /** 이름 어디에 있어도 비밀 칸으로 보는 긴 말 */
-const SECRET_PART = /password|passwd|passcode|passphrase|secret|token|credential|session|cookie|bearer|private|비밀|암호|인증|카드|주민|계좌|휴대|전화/i;
+const SECRET_PART = /password|passwd|passcode|passphrase|secret|token|credential|session|cookie|bearer|private|authorization|비밀|암호|인증|카드|주민|계좌|휴대|전화/i;
+/** 구분자 없이 붙여 쓴 이름 (apikey · accesskey · cardnumber). 구분자를 지운 소문자 이름에 들어 있으면 비밀 칸으로 본다 */
+const SECRET_JOINED = /apikey|accesskey|privatekey|cardnumber/;
 /** 짧아서 다른 말 속에 섞이기 쉬운 것은 단어 단위로만 본다 (spinner·author·keyword 오판 방지) */
 const SECRET_WORD = new Set(['pw', 'pwd', 'pin', 'otp', 'cvc', 'cvv', 'ssn', 'key', 'sig', 'auth', 'card', 'jwt', 'nonce', 'code', 'email', 'phone', 'tel', 'mobile', 'account', 'birth']);
 
@@ -16,6 +18,7 @@ const SECRET_WORD = new Set(['pw', 'pwd', 'pin', 'otp', 'cvc', 'cvv', 'ssn', 'ke
 export function isSecretName(name: string | undefined): boolean {
   if (!name) return false;
   if (SECRET_PART.test(name)) return true;
+  if (SECRET_JOINED.test(name.toLowerCase().replace(/[^a-z0-9]+/g, ''))) return true;
   // auth_code · authCode · api-key → 단어로 나눠 본다
   const words = name.replace(/([a-z0-9])([A-Z])/g, '$1 $2').toLowerCase().split(/[^a-z0-9]+/);
   return words.some((w) => SECRET_WORD.has(w));
