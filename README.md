@@ -94,8 +94,8 @@ dependencyResolutionManagement {
 
 // app/build.gradle.kts — use the same release tag as the DroidLens app (network mocks need v0.10.0+)
 dependencies {
-    debugImplementation("com.github.ESeungJun.droidlens:sdk:v0.12.0")
-    releaseImplementation("com.github.ESeungJun.droidlens:sdk-noop:v0.12.0")
+    debugImplementation("com.github.ESeungJun.droidlens:sdk:v0.12.1")
+    releaseImplementation("com.github.ESeungJun.droidlens:sdk-noop:v0.12.1")
 }
 
 // Network inspector (if you use OkHttp)
