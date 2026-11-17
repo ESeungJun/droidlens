@@ -178,7 +178,6 @@ test('recordTransition: 누른 좌표를 그 자리 요소(라벨·셀렉터)로
 test('followPath: 같은 요소를 다시 찾아 누르고, 다른 화면·위험 버튼·다시 실행할 수 없는 연결이면 멈춘다', async () => {
   const pkg = 'com.ex.follow';
   const f = fakeDevice(app(pkg));
-  const g = new ScreenGraph(pkg, join(home, 'follow'));
   f.open('home');
   const sHome = await captureSnapshot(f.dev, { screenshot: false });
   f.open('home', 'detail');
@@ -204,7 +203,6 @@ test('followPath: 같은 요소를 다시 찾아 누르고, 다른 화면·위�
   await assert.rejects(followPath(f.dev, pkg, sHome, [{ action: { type: 'tap', x: 0, y: 0, label: 'Nope' }, to: detailId }]), /"Nope"을\(를\) 찾을 수 없습니다/);
   await assert.rejects(followPath(f.dev, pkg, sHome, [{ action: { type: 'tap', x: 0, y: 0, label: '삭제' }, to: detailId }]), /다시 실행하지 않는 동작/);
   await assert.rejects(followPath(f.dev, pkg, sHome, [{ action: { type: 'deeplink', uri: 'a://b' }, to: detailId }]), /다시 실행하지 않는 동작이라 멈춥니다: deeplink/);
-  assert.ok(g);
 });
 
 test('navigateTo: 이미 그 화면이면 그대로, 아니면 앱을 다시 실행해 기록된 경로를 따라간다', async () => {

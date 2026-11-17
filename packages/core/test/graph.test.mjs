@@ -146,7 +146,7 @@ test('planRoute: 기록된 경로, 같은 요소로 건너가기, 선택된 탭�
   const sFeed = snap('feed', FEED);
   const sDetail = snap('detail', DETAIL);
   const h = (await g.addSnapshot(sHome)).id;
-  const f = (await g.addSnapshot(sFeed)).id;
+  await g.addSnapshot(sFeed);
   const d = (await g.addSnapshot(sDetail)).id;
   assert.deepEqual(planRoute(g, sHome, h), []);
   // 기록 없음
@@ -184,11 +184,11 @@ test('planRoute: 기록된 경로, 같은 요소로 건너가기, 선택된 탭�
   );
   // 위험 라벨 요소로는 건너가지 않는다
   const g3 = new ScreenGraph(PKG, join(home, 'mem5'));
-  const h3 = (await g3.addSnapshot(sHome)).id;
+  await g3.addSnapshot(sHome);
+  const f3 = (await g3.addSnapshot(sFeed)).id;
   const d3 = (await g3.addSnapshot(sDetail)).id;
-  g3.addEdge(f, d3, tap('삭제', 'btn_delete'));
+  g3.addEdge(f3, d3, tap('삭제', 'btn_delete'));
   assert.equal(planRoute(g3, sHome, d3), undefined);
-  assert.ok(h3);
 });
 
 test('save: graph.json·graph.mmd 를 쓰고, 다른 프로세스가 고친 파일은 다시 열 때 합친다', async () => {
