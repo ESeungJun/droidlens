@@ -816,9 +816,12 @@ async function runStep(
   throw new StepFailure('알 수 없는 단계');
 }
 
-/** 조작 직후 화면이 반응할 시간 (에이전트가 있으면 접근성 idle 대기) */
-async function settle(dev: DeviceAdb): Promise<void> {
-  const agent = await ensureAgent(dev);
+/**
+ * 조작 직후 화면이 반응할 시간 (에이전트가 있으면 접근성 idle 대기, 없으면 0.7초).
+ * install: false 면 에이전트를 새로 설치·실행하지 않고 이미 떠 있는 것만 쓴다 (waitScreenSettled)
+ */
+async function settle(dev: DeviceAdb, opts: { install?: boolean } = {}): Promise<void> {
+  const agent = opts.install === false ? await checkedAgent(dev).catch(() => undefined) : await ensureAgent(dev);
   if (agent) await agent.waitIdle(250, 2500).catch(() => sleep(400));
   else await sleep(700);
 }
@@ -828,9 +831,7 @@ async function settle(dev: DeviceAdb): Promise<void> {
  * (설치하면 Play 프로텍트 창이 떠서 그 창이 스크린샷에 찍힌다)
  */
 export async function waitScreenSettled(dev: DeviceAdb): Promise<void> {
-  const agent = await checkedAgent(dev).catch(() => undefined);
-  if (agent) await agent.waitIdle(250, 2500).catch(() => sleep(400));
-  else await sleep(700);
+  return settle(dev, { install: false });
 }
 
 /** 지금 앞 화면이 대상 앱이 아니면 그 패키지 이름 (런처로 나간 경우 포함). 같거나 모르면 undefined */
