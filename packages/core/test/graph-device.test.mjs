@@ -297,6 +297,175 @@ test('explore: maxSteps 에 닿으면 멈추고 limited 를 알린다', async ()
   assert.equal(r.limited, true);
 });
 
+// ---------- 자동 탐색의 갈래 (돌아오기·오류·취소·시작 화면). 기준은 리팩토링 전 graph.ts 빌드로 만들었다 ----------
+
+/** 갈래 시험용 앱. 화면 이름은 아래 각 시험이 필요한 것만 쓴다 */
+const branchApp = (pkg) => ({
+  pkg,
+  launch: 'home',
+  screens: {
+    home: {
+      activity: `${pkg}.HomeActivity`,
+      buttons: [
+        // 앱 밖 화면 위에 앱 안 화면이 하나 더 열린다: 첫 BACK 은 앱 밖, 두 번째 BACK 에 돌아온다
+        { id: 'jump', text: 'Jump', bounds: b(0), go: ['outside', 'side'] },
+        { id: 'web', text: 'Web', bounds: b(1), go: 'web' },
+        { id: 'list', text: 'List', bounds: b(2), go: 'list' },
+        { id: 'a', text: 'A', bounds: b(3), go: 'hub' },
+        { id: 'b', text: 'B', bounds: b(4), go: 'mid' },
+      ],
+    },
+    outside: { pkg: 'com.other', activity: 'com.other.OutsideActivity', buttons: [] },
+    side: { activity: `${pkg}.SideActivity`, buttons: [] },
+    // 화면 절반 이상을 덮는 WebView: 눌러도 그대로면 1.5초 더 기다린다
+    web: {
+      activity: `${pkg}.WebActivity`,
+      buttons: [
+        { id: 'page', cls: 'android.webkit.WebView', clickable: false, bounds: [0, 0, 1080, 2400] },
+        { id: 'load', text: 'Load', bounds: b(8) },
+      ],
+    },
+    // 펼치면 같은 화면 id 로 버튼 위치만 바뀐다: 다음 버튼은 바뀐 위치를 눌러야 한다
+    list: {
+      activity: `${pkg}.ListActivity`,
+      buttons: [
+        { id: 'expand', text: 'Expand', bounds: b(0), go: 'listOpen' },
+        { id: 'item', text: 'Item', bounds: b(1), go: 'leaf' },
+      ],
+    },
+    listOpen: {
+      activity: `${pkg}.ListActivity`,
+      root: 'list',
+      buttons: [
+        { id: 'expand', text: 'Expand', bounds: b(0) },
+        { id: 'item', text: 'Item', bounds: b(9), go: 'leaf' },
+      ],
+    },
+    // common 은 hub·mid 두 경로로 닿는다
+    hub: { activity: `${pkg}.HubActivity`, buttons: [{ id: 'share', text: 'Share', bounds: b(0), go: 'common' }] },
+    mid: { activity: `${pkg}.MidActivity`, buttons: [{ id: 'common2', text: 'Common', bounds: b(0), go: 'common' }] },
+    common: { activity: `${pkg}.CommonActivity`, buttons: [{ id: 'leaf', text: 'Leaf', bounds: b(1), go: 'leaf' }] },
+    leaf: { activity: `${pkg}.LeafActivity`, buttons: [] },
+    // BACK 으로 못 나오는 화면 (relaunch:false 에서 돌아오지 못하는 갈래)
+    trap: { activity: `${pkg}.TrapActivity`, backConsumes: 99, buttons: [] },
+    // BACK 명령이 실패하는 화면 (returnTo 가 던지는 갈래)
+    jam: { activity: `${pkg}.JamActivity`, backThrows: 'keyevent 실패', buttons: [] },
+  },
+});
+
+/** 탐색을 돌리고 결과·진행·명령을 기준과 비교한다 */
+async function exploreGolden(key, f, opts) {
+  const progress = [];
+  const r = await explore(f.dev, { ...opts, onProgress: (e) => (progress.push([e.step, e.message, e.screen ?? null]), opts.onProgress?.(e)) });
+  matchGolden(`${key}.result`, { ...r, graph: stable(r.graph) });
+  matchGolden(`${key}.progress`, progress);
+  matchGolden(`${key}.commands`, f.commands());
+  return r;
+}
+
+test('explore 갈래: 앱 밖을 거친 BACK·두 경로로 닿는 화면·웹 화면 재대기·같은 화면 위치 갱신·첫 화면 기록', async () => {
+  const pkg = 'com.ex.branch';
+  const f = fakeDevice(branchApp(pkg));
+  const r = await exploreGolden('exploreBranch', f, { packageName: pkg, maxDepth: 3 });
+  assert.deepEqual(r.errors, []);
+  // 앱을 다시 실행해 시작했으면 그 화면을 앱 첫 화면으로 남긴다 (경로 재생이 없는 탐색이라 여기서만 정해진다)
+  assert.equal(r.graph.launchScreen, r.startScreen);
+  // 첫 BACK 에 앱 밖이 보여도 두 번째 BACK 까지 해 보고, 돌아왔으니 앱을 다시 실행하지 않는다
+  assert.equal(f.commands().filter((c) => c.startsWith('am start')).length, 1);
+  // 펼친 뒤에는 바뀐 위치(10번째 줄)의 Item 을 누른다
+  assert.ok(f.commands().includes(`input tap ${center(9).x} ${center(9).y}`));
+  // common 은 두 경로로 닿지만 한 번만 들어간다: Leaf 는 한 번만 누른다
+  const commonId = r.graph.nodes.find((n) => n.label === 'CommonActivity').id;
+  assert.equal(r.graph.edges.filter((e) => e.from === commonId).length, 1);
+  // 웹 화면에서 눌러도 그대로면 1.5초 더 기다린 뒤 다시 본다 (명령 순서로는 안 보여서 시각으로 본다)
+  const loadAt = f.stamps.findIndex(([c]) => c === `input tap ${center(8).x} ${center(8).y}`);
+  assert.ok(loadAt > 0, '웹 화면 Load 를 누르지 않음');
+  let gap = 0;
+  for (let j = loadAt + 1; j < f.stamps.length && !f.stamps[j][0].startsWith('input'); j++) gap = Math.max(gap, f.stamps[j][1] - f.stamps[j - 1][1]);
+  assert.ok(gap >= 1450, `웹 화면 재대기 ${gap}ms`);
+});
+
+test('explore 갈래: startAt 으로 시작하고, 누르다 실패하면 앱을 다시 실행해 경로를 따라 원래 화면으로 간다', async () => {
+  const pkg = 'com.ex.fail';
+  const app1 = branchApp(pkg);
+  app1.screens.common.buttons.unshift({ id: 'boom', text: 'Boom', bounds: b(0), fail: 'input 실패' });
+  const f = fakeDevice(app1);
+  const g = await ScreenGraph.open(pkg);
+  f.open('home');
+  const hub = (await recordTransition(f.dev, g, { type: 'tap', ...center(3) })).to;
+  await g.save();
+  f.open('home', 'mid');
+  f.log.length = 0;
+  const r = await exploreGolden('exploreFail', f, { packageName: pkg, startAt: hub.id, maxDepth: 3 });
+  assert.equal(r.startScreen, hub.id);
+  assert.ok(r.errors.some((e) => e.endsWith('tap "Boom": input 실패')), r.errors.join('\n'));
+  // 실패 뒤 다시 실행해 Hub → Common 을 따라간 다음 남은 Leaf 를 누른다
+  assert.ok(r.graph.edges.some((e) => e.action.label === 'Leaf'));
+});
+
+test('explore 갈래: 지금 화면부터(relaunch:false) 시작하면 BACK 으로 못 돌아올 때 앱을 다시 실행하지 않고 그 화면을 그만둔다', async () => {
+  // BACK 이 먹히지 않는 화면
+  const pkg = 'com.ex.trap';
+  const app1 = branchApp(pkg);
+  app1.screens.home.buttons = [
+    { id: 'trap', text: 'Trap', bounds: b(0), go: 'trap' },
+    { id: 'x', text: 'X', bounds: b(1), go: 'leaf' },
+    { id: 'y', text: 'Y', bounds: b(2), go: 'leaf' },
+  ];
+  const f = fakeDevice(app1);
+  f.open('home');
+  const r = await exploreGolden('exploreTrap', f, { packageName: pkg, relaunch: false });
+  assert.ok(!f.commands().some((c) => c.startsWith('am ')), '앱을 다시 실행하지 않는다');
+  assert.equal(r.errors.length, 1);
+  assert.match(r.errors[0], /원래 화면으로 돌아오지 못해 남은 버튼은 건너뜀/);
+  // X 에서 돌아오기를 한 번 해 보고 멈춘다: Y 를 위해 다시 BACK 하지 않는다
+  assert.equal(f.commands().filter((c) => c === 'input keyevent 4').length, 4);
+
+  // BACK 명령 자체가 실패하는 화면: 오류로 남기고 탐색은 끝까지 돈다
+  const pkg2 = 'com.ex.jam';
+  const app2 = branchApp(pkg2);
+  app2.screens.home.buttons = [
+    { id: 'jam', text: 'Jam', bounds: b(0), go: 'jam' },
+    { id: 'x', text: 'X', bounds: b(1), go: 'leaf' },
+    { id: 'y', text: 'Y', bounds: b(2), go: 'leaf' },
+  ];
+  const f2 = fakeDevice(app2);
+  f2.open('home');
+  const r2 = await exploreGolden('exploreJam', f2, { packageName: pkg2, relaunch: false });
+  assert.ok(!f2.commands().some((c) => c.startsWith('am ')));
+  assert.deepEqual(
+    r2.errors.map((e) => e.replace(/^\S+ /, '')),
+    ['tap "Jam": keyevent 실패', '원래 화면으로 돌아오지 못해 남은 버튼은 건너뜀'],
+  );
+});
+
+test('explore 갈래: 시작 화면에 다시 닿아도 들어가지 않는다 (only 로 고른 것 외의 버튼을 누르지 않는다)', async () => {
+  const pkg = 'com.ex.loop';
+  const app1 = branchApp(pkg);
+  app1.screens.hub.buttons = [{ id: 'home', text: 'Home', bounds: b(0), go: 'home' }];
+  const f = fakeDevice(app1);
+  f.open('home');
+  const r = await exploreGolden('exploreLoop', f, { packageName: pkg, relaunch: false, maxDepth: 3, only: [{ kind: 'tap', key: `${pkg}:id/a|A` }] });
+  assert.deepEqual(
+    r.graph.edges.map((e) => e.action.label),
+    ['A', 'Home'],
+  );
+});
+
+test('explore 갈래: AbortSignal 로 취소하면 다음 행동부터 멈춘다', async () => {
+  const pkg = 'com.ex.abort';
+  const f = fakeDevice(branchApp(pkg));
+  const ac = new AbortController();
+  const r = await exploreGolden('exploreAbort', f, {
+    packageName: pkg,
+    signal: ac.signal,
+    // 첫 연결이 생기면 취소한다
+    onProgress: (e) => e.message.includes(' → ') && ac.abort(),
+  });
+  assert.equal(r.steps, 1);
+  assert.equal(r.limited, false);
+});
+
 test('FlowCollector: 알려 준 행동으로 직전 화면과 지금 화면을 잇고, 앱 밖·실패면 끊는다', async () => {
   const pkg = 'com.ex.flow';
   const f = fakeDevice(app(pkg));

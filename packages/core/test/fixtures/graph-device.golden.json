@@ -931,5 +931,1686 @@
     "screencap -p",
     "dumpsys window | grep -E \"mCurrentFocus|mFocusedApp\"",
     "uiautomator dump --compressed /data/local/tmp/droidlens_ui_X.xml 2>&1; echo __DROIDLENS_XML__; cat /data/local/tmp/droidlens_ui_X.xml 2>/dev/null; rm -f /data/local/tmp/droidlens_ui_X.xml"
+  ],
+  "exploreBranch.result": {
+    "graph": {
+      "packageName": "com.ex.branch",
+      "launchScreen": "HomeActivity@92953a5caf5c",
+      "nodes": [
+        {
+          "id": "HomeActivity@92953a5caf5c",
+          "packageName": "com.ex.branch",
+          "activity": "com.ex.branch.HomeActivity",
+          "fragments": [],
+          "signature": "92953a5caf5c",
+          "label": "HomeActivity",
+          "screenshot": "HomeActivity_92953a5caf5c.png",
+          "visits": 1,
+          "nodeCount": 7,
+          "maxDepth": 2,
+          "actions": [
+            "Jump",
+            "Web",
+            "List",
+            "A",
+            "B"
+          ],
+          "targets": [
+            {
+              "key": "com.ex.branch:id/jump|Jump",
+              "label": "Jump",
+              "bounds": [
+                0,
+                100,
+                1080,
+                190
+              ]
+            },
+            {
+              "key": "com.ex.branch:id/web|Web",
+              "label": "Web",
+              "bounds": [
+                0,
+                200,
+                1080,
+                290
+              ]
+            },
+            {
+              "key": "com.ex.branch:id/list|List",
+              "label": "List",
+              "bounds": [
+                0,
+                300,
+                1080,
+                390
+              ]
+            },
+            {
+              "key": "com.ex.branch:id/a|A",
+              "label": "A",
+              "bounds": [
+                0,
+                400,
+                1080,
+                490
+              ]
+            },
+            {
+              "key": "com.ex.branch:id/b|B",
+              "label": "B",
+              "bounds": [
+                0,
+                500,
+                1080,
+                590
+              ]
+            }
+          ],
+          "selectedKeys": [],
+          "tried": [
+            "com.ex.branch:id/jump|Jump",
+            "com.ex.branch:id/web|Web",
+            "com.ex.branch:id/list|List",
+            "com.ex.branch:id/a|A",
+            "com.ex.branch:id/b|B"
+          ]
+        },
+        {
+          "id": "SideActivity@961030708c8f",
+          "packageName": "com.ex.branch",
+          "activity": "com.ex.branch.SideActivity",
+          "fragments": [],
+          "signature": "961030708c8f",
+          "label": "SideActivity",
+          "screenshot": "SideActivity_961030708c8f.png",
+          "visits": 1,
+          "nodeCount": 2,
+          "maxDepth": 1,
+          "actions": [],
+          "targets": [],
+          "selectedKeys": []
+        },
+        {
+          "id": "WebActivity@694a5d909438",
+          "packageName": "com.ex.branch",
+          "activity": "com.ex.branch.WebActivity",
+          "fragments": [],
+          "signature": "694a5d909438",
+          "label": "WebActivity",
+          "screenshot": "WebActivity_694a5d909438.png",
+          "visits": 2,
+          "nodeCount": 4,
+          "maxDepth": 2,
+          "actions": [
+            "Load"
+          ],
+          "targets": [
+            {
+              "key": "com.ex.branch:id/load|Load",
+              "label": "Load",
+              "bounds": [
+                0,
+                900,
+                1080,
+                990
+              ]
+            }
+          ],
+          "selectedKeys": [],
+          "tried": [
+            "com.ex.branch:id/load|Load"
+          ]
+        },
+        {
+          "id": "ListActivity@272e246ba9ba",
+          "packageName": "com.ex.branch",
+          "activity": "com.ex.branch.ListActivity",
+          "fragments": [],
+          "signature": "272e246ba9ba",
+          "label": "ListActivity",
+          "screenshot": "ListActivity_272e246ba9ba.png",
+          "visits": 2,
+          "nodeCount": 4,
+          "maxDepth": 2,
+          "actions": [
+            "Expand",
+            "Item"
+          ],
+          "targets": [
+            {
+              "key": "com.ex.branch:id/expand|Expand",
+              "label": "Expand",
+              "bounds": [
+                0,
+                100,
+                1080,
+                190
+              ]
+            },
+            {
+              "key": "com.ex.branch:id/item|Item",
+              "label": "Item",
+              "bounds": [
+                0,
+                200,
+                1080,
+                290
+              ]
+            }
+          ],
+          "selectedKeys": [],
+          "tried": [
+            "com.ex.branch:id/expand|Expand",
+            "com.ex.branch:id/item|Item"
+          ]
+        },
+        {
+          "id": "LeafActivity@47f770dcf59d",
+          "packageName": "com.ex.branch",
+          "activity": "com.ex.branch.LeafActivity",
+          "fragments": [],
+          "signature": "47f770dcf59d",
+          "label": "LeafActivity",
+          "screenshot": "LeafActivity_47f770dcf59d.png",
+          "visits": 2,
+          "nodeCount": 2,
+          "maxDepth": 1,
+          "actions": [],
+          "targets": [],
+          "selectedKeys": []
+        },
+        {
+          "id": "HubActivity@5fe48bfe4bc6",
+          "packageName": "com.ex.branch",
+          "activity": "com.ex.branch.HubActivity",
+          "fragments": [],
+          "signature": "5fe48bfe4bc6",
+          "label": "HubActivity",
+          "screenshot": "HubActivity_5fe48bfe4bc6.png",
+          "visits": 1,
+          "nodeCount": 3,
+          "maxDepth": 2,
+          "actions": [
+            "Share"
+          ],
+          "targets": [
+            {
+              "key": "com.ex.branch:id/share|Share",
+              "label": "Share",
+              "bounds": [
+                0,
+                100,
+                1080,
+                190
+              ]
+            }
+          ],
+          "selectedKeys": [],
+          "tried": [
+            "com.ex.branch:id/share|Share"
+          ]
+        },
+        {
+          "id": "CommonActivity@e0f4dd013bb1",
+          "packageName": "com.ex.branch",
+          "activity": "com.ex.branch.CommonActivity",
+          "fragments": [],
+          "signature": "e0f4dd013bb1",
+          "label": "CommonActivity",
+          "screenshot": "CommonActivity_e0f4dd013bb1.png",
+          "visits": 2,
+          "nodeCount": 3,
+          "maxDepth": 2,
+          "actions": [
+            "Leaf"
+          ],
+          "targets": [
+            {
+              "key": "com.ex.branch:id/leaf|Leaf",
+              "label": "Leaf",
+              "bounds": [
+                0,
+                200,
+                1080,
+                290
+              ]
+            }
+          ],
+          "selectedKeys": [],
+          "tried": [
+            "com.ex.branch:id/leaf|Leaf"
+          ]
+        },
+        {
+          "id": "MidActivity@831a721a4495",
+          "packageName": "com.ex.branch",
+          "activity": "com.ex.branch.MidActivity",
+          "fragments": [],
+          "signature": "831a721a4495",
+          "label": "MidActivity",
+          "screenshot": "MidActivity_831a721a4495.png",
+          "visits": 1,
+          "nodeCount": 3,
+          "maxDepth": 2,
+          "actions": [
+            "Common"
+          ],
+          "targets": [
+            {
+              "key": "com.ex.branch:id/common2|Common",
+              "label": "Common",
+              "bounds": [
+                0,
+                100,
+                1080,
+                190
+              ]
+            }
+          ],
+          "selectedKeys": [],
+          "tried": [
+            "com.ex.branch:id/common2|Common"
+          ]
+        }
+      ],
+      "edges": [
+        {
+          "id": "HomeActivity@92953a5caf5c->SideActivity@961030708c8f:tap \"Jump\"",
+          "from": "HomeActivity@92953a5caf5c",
+          "to": "SideActivity@961030708c8f",
+          "action": {
+            "type": "tap",
+            "x": 540,
+            "y": 145,
+            "label": "Jump",
+            "selector": {
+              "id": "com.ex.branch:id/jump"
+            }
+          },
+          "count": 1
+        },
+        {
+          "id": "HomeActivity@92953a5caf5c->WebActivity@694a5d909438:tap \"Web\"",
+          "from": "HomeActivity@92953a5caf5c",
+          "to": "WebActivity@694a5d909438",
+          "action": {
+            "type": "tap",
+            "x": 540,
+            "y": 245,
+            "label": "Web",
+            "selector": {
+              "id": "com.ex.branch:id/web"
+            }
+          },
+          "count": 1
+        },
+        {
+          "id": "HomeActivity@92953a5caf5c->ListActivity@272e246ba9ba:tap \"List\"",
+          "from": "HomeActivity@92953a5caf5c",
+          "to": "ListActivity@272e246ba9ba",
+          "action": {
+            "type": "tap",
+            "x": 540,
+            "y": 345,
+            "label": "List",
+            "selector": {
+              "id": "com.ex.branch:id/list"
+            }
+          },
+          "count": 1
+        },
+        {
+          "id": "ListActivity@272e246ba9ba->LeafActivity@47f770dcf59d:tap \"Item\"",
+          "from": "ListActivity@272e246ba9ba",
+          "to": "LeafActivity@47f770dcf59d",
+          "action": {
+            "type": "tap",
+            "x": 540,
+            "y": 1045,
+            "label": "Item",
+            "selector": {
+              "id": "com.ex.branch:id/item"
+            }
+          },
+          "count": 1
+        },
+        {
+          "id": "HomeActivity@92953a5caf5c->HubActivity@5fe48bfe4bc6:tap \"A\"",
+          "from": "HomeActivity@92953a5caf5c",
+          "to": "HubActivity@5fe48bfe4bc6",
+          "action": {
+            "type": "tap",
+            "x": 540,
+            "y": 445,
+            "label": "A",
+            "selector": {
+              "id": "com.ex.branch:id/a"
+            }
+          },
+          "count": 1
+        },
+        {
+          "id": "HubActivity@5fe48bfe4bc6->CommonActivity@e0f4dd013bb1:tap \"Share\"",
+          "from": "HubActivity@5fe48bfe4bc6",
+          "to": "CommonActivity@e0f4dd013bb1",
+          "action": {
+            "type": "tap",
+            "x": 540,
+            "y": 145,
+            "label": "Share",
+            "selector": {
+              "id": "com.ex.branch:id/share"
+            }
+          },
+          "count": 1
+        },
+        {
+          "id": "CommonActivity@e0f4dd013bb1->LeafActivity@47f770dcf59d:tap \"Leaf\"",
+          "from": "CommonActivity@e0f4dd013bb1",
+          "to": "LeafActivity@47f770dcf59d",
+          "action": {
+            "type": "tap",
+            "x": 540,
+            "y": 245,
+            "label": "Leaf",
+            "selector": {
+              "id": "com.ex.branch:id/leaf"
+            }
+          },
+          "count": 1
+        },
+        {
+          "id": "HomeActivity@92953a5caf5c->MidActivity@831a721a4495:tap \"B\"",
+          "from": "HomeActivity@92953a5caf5c",
+          "to": "MidActivity@831a721a4495",
+          "action": {
+            "type": "tap",
+            "x": 540,
+            "y": 545,
+            "label": "B",
+            "selector": {
+              "id": "com.ex.branch:id/b"
+            }
+          },
+          "count": 1
+        },
+        {
+          "id": "MidActivity@831a721a4495->CommonActivity@e0f4dd013bb1:tap \"Common\"",
+          "from": "MidActivity@831a721a4495",
+          "to": "CommonActivity@e0f4dd013bb1",
+          "action": {
+            "type": "tap",
+            "x": 540,
+            "y": 145,
+            "label": "Common",
+            "selector": {
+              "id": "com.ex.branch:id/common2"
+            }
+          },
+          "count": 1
+        }
+      ]
+    },
+    "startScreen": "HomeActivity@92953a5caf5c",
+    "steps": 11,
+    "limited": false,
+    "skipped": [],
+    "errors": [],
+    "touched": {
+      "nodes": [
+        "HomeActivity@92953a5caf5c",
+        "SideActivity@961030708c8f",
+        "WebActivity@694a5d909438",
+        "ListActivity@272e246ba9ba",
+        "LeafActivity@47f770dcf59d",
+        "HubActivity@5fe48bfe4bc6",
+        "CommonActivity@e0f4dd013bb1",
+        "MidActivity@831a721a4495"
+      ],
+      "edges": [
+        "HomeActivity@92953a5caf5c->SideActivity@961030708c8f:tap \"Jump\"",
+        "HomeActivity@92953a5caf5c->WebActivity@694a5d909438:tap \"Web\"",
+        "HomeActivity@92953a5caf5c->ListActivity@272e246ba9ba:tap \"List\"",
+        "ListActivity@272e246ba9ba->LeafActivity@47f770dcf59d:tap \"Item\"",
+        "HomeActivity@92953a5caf5c->HubActivity@5fe48bfe4bc6:tap \"A\"",
+        "HubActivity@5fe48bfe4bc6->CommonActivity@e0f4dd013bb1:tap \"Share\"",
+        "CommonActivity@e0f4dd013bb1->LeafActivity@47f770dcf59d:tap \"Leaf\"",
+        "HomeActivity@92953a5caf5c->MidActivity@831a721a4495:tap \"B\"",
+        "MidActivity@831a721a4495->CommonActivity@e0f4dd013bb1:tap \"Common\""
+      ]
+    }
+  },
+  "exploreBranch.progress": [
+    [
+      0,
+      "시작 화면: HomeActivity",
+      "HomeActivity@92953a5caf5c"
+    ],
+    [
+      1,
+      "tap \"Jump\" → SideActivity",
+      "SideActivity@961030708c8f"
+    ],
+    [
+      2,
+      "tap \"Web\" → WebActivity",
+      "WebActivity@694a5d909438"
+    ],
+    [
+      4,
+      "tap \"List\" → ListActivity",
+      "ListActivity@272e246ba9ba"
+    ],
+    [
+      6,
+      "tap \"Item\" → LeafActivity",
+      "LeafActivity@47f770dcf59d"
+    ],
+    [
+      7,
+      "tap \"A\" → HubActivity",
+      "HubActivity@5fe48bfe4bc6"
+    ],
+    [
+      8,
+      "tap \"Share\" → CommonActivity",
+      "CommonActivity@e0f4dd013bb1"
+    ],
+    [
+      9,
+      "tap \"Leaf\" → LeafActivity",
+      "LeafActivity@47f770dcf59d"
+    ],
+    [
+      10,
+      "tap \"B\" → MidActivity",
+      "MidActivity@831a721a4495"
+    ],
+    [
+      11,
+      "tap \"Common\" → CommonActivity",
+      "CommonActivity@e0f4dd013bb1"
+    ],
+    [
+      11,
+      "탐색 완료: 화면 8개, 전이 9개, 11스텝",
+      null
+    ]
+  ],
+  "exploreBranch.commands": [
+    "am force-stop com.ex.branch",
+    "cmd package resolve-activity --brief -a android.intent.action.MAIN -c android.intent.category.LAUNCHER com.ex.branch",
+    "am start -W -f 0x10008000 -n 'com.ex.branch/com.ex.branch.HomeActivity'",
+    "dumpsys window | grep -E \"mCurrentFocus|mFocusedApp\"",
+    "uiautomator dump --compressed /data/local/tmp/droidlens_ui_X.xml 2>&1; echo __DROIDLENS_XML__; cat /data/local/tmp/droidlens_ui_X.xml 2>/dev/null; rm -f /data/local/tmp/droidlens_ui_X.xml",
+    "screencap -p",
+    "screencap -p",
+    "dumpsys window | grep -E \"mCurrentFocus|mFocusedApp\"",
+    "uiautomator dump --compressed /data/local/tmp/droidlens_ui_X.xml 2>&1; echo __DROIDLENS_XML__; cat /data/local/tmp/droidlens_ui_X.xml 2>/dev/null; rm -f /data/local/tmp/droidlens_ui_X.xml",
+    "dumpsys activity top",
+    "input tap 540 145",
+    "screencap -p",
+    "screencap -p",
+    "dumpsys window | grep -E \"mCurrentFocus|mFocusedApp\"",
+    "uiautomator dump --compressed /data/local/tmp/droidlens_ui_X.xml 2>&1; echo __DROIDLENS_XML__; cat /data/local/tmp/droidlens_ui_X.xml 2>/dev/null; rm -f /data/local/tmp/droidlens_ui_X.xml",
+    "dumpsys activity top",
+    "input keyevent 4",
+    "screencap -p",
+    "screencap -p",
+    "dumpsys window | grep -E \"mCurrentFocus|mFocusedApp\"",
+    "uiautomator dump --compressed /data/local/tmp/droidlens_ui_X.xml 2>&1; echo __DROIDLENS_XML__; cat /data/local/tmp/droidlens_ui_X.xml 2>/dev/null; rm -f /data/local/tmp/droidlens_ui_X.xml",
+    "input keyevent 4",
+    "screencap -p",
+    "screencap -p",
+    "dumpsys window | grep -E \"mCurrentFocus|mFocusedApp\"",
+    "uiautomator dump --compressed /data/local/tmp/droidlens_ui_X.xml 2>&1; echo __DROIDLENS_XML__; cat /data/local/tmp/droidlens_ui_X.xml 2>/dev/null; rm -f /data/local/tmp/droidlens_ui_X.xml",
+    "input tap 540 245",
+    "screencap -p",
+    "screencap -p",
+    "dumpsys window | grep -E \"mCurrentFocus|mFocusedApp\"",
+    "uiautomator dump --compressed /data/local/tmp/droidlens_ui_X.xml 2>&1; echo __DROIDLENS_XML__; cat /data/local/tmp/droidlens_ui_X.xml 2>/dev/null; rm -f /data/local/tmp/droidlens_ui_X.xml",
+    "dumpsys activity top",
+    "input tap 540 945",
+    "screencap -p",
+    "screencap -p",
+    "dumpsys window | grep -E \"mCurrentFocus|mFocusedApp\"",
+    "uiautomator dump --compressed /data/local/tmp/droidlens_ui_X.xml 2>&1; echo __DROIDLENS_XML__; cat /data/local/tmp/droidlens_ui_X.xml 2>/dev/null; rm -f /data/local/tmp/droidlens_ui_X.xml",
+    "screencap -p",
+    "screencap -p",
+    "dumpsys window | grep -E \"mCurrentFocus|mFocusedApp\"",
+    "uiautomator dump --compressed /data/local/tmp/droidlens_ui_X.xml 2>&1; echo __DROIDLENS_XML__; cat /data/local/tmp/droidlens_ui_X.xml 2>/dev/null; rm -f /data/local/tmp/droidlens_ui_X.xml",
+    "input keyevent 4",
+    "screencap -p",
+    "screencap -p",
+    "dumpsys window | grep -E \"mCurrentFocus|mFocusedApp\"",
+    "uiautomator dump --compressed /data/local/tmp/droidlens_ui_X.xml 2>&1; echo __DROIDLENS_XML__; cat /data/local/tmp/droidlens_ui_X.xml 2>/dev/null; rm -f /data/local/tmp/droidlens_ui_X.xml",
+    "input tap 540 345",
+    "screencap -p",
+    "screencap -p",
+    "dumpsys window | grep -E \"mCurrentFocus|mFocusedApp\"",
+    "uiautomator dump --compressed /data/local/tmp/droidlens_ui_X.xml 2>&1; echo __DROIDLENS_XML__; cat /data/local/tmp/droidlens_ui_X.xml 2>/dev/null; rm -f /data/local/tmp/droidlens_ui_X.xml",
+    "dumpsys activity top",
+    "input tap 540 145",
+    "screencap -p",
+    "screencap -p",
+    "dumpsys window | grep -E \"mCurrentFocus|mFocusedApp\"",
+    "uiautomator dump --compressed /data/local/tmp/droidlens_ui_X.xml 2>&1; echo __DROIDLENS_XML__; cat /data/local/tmp/droidlens_ui_X.xml 2>/dev/null; rm -f /data/local/tmp/droidlens_ui_X.xml",
+    "input tap 540 1045",
+    "screencap -p",
+    "screencap -p",
+    "dumpsys window | grep -E \"mCurrentFocus|mFocusedApp\"",
+    "uiautomator dump --compressed /data/local/tmp/droidlens_ui_X.xml 2>&1; echo __DROIDLENS_XML__; cat /data/local/tmp/droidlens_ui_X.xml 2>/dev/null; rm -f /data/local/tmp/droidlens_ui_X.xml",
+    "dumpsys activity top",
+    "input keyevent 4",
+    "screencap -p",
+    "screencap -p",
+    "dumpsys window | grep -E \"mCurrentFocus|mFocusedApp\"",
+    "uiautomator dump --compressed /data/local/tmp/droidlens_ui_X.xml 2>&1; echo __DROIDLENS_XML__; cat /data/local/tmp/droidlens_ui_X.xml 2>/dev/null; rm -f /data/local/tmp/droidlens_ui_X.xml",
+    "input keyevent 4",
+    "screencap -p",
+    "screencap -p",
+    "dumpsys window | grep -E \"mCurrentFocus|mFocusedApp\"",
+    "uiautomator dump --compressed /data/local/tmp/droidlens_ui_X.xml 2>&1; echo __DROIDLENS_XML__; cat /data/local/tmp/droidlens_ui_X.xml 2>/dev/null; rm -f /data/local/tmp/droidlens_ui_X.xml",
+    "input keyevent 4",
+    "screencap -p",
+    "screencap -p",
+    "dumpsys window | grep -E \"mCurrentFocus|mFocusedApp\"",
+    "uiautomator dump --compressed /data/local/tmp/droidlens_ui_X.xml 2>&1; echo __DROIDLENS_XML__; cat /data/local/tmp/droidlens_ui_X.xml 2>/dev/null; rm -f /data/local/tmp/droidlens_ui_X.xml",
+    "input tap 540 445",
+    "screencap -p",
+    "screencap -p",
+    "dumpsys window | grep -E \"mCurrentFocus|mFocusedApp\"",
+    "uiautomator dump --compressed /data/local/tmp/droidlens_ui_X.xml 2>&1; echo __DROIDLENS_XML__; cat /data/local/tmp/droidlens_ui_X.xml 2>/dev/null; rm -f /data/local/tmp/droidlens_ui_X.xml",
+    "dumpsys activity top",
+    "input tap 540 145",
+    "screencap -p",
+    "screencap -p",
+    "dumpsys window | grep -E \"mCurrentFocus|mFocusedApp\"",
+    "uiautomator dump --compressed /data/local/tmp/droidlens_ui_X.xml 2>&1; echo __DROIDLENS_XML__; cat /data/local/tmp/droidlens_ui_X.xml 2>/dev/null; rm -f /data/local/tmp/droidlens_ui_X.xml",
+    "dumpsys activity top",
+    "input tap 540 245",
+    "screencap -p",
+    "screencap -p",
+    "dumpsys window | grep -E \"mCurrentFocus|mFocusedApp\"",
+    "uiautomator dump --compressed /data/local/tmp/droidlens_ui_X.xml 2>&1; echo __DROIDLENS_XML__; cat /data/local/tmp/droidlens_ui_X.xml 2>/dev/null; rm -f /data/local/tmp/droidlens_ui_X.xml",
+    "input keyevent 4",
+    "screencap -p",
+    "screencap -p",
+    "dumpsys window | grep -E \"mCurrentFocus|mFocusedApp\"",
+    "uiautomator dump --compressed /data/local/tmp/droidlens_ui_X.xml 2>&1; echo __DROIDLENS_XML__; cat /data/local/tmp/droidlens_ui_X.xml 2>/dev/null; rm -f /data/local/tmp/droidlens_ui_X.xml",
+    "input keyevent 4",
+    "screencap -p",
+    "screencap -p",
+    "dumpsys window | grep -E \"mCurrentFocus|mFocusedApp\"",
+    "uiautomator dump --compressed /data/local/tmp/droidlens_ui_X.xml 2>&1; echo __DROIDLENS_XML__; cat /data/local/tmp/droidlens_ui_X.xml 2>/dev/null; rm -f /data/local/tmp/droidlens_ui_X.xml",
+    "input keyevent 4",
+    "screencap -p",
+    "screencap -p",
+    "dumpsys window | grep -E \"mCurrentFocus|mFocusedApp\"",
+    "uiautomator dump --compressed /data/local/tmp/droidlens_ui_X.xml 2>&1; echo __DROIDLENS_XML__; cat /data/local/tmp/droidlens_ui_X.xml 2>/dev/null; rm -f /data/local/tmp/droidlens_ui_X.xml",
+    "input tap 540 545",
+    "screencap -p",
+    "screencap -p",
+    "dumpsys window | grep -E \"mCurrentFocus|mFocusedApp\"",
+    "uiautomator dump --compressed /data/local/tmp/droidlens_ui_X.xml 2>&1; echo __DROIDLENS_XML__; cat /data/local/tmp/droidlens_ui_X.xml 2>/dev/null; rm -f /data/local/tmp/droidlens_ui_X.xml",
+    "dumpsys activity top",
+    "input tap 540 145",
+    "screencap -p",
+    "screencap -p",
+    "dumpsys window | grep -E \"mCurrentFocus|mFocusedApp\"",
+    "uiautomator dump --compressed /data/local/tmp/droidlens_ui_X.xml 2>&1; echo __DROIDLENS_XML__; cat /data/local/tmp/droidlens_ui_X.xml 2>/dev/null; rm -f /data/local/tmp/droidlens_ui_X.xml",
+    "input keyevent 4",
+    "screencap -p",
+    "screencap -p",
+    "dumpsys window | grep -E \"mCurrentFocus|mFocusedApp\"",
+    "uiautomator dump --compressed /data/local/tmp/droidlens_ui_X.xml 2>&1; echo __DROIDLENS_XML__; cat /data/local/tmp/droidlens_ui_X.xml 2>/dev/null; rm -f /data/local/tmp/droidlens_ui_X.xml",
+    "input keyevent 4",
+    "screencap -p",
+    "screencap -p",
+    "dumpsys window | grep -E \"mCurrentFocus|mFocusedApp\"",
+    "uiautomator dump --compressed /data/local/tmp/droidlens_ui_X.xml 2>&1; echo __DROIDLENS_XML__; cat /data/local/tmp/droidlens_ui_X.xml 2>/dev/null; rm -f /data/local/tmp/droidlens_ui_X.xml"
+  ],
+  "exploreFail.result": {
+    "graph": {
+      "packageName": "com.ex.fail",
+      "launchScreen": "HomeActivity@92953a5caf5c",
+      "nodes": [
+        {
+          "id": "HomeActivity@92953a5caf5c",
+          "packageName": "com.ex.fail",
+          "activity": "com.ex.fail.HomeActivity",
+          "fragments": [],
+          "signature": "92953a5caf5c",
+          "label": "HomeActivity",
+          "screenshot": "HomeActivity_92953a5caf5c.png",
+          "visits": 3,
+          "nodeCount": 7,
+          "maxDepth": 2,
+          "actions": [
+            "Jump",
+            "Web",
+            "List",
+            "A",
+            "B"
+          ],
+          "targets": [
+            {
+              "key": "com.ex.fail:id/jump|Jump",
+              "label": "Jump",
+              "bounds": [
+                0,
+                100,
+                1080,
+                190
+              ]
+            },
+            {
+              "key": "com.ex.fail:id/web|Web",
+              "label": "Web",
+              "bounds": [
+                0,
+                200,
+                1080,
+                290
+              ]
+            },
+            {
+              "key": "com.ex.fail:id/list|List",
+              "label": "List",
+              "bounds": [
+                0,
+                300,
+                1080,
+                390
+              ]
+            },
+            {
+              "key": "com.ex.fail:id/a|A",
+              "label": "A",
+              "bounds": [
+                0,
+                400,
+                1080,
+                490
+              ]
+            },
+            {
+              "key": "com.ex.fail:id/b|B",
+              "label": "B",
+              "bounds": [
+                0,
+                500,
+                1080,
+                590
+              ]
+            }
+          ],
+          "selectedKeys": [],
+          "tried": [
+            "com.ex.fail:id/a|A"
+          ]
+        },
+        {
+          "id": "HubActivity@5fe48bfe4bc6",
+          "packageName": "com.ex.fail",
+          "activity": "com.ex.fail.HubActivity",
+          "fragments": [],
+          "signature": "5fe48bfe4bc6",
+          "label": "HubActivity",
+          "screenshot": "HubActivity_5fe48bfe4bc6.png",
+          "visits": 2,
+          "nodeCount": 3,
+          "maxDepth": 2,
+          "actions": [
+            "Share"
+          ],
+          "targets": [
+            {
+              "key": "com.ex.fail:id/share|Share",
+              "label": "Share",
+              "bounds": [
+                0,
+                100,
+                1080,
+                190
+              ]
+            }
+          ],
+          "selectedKeys": [],
+          "tried": [
+            "com.ex.fail:id/share|Share"
+          ]
+        },
+        {
+          "id": "CommonActivity@7b71dba7218a",
+          "packageName": "com.ex.fail",
+          "activity": "com.ex.fail.CommonActivity",
+          "fragments": [],
+          "signature": "7b71dba7218a",
+          "label": "CommonActivity",
+          "screenshot": "CommonActivity_7b71dba7218a.png",
+          "visits": 1,
+          "nodeCount": 4,
+          "maxDepth": 2,
+          "actions": [
+            "Boom",
+            "Leaf"
+          ],
+          "targets": [
+            {
+              "key": "com.ex.fail:id/boom|Boom",
+              "label": "Boom",
+              "bounds": [
+                0,
+                100,
+                1080,
+                190
+              ]
+            },
+            {
+              "key": "com.ex.fail:id/leaf|Leaf",
+              "label": "Leaf",
+              "bounds": [
+                0,
+                200,
+                1080,
+                290
+              ]
+            }
+          ],
+          "selectedKeys": [],
+          "tried": [
+            "com.ex.fail:id/boom|Boom",
+            "com.ex.fail:id/leaf|Leaf"
+          ]
+        },
+        {
+          "id": "LeafActivity@47f770dcf59d",
+          "packageName": "com.ex.fail",
+          "activity": "com.ex.fail.LeafActivity",
+          "fragments": [],
+          "signature": "47f770dcf59d",
+          "label": "LeafActivity",
+          "screenshot": "LeafActivity_47f770dcf59d.png",
+          "visits": 1,
+          "nodeCount": 2,
+          "maxDepth": 1,
+          "actions": [],
+          "targets": [],
+          "selectedKeys": []
+        }
+      ],
+      "edges": [
+        {
+          "id": "HomeActivity@92953a5caf5c->HubActivity@5fe48bfe4bc6:tap \"A\"",
+          "from": "HomeActivity@92953a5caf5c",
+          "to": "HubActivity@5fe48bfe4bc6",
+          "action": {
+            "type": "tap",
+            "x": 540,
+            "y": 445,
+            "label": "A",
+            "selector": {
+              "id": "com.ex.fail:id/a"
+            }
+          },
+          "count": 1
+        },
+        {
+          "id": "HubActivity@5fe48bfe4bc6->CommonActivity@7b71dba7218a:tap \"Share\"",
+          "from": "HubActivity@5fe48bfe4bc6",
+          "to": "CommonActivity@7b71dba7218a",
+          "action": {
+            "type": "tap",
+            "x": 540,
+            "y": 145,
+            "label": "Share",
+            "selector": {
+              "id": "com.ex.fail:id/share"
+            }
+          },
+          "count": 1
+        },
+        {
+          "id": "CommonActivity@7b71dba7218a->LeafActivity@47f770dcf59d:tap \"Leaf\"",
+          "from": "CommonActivity@7b71dba7218a",
+          "to": "LeafActivity@47f770dcf59d",
+          "action": {
+            "type": "tap",
+            "x": 540,
+            "y": 245,
+            "label": "Leaf",
+            "selector": {
+              "id": "com.ex.fail:id/leaf"
+            }
+          },
+          "count": 1
+        }
+      ]
+    },
+    "startScreen": "HubActivity@5fe48bfe4bc6",
+    "steps": 3,
+    "limited": false,
+    "skipped": [],
+    "errors": [
+      "CommonActivity@7b71dba7218a tap \"Boom\": input 실패"
+    ],
+    "touched": {
+      "nodes": [
+        "HubActivity@5fe48bfe4bc6",
+        "CommonActivity@7b71dba7218a",
+        "LeafActivity@47f770dcf59d"
+      ],
+      "edges": [
+        "HubActivity@5fe48bfe4bc6->CommonActivity@7b71dba7218a:tap \"Share\"",
+        "CommonActivity@7b71dba7218a->LeafActivity@47f770dcf59d:tap \"Leaf\""
+      ]
+    }
+  },
+  "exploreFail.progress": [
+    [
+      0,
+      "기록된 경로로 이동: tap \"A\"",
+      null
+    ],
+    [
+      0,
+      "시작 화면: HubActivity",
+      "HubActivity@5fe48bfe4bc6"
+    ],
+    [
+      1,
+      "tap \"Share\" → CommonActivity",
+      "CommonActivity@7b71dba7218a"
+    ],
+    [
+      2,
+      "기록된 경로로 이동: tap \"A\"",
+      null
+    ],
+    [
+      3,
+      "tap \"Leaf\" → LeafActivity",
+      "LeafActivity@47f770dcf59d"
+    ],
+    [
+      3,
+      "탐색 완료: 화면 4개, 전이 3개, 3스텝",
+      null
+    ]
+  ],
+  "exploreFail.commands": [
+    "screencap -p",
+    "screencap -p",
+    "dumpsys window | grep -E \"mCurrentFocus|mFocusedApp\"",
+    "uiautomator dump --compressed /data/local/tmp/droidlens_ui_X.xml 2>&1; echo __DROIDLENS_XML__; cat /data/local/tmp/droidlens_ui_X.xml 2>/dev/null; rm -f /data/local/tmp/droidlens_ui_X.xml",
+    "am force-stop com.ex.fail",
+    "cmd package resolve-activity --brief -a android.intent.action.MAIN -c android.intent.category.LAUNCHER com.ex.fail",
+    "am start -W -f 0x10008000 -n 'com.ex.fail/com.ex.fail.HomeActivity'",
+    "dumpsys window | grep -E \"mCurrentFocus|mFocusedApp\"",
+    "uiautomator dump --compressed /data/local/tmp/droidlens_ui_X.xml 2>&1; echo __DROIDLENS_XML__; cat /data/local/tmp/droidlens_ui_X.xml 2>/dev/null; rm -f /data/local/tmp/droidlens_ui_X.xml",
+    "screencap -p",
+    "screencap -p",
+    "dumpsys window | grep -E \"mCurrentFocus|mFocusedApp\"",
+    "uiautomator dump --compressed /data/local/tmp/droidlens_ui_X.xml 2>&1; echo __DROIDLENS_XML__; cat /data/local/tmp/droidlens_ui_X.xml 2>/dev/null; rm -f /data/local/tmp/droidlens_ui_X.xml",
+    "input tap 540 445",
+    "screencap -p",
+    "screencap -p",
+    "dumpsys window | grep -E \"mCurrentFocus|mFocusedApp\"",
+    "uiautomator dump --compressed /data/local/tmp/droidlens_ui_X.xml 2>&1; echo __DROIDLENS_XML__; cat /data/local/tmp/droidlens_ui_X.xml 2>/dev/null; rm -f /data/local/tmp/droidlens_ui_X.xml",
+    "input tap 540 145",
+    "screencap -p",
+    "screencap -p",
+    "dumpsys window | grep -E \"mCurrentFocus|mFocusedApp\"",
+    "uiautomator dump --compressed /data/local/tmp/droidlens_ui_X.xml 2>&1; echo __DROIDLENS_XML__; cat /data/local/tmp/droidlens_ui_X.xml 2>/dev/null; rm -f /data/local/tmp/droidlens_ui_X.xml",
+    "dumpsys activity top",
+    "input tap 540 145",
+    "screencap -p",
+    "screencap -p",
+    "dumpsys window | grep -E \"mCurrentFocus|mFocusedApp\"",
+    "uiautomator dump --compressed /data/local/tmp/droidlens_ui_X.xml 2>&1; echo __DROIDLENS_XML__; cat /data/local/tmp/droidlens_ui_X.xml 2>/dev/null; rm -f /data/local/tmp/droidlens_ui_X.xml",
+    "am force-stop com.ex.fail",
+    "cmd package resolve-activity --brief -a android.intent.action.MAIN -c android.intent.category.LAUNCHER com.ex.fail",
+    "am start -W -f 0x10008000 -n 'com.ex.fail/com.ex.fail.HomeActivity'",
+    "dumpsys window | grep -E \"mCurrentFocus|mFocusedApp\"",
+    "uiautomator dump --compressed /data/local/tmp/droidlens_ui_X.xml 2>&1; echo __DROIDLENS_XML__; cat /data/local/tmp/droidlens_ui_X.xml 2>/dev/null; rm -f /data/local/tmp/droidlens_ui_X.xml",
+    "screencap -p",
+    "screencap -p",
+    "dumpsys window | grep -E \"mCurrentFocus|mFocusedApp\"",
+    "uiautomator dump --compressed /data/local/tmp/droidlens_ui_X.xml 2>&1; echo __DROIDLENS_XML__; cat /data/local/tmp/droidlens_ui_X.xml 2>/dev/null; rm -f /data/local/tmp/droidlens_ui_X.xml",
+    "input tap 540 445",
+    "screencap -p",
+    "screencap -p",
+    "dumpsys window | grep -E \"mCurrentFocus|mFocusedApp\"",
+    "uiautomator dump --compressed /data/local/tmp/droidlens_ui_X.xml 2>&1; echo __DROIDLENS_XML__; cat /data/local/tmp/droidlens_ui_X.xml 2>/dev/null; rm -f /data/local/tmp/droidlens_ui_X.xml",
+    "input tap 540 145",
+    "screencap -p",
+    "screencap -p",
+    "dumpsys window | grep -E \"mCurrentFocus|mFocusedApp\"",
+    "uiautomator dump --compressed /data/local/tmp/droidlens_ui_X.xml 2>&1; echo __DROIDLENS_XML__; cat /data/local/tmp/droidlens_ui_X.xml 2>/dev/null; rm -f /data/local/tmp/droidlens_ui_X.xml",
+    "input tap 540 245",
+    "screencap -p",
+    "screencap -p",
+    "dumpsys window | grep -E \"mCurrentFocus|mFocusedApp\"",
+    "uiautomator dump --compressed /data/local/tmp/droidlens_ui_X.xml 2>&1; echo __DROIDLENS_XML__; cat /data/local/tmp/droidlens_ui_X.xml 2>/dev/null; rm -f /data/local/tmp/droidlens_ui_X.xml",
+    "dumpsys activity top",
+    "input keyevent 4",
+    "screencap -p",
+    "screencap -p",
+    "dumpsys window | grep -E \"mCurrentFocus|mFocusedApp\"",
+    "uiautomator dump --compressed /data/local/tmp/droidlens_ui_X.xml 2>&1; echo __DROIDLENS_XML__; cat /data/local/tmp/droidlens_ui_X.xml 2>/dev/null; rm -f /data/local/tmp/droidlens_ui_X.xml",
+    "input keyevent 4",
+    "screencap -p",
+    "screencap -p",
+    "dumpsys window | grep -E \"mCurrentFocus|mFocusedApp\"",
+    "uiautomator dump --compressed /data/local/tmp/droidlens_ui_X.xml 2>&1; echo __DROIDLENS_XML__; cat /data/local/tmp/droidlens_ui_X.xml 2>/dev/null; rm -f /data/local/tmp/droidlens_ui_X.xml"
+  ],
+  "exploreTrap.result": {
+    "graph": {
+      "packageName": "com.ex.trap",
+      "nodes": [
+        {
+          "id": "HomeActivity@1e5d37e2dc18",
+          "packageName": "com.ex.trap",
+          "activity": "com.ex.trap.HomeActivity",
+          "fragments": [],
+          "signature": "1e5d37e2dc18",
+          "label": "HomeActivity",
+          "screenshot": "HomeActivity_1e5d37e2dc18.png",
+          "visits": 1,
+          "nodeCount": 5,
+          "maxDepth": 2,
+          "actions": [
+            "Trap",
+            "X",
+            "Y"
+          ],
+          "targets": [
+            {
+              "key": "com.ex.trap:id/trap|Trap",
+              "label": "Trap",
+              "bounds": [
+                0,
+                100,
+                1080,
+                190
+              ]
+            },
+            {
+              "key": "com.ex.trap:id/x|X",
+              "label": "X",
+              "bounds": [
+                0,
+                200,
+                1080,
+                290
+              ]
+            },
+            {
+              "key": "com.ex.trap:id/y|Y",
+              "label": "Y",
+              "bounds": [
+                0,
+                300,
+                1080,
+                390
+              ]
+            }
+          ],
+          "selectedKeys": [],
+          "tried": [
+            "com.ex.trap:id/trap|Trap"
+          ]
+        },
+        {
+          "id": "TrapActivity@8c0ec8fb9c9f",
+          "packageName": "com.ex.trap",
+          "activity": "com.ex.trap.TrapActivity",
+          "fragments": [],
+          "signature": "8c0ec8fb9c9f",
+          "label": "TrapActivity",
+          "screenshot": "TrapActivity_8c0ec8fb9c9f.png",
+          "visits": 1,
+          "nodeCount": 2,
+          "maxDepth": 1,
+          "actions": [],
+          "targets": [],
+          "selectedKeys": []
+        }
+      ],
+      "edges": [
+        {
+          "id": "HomeActivity@1e5d37e2dc18->TrapActivity@8c0ec8fb9c9f:tap \"Trap\"",
+          "from": "HomeActivity@1e5d37e2dc18",
+          "to": "TrapActivity@8c0ec8fb9c9f",
+          "action": {
+            "type": "tap",
+            "x": 540,
+            "y": 145,
+            "label": "Trap",
+            "selector": {
+              "id": "com.ex.trap:id/trap"
+            }
+          },
+          "count": 1
+        }
+      ]
+    },
+    "startScreen": "HomeActivity@1e5d37e2dc18",
+    "steps": 1,
+    "limited": false,
+    "skipped": [],
+    "errors": [
+      "HomeActivity@1e5d37e2dc18: 원래 화면으로 돌아오지 못해 남은 버튼은 건너뜀"
+    ],
+    "touched": {
+      "nodes": [
+        "HomeActivity@1e5d37e2dc18",
+        "TrapActivity@8c0ec8fb9c9f"
+      ],
+      "edges": [
+        "HomeActivity@1e5d37e2dc18->TrapActivity@8c0ec8fb9c9f:tap \"Trap\""
+      ]
+    }
+  },
+  "exploreTrap.progress": [
+    [
+      0,
+      "시작 화면: HomeActivity",
+      "HomeActivity@1e5d37e2dc18"
+    ],
+    [
+      1,
+      "tap \"Trap\" → TrapActivity",
+      "TrapActivity@8c0ec8fb9c9f"
+    ],
+    [
+      1,
+      "BACK 으로 돌아오지 못했습니다 (현재 화면 기준 탐색이라 이 갈래는 멈춤)",
+      null
+    ],
+    [
+      1,
+      "BACK 으로 돌아오지 못했습니다 (현재 화면 기준 탐색이라 이 갈래는 멈춤)",
+      null
+    ],
+    [
+      1,
+      "원래 화면으로 돌아오지 못해 이 화면의 남은 버튼은 건너뜁니다",
+      null
+    ],
+    [
+      1,
+      "탐색 완료: 화면 2개, 전이 1개, 1스텝",
+      null
+    ]
+  ],
+  "exploreTrap.commands": [
+    "screencap -p",
+    "screencap -p",
+    "dumpsys window | grep -E \"mCurrentFocus|mFocusedApp\"",
+    "uiautomator dump --compressed /data/local/tmp/droidlens_ui_X.xml 2>&1; echo __DROIDLENS_XML__; cat /data/local/tmp/droidlens_ui_X.xml 2>/dev/null; rm -f /data/local/tmp/droidlens_ui_X.xml",
+    "dumpsys activity top",
+    "input tap 540 145",
+    "screencap -p",
+    "screencap -p",
+    "dumpsys window | grep -E \"mCurrentFocus|mFocusedApp\"",
+    "uiautomator dump --compressed /data/local/tmp/droidlens_ui_X.xml 2>&1; echo __DROIDLENS_XML__; cat /data/local/tmp/droidlens_ui_X.xml 2>/dev/null; rm -f /data/local/tmp/droidlens_ui_X.xml",
+    "dumpsys activity top",
+    "input keyevent 4",
+    "screencap -p",
+    "screencap -p",
+    "dumpsys window | grep -E \"mCurrentFocus|mFocusedApp\"",
+    "uiautomator dump --compressed /data/local/tmp/droidlens_ui_X.xml 2>&1; echo __DROIDLENS_XML__; cat /data/local/tmp/droidlens_ui_X.xml 2>/dev/null; rm -f /data/local/tmp/droidlens_ui_X.xml",
+    "input keyevent 4",
+    "screencap -p",
+    "screencap -p",
+    "dumpsys window | grep -E \"mCurrentFocus|mFocusedApp\"",
+    "uiautomator dump --compressed /data/local/tmp/droidlens_ui_X.xml 2>&1; echo __DROIDLENS_XML__; cat /data/local/tmp/droidlens_ui_X.xml 2>/dev/null; rm -f /data/local/tmp/droidlens_ui_X.xml",
+    "input keyevent 4",
+    "screencap -p",
+    "screencap -p",
+    "dumpsys window | grep -E \"mCurrentFocus|mFocusedApp\"",
+    "uiautomator dump --compressed /data/local/tmp/droidlens_ui_X.xml 2>&1; echo __DROIDLENS_XML__; cat /data/local/tmp/droidlens_ui_X.xml 2>/dev/null; rm -f /data/local/tmp/droidlens_ui_X.xml",
+    "input keyevent 4",
+    "screencap -p",
+    "screencap -p",
+    "dumpsys window | grep -E \"mCurrentFocus|mFocusedApp\"",
+    "uiautomator dump --compressed /data/local/tmp/droidlens_ui_X.xml 2>&1; echo __DROIDLENS_XML__; cat /data/local/tmp/droidlens_ui_X.xml 2>/dev/null; rm -f /data/local/tmp/droidlens_ui_X.xml"
+  ],
+  "exploreJam.result": {
+    "graph": {
+      "packageName": "com.ex.jam",
+      "nodes": [
+        {
+          "id": "HomeActivity@198bf8b980f1",
+          "packageName": "com.ex.jam",
+          "activity": "com.ex.jam.HomeActivity",
+          "fragments": [],
+          "signature": "198bf8b980f1",
+          "label": "HomeActivity",
+          "screenshot": "HomeActivity_198bf8b980f1.png",
+          "visits": 1,
+          "nodeCount": 5,
+          "maxDepth": 2,
+          "actions": [
+            "Jam",
+            "X",
+            "Y"
+          ],
+          "targets": [
+            {
+              "key": "com.ex.jam:id/jam|Jam",
+              "label": "Jam",
+              "bounds": [
+                0,
+                100,
+                1080,
+                190
+              ]
+            },
+            {
+              "key": "com.ex.jam:id/x|X",
+              "label": "X",
+              "bounds": [
+                0,
+                200,
+                1080,
+                290
+              ]
+            },
+            {
+              "key": "com.ex.jam:id/y|Y",
+              "label": "Y",
+              "bounds": [
+                0,
+                300,
+                1080,
+                390
+              ]
+            }
+          ],
+          "selectedKeys": [],
+          "tried": [
+            "com.ex.jam:id/jam|Jam"
+          ]
+        },
+        {
+          "id": "JamActivity@5995fa5cca07",
+          "packageName": "com.ex.jam",
+          "activity": "com.ex.jam.JamActivity",
+          "fragments": [],
+          "signature": "5995fa5cca07",
+          "label": "JamActivity",
+          "screenshot": "JamActivity_5995fa5cca07.png",
+          "visits": 1,
+          "nodeCount": 2,
+          "maxDepth": 1,
+          "actions": [],
+          "targets": [],
+          "selectedKeys": []
+        }
+      ],
+      "edges": [
+        {
+          "id": "HomeActivity@198bf8b980f1->JamActivity@5995fa5cca07:tap \"Jam\"",
+          "from": "HomeActivity@198bf8b980f1",
+          "to": "JamActivity@5995fa5cca07",
+          "action": {
+            "type": "tap",
+            "x": 540,
+            "y": 145,
+            "label": "Jam",
+            "selector": {
+              "id": "com.ex.jam:id/jam"
+            }
+          },
+          "count": 1
+        }
+      ]
+    },
+    "startScreen": "HomeActivity@198bf8b980f1",
+    "steps": 1,
+    "limited": false,
+    "skipped": [],
+    "errors": [
+      "HomeActivity@198bf8b980f1 tap \"Jam\": keyevent 실패",
+      "HomeActivity@198bf8b980f1: 원래 화면으로 돌아오지 못해 남은 버튼은 건너뜀"
+    ],
+    "touched": {
+      "nodes": [
+        "HomeActivity@198bf8b980f1",
+        "JamActivity@5995fa5cca07"
+      ],
+      "edges": [
+        "HomeActivity@198bf8b980f1->JamActivity@5995fa5cca07:tap \"Jam\""
+      ]
+    }
+  },
+  "exploreJam.progress": [
+    [
+      0,
+      "시작 화면: HomeActivity",
+      "HomeActivity@198bf8b980f1"
+    ],
+    [
+      1,
+      "tap \"Jam\" → JamActivity",
+      "JamActivity@5995fa5cca07"
+    ],
+    [
+      1,
+      "원래 화면으로 돌아오지 못해 이 화면의 남은 버튼은 건너뜁니다",
+      null
+    ],
+    [
+      1,
+      "탐색 완료: 화면 2개, 전이 1개, 1스텝",
+      null
+    ]
+  ],
+  "exploreJam.commands": [
+    "screencap -p",
+    "screencap -p",
+    "dumpsys window | grep -E \"mCurrentFocus|mFocusedApp\"",
+    "uiautomator dump --compressed /data/local/tmp/droidlens_ui_X.xml 2>&1; echo __DROIDLENS_XML__; cat /data/local/tmp/droidlens_ui_X.xml 2>/dev/null; rm -f /data/local/tmp/droidlens_ui_X.xml",
+    "dumpsys activity top",
+    "input tap 540 145",
+    "screencap -p",
+    "screencap -p",
+    "dumpsys window | grep -E \"mCurrentFocus|mFocusedApp\"",
+    "uiautomator dump --compressed /data/local/tmp/droidlens_ui_X.xml 2>&1; echo __DROIDLENS_XML__; cat /data/local/tmp/droidlens_ui_X.xml 2>/dev/null; rm -f /data/local/tmp/droidlens_ui_X.xml",
+    "dumpsys activity top",
+    "input keyevent 4",
+    "screencap -p",
+    "screencap -p",
+    "dumpsys window | grep -E \"mCurrentFocus|mFocusedApp\"",
+    "uiautomator dump --compressed /data/local/tmp/droidlens_ui_X.xml 2>&1; echo __DROIDLENS_XML__; cat /data/local/tmp/droidlens_ui_X.xml 2>/dev/null; rm -f /data/local/tmp/droidlens_ui_X.xml",
+    "input keyevent 4"
+  ],
+  "exploreLoop.result": {
+    "graph": {
+      "packageName": "com.ex.loop",
+      "nodes": [
+        {
+          "id": "HomeActivity@92953a5caf5c",
+          "packageName": "com.ex.loop",
+          "activity": "com.ex.loop.HomeActivity",
+          "fragments": [],
+          "signature": "92953a5caf5c",
+          "label": "HomeActivity",
+          "screenshot": "HomeActivity_92953a5caf5c.png",
+          "visits": 2,
+          "nodeCount": 7,
+          "maxDepth": 2,
+          "actions": [
+            "Jump",
+            "Web",
+            "List",
+            "A",
+            "B"
+          ],
+          "targets": [
+            {
+              "key": "com.ex.loop:id/jump|Jump",
+              "label": "Jump",
+              "bounds": [
+                0,
+                100,
+                1080,
+                190
+              ]
+            },
+            {
+              "key": "com.ex.loop:id/web|Web",
+              "label": "Web",
+              "bounds": [
+                0,
+                200,
+                1080,
+                290
+              ]
+            },
+            {
+              "key": "com.ex.loop:id/list|List",
+              "label": "List",
+              "bounds": [
+                0,
+                300,
+                1080,
+                390
+              ]
+            },
+            {
+              "key": "com.ex.loop:id/a|A",
+              "label": "A",
+              "bounds": [
+                0,
+                400,
+                1080,
+                490
+              ]
+            },
+            {
+              "key": "com.ex.loop:id/b|B",
+              "label": "B",
+              "bounds": [
+                0,
+                500,
+                1080,
+                590
+              ]
+            }
+          ],
+          "selectedKeys": [],
+          "tried": [
+            "com.ex.loop:id/a|A"
+          ]
+        },
+        {
+          "id": "HubActivity@c97ba8c980d8",
+          "packageName": "com.ex.loop",
+          "activity": "com.ex.loop.HubActivity",
+          "fragments": [],
+          "signature": "c97ba8c980d8",
+          "label": "HubActivity",
+          "screenshot": "HubActivity_c97ba8c980d8.png",
+          "visits": 1,
+          "nodeCount": 3,
+          "maxDepth": 2,
+          "actions": [
+            "Home"
+          ],
+          "targets": [
+            {
+              "key": "com.ex.loop:id/home|Home",
+              "label": "Home",
+              "bounds": [
+                0,
+                100,
+                1080,
+                190
+              ]
+            }
+          ],
+          "selectedKeys": [],
+          "tried": [
+            "com.ex.loop:id/home|Home"
+          ]
+        }
+      ],
+      "edges": [
+        {
+          "id": "HomeActivity@92953a5caf5c->HubActivity@c97ba8c980d8:tap \"A\"",
+          "from": "HomeActivity@92953a5caf5c",
+          "to": "HubActivity@c97ba8c980d8",
+          "action": {
+            "type": "tap",
+            "x": 540,
+            "y": 445,
+            "label": "A",
+            "selector": {
+              "id": "com.ex.loop:id/a"
+            }
+          },
+          "count": 1
+        },
+        {
+          "id": "HubActivity@c97ba8c980d8->HomeActivity@92953a5caf5c:tap \"Home\"",
+          "from": "HubActivity@c97ba8c980d8",
+          "to": "HomeActivity@92953a5caf5c",
+          "action": {
+            "type": "tap",
+            "x": 540,
+            "y": 145,
+            "label": "Home",
+            "selector": {
+              "id": "com.ex.loop:id/home"
+            }
+          },
+          "count": 1
+        }
+      ]
+    },
+    "startScreen": "HomeActivity@92953a5caf5c",
+    "steps": 2,
+    "limited": false,
+    "skipped": [],
+    "errors": [],
+    "touched": {
+      "nodes": [
+        "HomeActivity@92953a5caf5c",
+        "HubActivity@c97ba8c980d8"
+      ],
+      "edges": [
+        "HomeActivity@92953a5caf5c->HubActivity@c97ba8c980d8:tap \"A\"",
+        "HubActivity@c97ba8c980d8->HomeActivity@92953a5caf5c:tap \"Home\""
+      ]
+    }
+  },
+  "exploreLoop.progress": [
+    [
+      0,
+      "시작 화면: HomeActivity",
+      "HomeActivity@92953a5caf5c"
+    ],
+    [
+      1,
+      "tap \"A\" → HubActivity",
+      "HubActivity@c97ba8c980d8"
+    ],
+    [
+      2,
+      "tap \"Home\" → HomeActivity",
+      "HomeActivity@92953a5caf5c"
+    ],
+    [
+      2,
+      "탐색 완료: 화면 2개, 전이 2개, 2스텝",
+      null
+    ]
+  ],
+  "exploreLoop.commands": [
+    "screencap -p",
+    "screencap -p",
+    "dumpsys window | grep -E \"mCurrentFocus|mFocusedApp\"",
+    "uiautomator dump --compressed /data/local/tmp/droidlens_ui_X.xml 2>&1; echo __DROIDLENS_XML__; cat /data/local/tmp/droidlens_ui_X.xml 2>/dev/null; rm -f /data/local/tmp/droidlens_ui_X.xml",
+    "dumpsys activity top",
+    "input tap 540 445",
+    "screencap -p",
+    "screencap -p",
+    "dumpsys window | grep -E \"mCurrentFocus|mFocusedApp\"",
+    "uiautomator dump --compressed /data/local/tmp/droidlens_ui_X.xml 2>&1; echo __DROIDLENS_XML__; cat /data/local/tmp/droidlens_ui_X.xml 2>/dev/null; rm -f /data/local/tmp/droidlens_ui_X.xml",
+    "dumpsys activity top",
+    "input tap 540 145",
+    "screencap -p",
+    "screencap -p",
+    "dumpsys window | grep -E \"mCurrentFocus|mFocusedApp\"",
+    "uiautomator dump --compressed /data/local/tmp/droidlens_ui_X.xml 2>&1; echo __DROIDLENS_XML__; cat /data/local/tmp/droidlens_ui_X.xml 2>/dev/null; rm -f /data/local/tmp/droidlens_ui_X.xml",
+    "input keyevent 4",
+    "screencap -p",
+    "screencap -p",
+    "dumpsys window | grep -E \"mCurrentFocus|mFocusedApp\"",
+    "uiautomator dump --compressed /data/local/tmp/droidlens_ui_X.xml 2>&1; echo __DROIDLENS_XML__; cat /data/local/tmp/droidlens_ui_X.xml 2>/dev/null; rm -f /data/local/tmp/droidlens_ui_X.xml",
+    "input keyevent 4",
+    "screencap -p",
+    "screencap -p",
+    "dumpsys window | grep -E \"mCurrentFocus|mFocusedApp\"",
+    "uiautomator dump --compressed /data/local/tmp/droidlens_ui_X.xml 2>&1; echo __DROIDLENS_XML__; cat /data/local/tmp/droidlens_ui_X.xml 2>/dev/null; rm -f /data/local/tmp/droidlens_ui_X.xml"
+  ],
+  "exploreAbort.result": {
+    "graph": {
+      "packageName": "com.ex.abort",
+      "launchScreen": "HomeActivity@92953a5caf5c",
+      "nodes": [
+        {
+          "id": "HomeActivity@92953a5caf5c",
+          "packageName": "com.ex.abort",
+          "activity": "com.ex.abort.HomeActivity",
+          "fragments": [],
+          "signature": "92953a5caf5c",
+          "label": "HomeActivity",
+          "screenshot": "HomeActivity_92953a5caf5c.png",
+          "visits": 1,
+          "nodeCount": 7,
+          "maxDepth": 2,
+          "actions": [
+            "Jump",
+            "Web",
+            "List",
+            "A",
+            "B"
+          ],
+          "targets": [
+            {
+              "key": "com.ex.abort:id/jump|Jump",
+              "label": "Jump",
+              "bounds": [
+                0,
+                100,
+                1080,
+                190
+              ]
+            },
+            {
+              "key": "com.ex.abort:id/web|Web",
+              "label": "Web",
+              "bounds": [
+                0,
+                200,
+                1080,
+                290
+              ]
+            },
+            {
+              "key": "com.ex.abort:id/list|List",
+              "label": "List",
+              "bounds": [
+                0,
+                300,
+                1080,
+                390
+              ]
+            },
+            {
+              "key": "com.ex.abort:id/a|A",
+              "label": "A",
+              "bounds": [
+                0,
+                400,
+                1080,
+                490
+              ]
+            },
+            {
+              "key": "com.ex.abort:id/b|B",
+              "label": "B",
+              "bounds": [
+                0,
+                500,
+                1080,
+                590
+              ]
+            }
+          ],
+          "selectedKeys": [],
+          "tried": [
+            "com.ex.abort:id/jump|Jump"
+          ]
+        },
+        {
+          "id": "SideActivity@961030708c8f",
+          "packageName": "com.ex.abort",
+          "activity": "com.ex.abort.SideActivity",
+          "fragments": [],
+          "signature": "961030708c8f",
+          "label": "SideActivity",
+          "screenshot": "SideActivity_961030708c8f.png",
+          "visits": 1,
+          "nodeCount": 2,
+          "maxDepth": 1,
+          "actions": [],
+          "targets": [],
+          "selectedKeys": []
+        }
+      ],
+      "edges": [
+        {
+          "id": "HomeActivity@92953a5caf5c->SideActivity@961030708c8f:tap \"Jump\"",
+          "from": "HomeActivity@92953a5caf5c",
+          "to": "SideActivity@961030708c8f",
+          "action": {
+            "type": "tap",
+            "x": 540,
+            "y": 145,
+            "label": "Jump",
+            "selector": {
+              "id": "com.ex.abort:id/jump"
+            }
+          },
+          "count": 1
+        }
+      ]
+    },
+    "startScreen": "HomeActivity@92953a5caf5c",
+    "steps": 1,
+    "limited": false,
+    "skipped": [],
+    "errors": [],
+    "touched": {
+      "nodes": [
+        "HomeActivity@92953a5caf5c",
+        "SideActivity@961030708c8f"
+      ],
+      "edges": [
+        "HomeActivity@92953a5caf5c->SideActivity@961030708c8f:tap \"Jump\""
+      ]
+    }
+  },
+  "exploreAbort.progress": [
+    [
+      0,
+      "시작 화면: HomeActivity",
+      "HomeActivity@92953a5caf5c"
+    ],
+    [
+      1,
+      "tap \"Jump\" → SideActivity",
+      "SideActivity@961030708c8f"
+    ],
+    [
+      1,
+      "탐색 완료: 화면 2개, 전이 1개, 1스텝",
+      null
+    ]
+  ],
+  "exploreAbort.commands": [
+    "am force-stop com.ex.abort",
+    "cmd package resolve-activity --brief -a android.intent.action.MAIN -c android.intent.category.LAUNCHER com.ex.abort",
+    "am start -W -f 0x10008000 -n 'com.ex.abort/com.ex.abort.HomeActivity'",
+    "dumpsys window | grep -E \"mCurrentFocus|mFocusedApp\"",
+    "uiautomator dump --compressed /data/local/tmp/droidlens_ui_X.xml 2>&1; echo __DROIDLENS_XML__; cat /data/local/tmp/droidlens_ui_X.xml 2>/dev/null; rm -f /data/local/tmp/droidlens_ui_X.xml",
+    "screencap -p",
+    "screencap -p",
+    "dumpsys window | grep -E \"mCurrentFocus|mFocusedApp\"",
+    "uiautomator dump --compressed /data/local/tmp/droidlens_ui_X.xml 2>&1; echo __DROIDLENS_XML__; cat /data/local/tmp/droidlens_ui_X.xml 2>/dev/null; rm -f /data/local/tmp/droidlens_ui_X.xml",
+    "dumpsys activity top",
+    "input tap 540 145",
+    "screencap -p",
+    "screencap -p",
+    "dumpsys window | grep -E \"mCurrentFocus|mFocusedApp\"",
+    "uiautomator dump --compressed /data/local/tmp/droidlens_ui_X.xml 2>&1; echo __DROIDLENS_XML__; cat /data/local/tmp/droidlens_ui_X.xml 2>/dev/null; rm -f /data/local/tmp/droidlens_ui_X.xml",
+    "dumpsys activity top",
+    "input keyevent 4",
+    "screencap -p",
+    "screencap -p",
+    "dumpsys window | grep -E \"mCurrentFocus|mFocusedApp\"",
+    "uiautomator dump --compressed /data/local/tmp/droidlens_ui_X.xml 2>&1; echo __DROIDLENS_XML__; cat /data/local/tmp/droidlens_ui_X.xml 2>/dev/null; rm -f /data/local/tmp/droidlens_ui_X.xml",
+    "input keyevent 4",
+    "screencap -p",
+    "screencap -p",
+    "dumpsys window | grep -E \"mCurrentFocus|mFocusedApp\"",
+    "uiautomator dump --compressed /data/local/tmp/droidlens_ui_X.xml 2>&1; echo __DROIDLENS_XML__; cat /data/local/tmp/droidlens_ui_X.xml 2>/dev/null; rm -f /data/local/tmp/droidlens_ui_X.xml"
   ]
 }

@@ -2,9 +2,12 @@
 // DeviceAdb 중 graph 가 쓰는 shell·execOut 만 흉내 낸다. 에이전트는 끈 상태(DROIDLENS_AGENT=0)를 전제로
 // dumpsys window · uiautomator dump · screencap · input 명령에 답하고, 화면 이동은 아래 screens 정의를 따른다.
 //
-// screens: { 이름: { activity, pkg?, buttons: [{ id, text?, desc?, bounds, cls?, enabled?, go?, long? }], swipe?: { left: 이름 }, backConsumes? } }
-// - go: 누르면 갈 화면 이름 (없으면 그대로). '@back' 이면 뒤로 가기와 같다
+// screens: { 이름: { activity, pkg?, root?, buttons: [{ id, text?, desc?, bounds, cls?, enabled?, go?, long?, fail? }], swipe?: { left: 이름 }, backConsumes?, backThrows? } }
+// - go: 누르면 갈 화면 이름 (없으면 그대로). '@back' 이면 뒤로 가기와 같다. 배열이면 차례로 쌓는다 (['앱 밖', '앱 안'] 이면 BACK 한 번에 앱 밖으로 나온다)
+// - fail: 누르면 input tap 명령이 이 메시지로 실패한다 (화면은 그대로)
 // - backConsumes: 그 화면에 들어온 뒤 BACK 을 이 횟수만큼 무시한다 (BACK 으로 못 돌아오는 화면)
+// - backThrows: 그 화면에서 BACK(input keyevent 4)을 보내면 이 메시지로 실패한다
+// - root: 루트 뷰 id 를 다른 화면과 같게 둔다. 버튼 id·class 가 같으면 위치가 달라도 같은 화면 id 가 된다 (펼치기처럼 배치만 바뀌는 상태)
 import { PNG_MAGIC } from '../dist/device.js';
 
 const LAUNCHER = { pkg: 'com.android.launcher3', activity: 'com.android.launcher3.Launcher', buttons: [] };
@@ -21,7 +24,7 @@ export function screenXml(name, s, defaultPkg) {
   const pkg = s.pkg ?? defaultPkg;
   const kids = s.buttons.map((b) => nodeXml(pkg, b)).join('');
   // 화면마다 루트 id 를 달리 해 구조 시그니처가 갈리게 한다
-  return `<?xml version='1.0' encoding='UTF-8'?><hierarchy rotation="0"><node class="android.widget.FrameLayout" resource-id="${pkg}:id/root_${name}" text="" content-desc="" package="${pkg}" bounds="[0,0][1080,2400]" clickable="false" long-clickable="false" scrollable="false" focusable="false" focused="false" enabled="true" checkable="false" checked="false" selected="false" password="false">${kids}</node></hierarchy>`;
+  return `<?xml version='1.0' encoding='UTF-8'?><hierarchy rotation="0"><node class="android.widget.FrameLayout" resource-id="${pkg}:id/root_${s.root ?? name}" text="" content-desc="" package="${pkg}" bounds="[0,0][1080,2400]" clickable="false" long-clickable="false" scrollable="false" focusable="false" focused="false" enabled="true" checkable="false" checked="false" selected="false" password="false">${kids}</node></hierarchy>`;
 }
 
 /**
@@ -32,6 +35,8 @@ export function fakeDevice(app, serial = 'fake-1') {
   /** 화면 스택. 맨 끝이 지금 화면. 항목은 { name, backLeft } */
   let stack = [];
   const log = [];
+  /** [명령, 받은 시각(ms)]. 기다림 길이처럼 명령 순서만으로 안 보이는 것을 볼 때 쓴다 */
+  const stamps = [];
   const top = () => stack.at(-1) ?? { name: '@launcher', backLeft: 0 };
   const cur = () => screens[top().name];
   const push = (name) => stack.push({ name, backLeft: screens[name].backConsumes ?? 0 });
@@ -44,7 +49,7 @@ export function fakeDevice(app, serial = 'fake-1') {
   const go = (target) => {
     if (!target) return;
     if (target === '@back') back();
-    else push(target);
+    else for (const t of [target].flat()) push(t);
   };
   const hit = (x, y) =>
     cur()
@@ -52,8 +57,14 @@ export function fakeDevice(app, serial = 'fake-1') {
       .filter(({ bounds: [l, t, r, bt] }) => x >= l && x <= r && y >= t && y <= bt)
       .sort((a, b) => (a.bounds[2] - a.bounds[0]) * (a.bounds[3] - a.bounds[1]) - (b.bounds[2] - b.bounds[0]) * (b.bounds[3] - b.bounds[1]))[0];
 
+  const record = (cmd) => {
+    const c = cmd.replace(/droidlens_ui_[0-9a-f]+/g, 'droidlens_ui_X');
+    log.push(c);
+    stamps.push([c, Date.now()]);
+  };
+
   function shell(cmd) {
-    log.push(cmd.replace(/droidlens_ui_[0-9a-f]+/g, 'droidlens_ui_X'));
+    record(cmd);
     let m;
     if (cmd.startsWith('dumpsys window displays')) return '  mDisplayId=0\n    cur=1080x2400 app=1080x2337';
     if (cmd.startsWith('dumpsys window')) {
@@ -73,7 +84,9 @@ export function fakeDevice(app, serial = 'fake-1') {
       return 'Status: ok';
     }
     if ((m = /^input tap (\d+) (\d+)$/.exec(cmd))) {
-      go(hit(Number(m[1]), Number(m[2]))?.go);
+      const b = hit(Number(m[1]), Number(m[2]));
+      if (b?.fail) throw new Error(b.fail);
+      go(b?.go);
       return '';
     }
     if ((m = /^input swipe (\d+) (\d+) (\d+) (\d+) (\d+)$/.exec(cmd))) {
@@ -87,6 +100,7 @@ export function fakeDevice(app, serial = 'fake-1') {
       return '';
     }
     if ((m = /^input keyevent (\d+)$/.exec(cmd))) {
+      if (m[1] === '4' && cur().backThrows) throw new Error(cur().backThrows);
       if (m[1] === '4') back();
       return '';
     }
@@ -94,7 +108,7 @@ export function fakeDevice(app, serial = 'fake-1') {
   }
 
   function execOut(cmd) {
-    log.push(cmd.replace(/droidlens_ui_[0-9a-f]+/g, 'droidlens_ui_X'));
+    record(cmd);
     if (cmd.startsWith('uiautomator dump')) {
       const name = top().name;
       return Buffer.from(`UI hierchary dumped to: /data/local/tmp/x.xml\n__DROIDLENS_XML__\n${screenXml(name, screens[name], app.pkg)}`);
@@ -118,6 +132,7 @@ export function fakeDevice(app, serial = 'fake-1') {
   return {
     dev,
     log,
+    stamps,
     /** 지금 화면 이름 */
     get screen() {
       return top().name;

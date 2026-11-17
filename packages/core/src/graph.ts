@@ -8,7 +8,7 @@
  * - graph/navigate.ts  행동 실행·경로·화면 이동
  * - graph/explore.ts   자동 탐색
  * - graph/flow.ts      흐름 수집
- * 의존은 snapshot ← bundle·store ← navigate ← explore·flow 한 방향이다.
+ * 의존 방향: bundle·snapshot ← store ← navigate ← explore·flow (explore·flow는 snapshot·store도 직접 씀). 거꾸로 가는 import 는 없다.
  */
 export * from './graph-model.js';
 export {

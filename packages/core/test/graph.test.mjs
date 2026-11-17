@@ -4,6 +4,7 @@ import { test, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtempSync, rmSync, readFileSync, writeFileSync, existsSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
+import { createHash } from 'node:crypto';
 
 // 지도는 DROIDLENS_HOME 아래에 쓴다. 임시 폴더 대신 저장소 안(.gitignore 된 .test-home)에 두고 끝나면 지운다
 const home = mkdtempSync(join(import.meta.dirname, '.test-home-'));
@@ -287,6 +288,32 @@ test('exportBundle → importBundle: 스크린샷까지 옮기고, 여러 번 �
   assert.deepEqual(r2, { nodes: 0, edges: 0, dropped: 2 });
   assert.equal(g2.edges.get(`${h.id}->${d.id}:tap "Detail"`).count, 2);
   assert.ok(existsSync(join(g2.dir, 'graph.json')));
+});
+
+test('importBundle: 스크린샷 이름에 ../ 가 있어도 지도 폴더 안에 화면 id 로 만든 이름으로만 쓴다', async () => {
+  const pkg = 'com.example.shotpath';
+  const g = await ScreenGraph.open(pkg);
+  const png = Buffer.concat([PNG_MAGIC, Buffer.from('evil')]).toString('base64');
+  const node = (id, screenshot) => ({ id, packageName: pkg, activity: 'a', fragments: [], signature: id.split('@')[1], label: 'H', screenshot, firstSeen: 1, visits: 1, nodeCount: 1, maxDepth: 1 });
+  const ids = ['HomeActivity@dddddddddddd', 'DetailActivity@eeeeeeeeeeee'];
+  const keys = ['../../x.png', 'a/../../../y.png'];
+  const r = await g.importBundle({
+    format: 'droidlens-map',
+    graph: { packageName: pkg, nodes: [node(ids[0], keys[0]), node(ids[1], keys[1])], edges: [] },
+    screenshots: { [keys[0]]: png, [keys[1]]: png },
+  });
+  assert.deepEqual(r, { nodes: 2, edges: 0, dropped: 0 });
+  // 지도 폴더 밖(그 위 폴더들)에 파일이 생기지 않는다
+  for (const k of keys) assert.equal(existsSync(join(g.dir, k)), false, k);
+  const stray = readdirSync(home, { recursive: true }).filter((f) => f.endsWith('.png') && !/^graphs\/[^/]+\/[^/]+\.png$/.test(f));
+  assert.deepEqual(stray, []);
+  // 저장된 이름은 safeName(화면 id)-sha1(화면 id) 앞 8자.png 이고, 지도 폴더 바로 아래에 있다
+  for (const id of ids) {
+    const want = `${id.replace(/[^\w.-]/g, '_')}-${createHash('sha1').update(id).digest('hex').slice(0, 8)}.png`;
+    assert.equal(g.nodes.get(id).screenshot, want);
+    assert.ok(readdirSync(g.dir).includes(want));
+  }
+  assert.deepEqual(readdirSync(g.dir).filter((f) => f.endsWith('.png')).sort(), ids.map((id) => g.nodes.get(id).screenshot).sort());
 });
 
 test('importBundle: 형식·앱·한도가 맞지 않으면 거절한다', async () => {
