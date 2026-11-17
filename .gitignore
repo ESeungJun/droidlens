@@ -10,3 +10,6 @@ vendor/
 
 # 사람이 읽는 문서 html 판은 로컬에서만 만든다 (node ~/.claude/scripts/docs-html/build.mjs docs)
 docs/html/
+
+# 테스트가 잠깐 쓰는 DroidLens 홈 (끝나면 지운다)
+packages/core/test/.test-home-*/

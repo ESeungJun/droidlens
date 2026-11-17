@@ -1,0 +1,935 @@
+{
+  "navigateTo.commands": [
+    "screencap -p",
+    "screencap -p",
+    "dumpsys window | grep -E \"mCurrentFocus|mFocusedApp\"",
+    "uiautomator dump --compressed /data/local/tmp/droidlens_ui_X.xml 2>&1; echo __DROIDLENS_XML__; cat /data/local/tmp/droidlens_ui_X.xml 2>/dev/null; rm -f /data/local/tmp/droidlens_ui_X.xml",
+    "am force-stop com.ex.nav",
+    "cmd package resolve-activity --brief -a android.intent.action.MAIN -c android.intent.category.LAUNCHER com.ex.nav",
+    "am start -W -f 0x10008000 -n 'com.ex.nav/com.ex.nav.HomeActivity'",
+    "dumpsys window | grep -E \"mCurrentFocus|mFocusedApp\"",
+    "uiautomator dump --compressed /data/local/tmp/droidlens_ui_X.xml 2>&1; echo __DROIDLENS_XML__; cat /data/local/tmp/droidlens_ui_X.xml 2>/dev/null; rm -f /data/local/tmp/droidlens_ui_X.xml",
+    "screencap -p",
+    "screencap -p",
+    "dumpsys window | grep -E \"mCurrentFocus|mFocusedApp\"",
+    "uiautomator dump --compressed /data/local/tmp/droidlens_ui_X.xml 2>&1; echo __DROIDLENS_XML__; cat /data/local/tmp/droidlens_ui_X.xml 2>/dev/null; rm -f /data/local/tmp/droidlens_ui_X.xml",
+    "input tap 540 145",
+    "screencap -p",
+    "screencap -p",
+    "dumpsys window | grep -E \"mCurrentFocus|mFocusedApp\"",
+    "uiautomator dump --compressed /data/local/tmp/droidlens_ui_X.xml 2>&1; echo __DROIDLENS_XML__; cat /data/local/tmp/droidlens_ui_X.xml 2>/dev/null; rm -f /data/local/tmp/droidlens_ui_X.xml",
+    "input tap 540 145",
+    "screencap -p",
+    "screencap -p",
+    "dumpsys window | grep -E \"mCurrentFocus|mFocusedApp\"",
+    "uiautomator dump --compressed /data/local/tmp/droidlens_ui_X.xml 2>&1; echo __DROIDLENS_XML__; cat /data/local/tmp/droidlens_ui_X.xml 2>/dev/null; rm -f /data/local/tmp/droidlens_ui_X.xml"
+  ],
+  "explore.result": {
+    "graph": {
+      "packageName": "com.ex.explore",
+      "launchScreen": "HomeActivity@49875b512dda",
+      "nodes": [
+        {
+          "id": "HomeActivity@49875b512dda",
+          "packageName": "com.ex.explore",
+          "activity": "com.ex.explore.HomeActivity",
+          "fragments": [],
+          "signature": "49875b512dda",
+          "label": "HomeActivity",
+          "screenshot": "HomeActivity_49875b512dda.png",
+          "visits": 3,
+          "nodeCount": 11,
+          "maxDepth": 2,
+          "actions": [
+            "Detail",
+            "Settings",
+            "삭제",
+            "뒤로",
+            "Share",
+            "Freeze",
+            "Modal",
+            "Pager"
+          ],
+          "targets": [
+            {
+              "key": "com.ex.explore:id/detail|Detail",
+              "label": "Detail",
+              "bounds": [
+                0,
+                100,
+                1080,
+                190
+              ]
+            },
+            {
+              "key": "com.ex.explore:id/settings|Settings",
+              "label": "Settings",
+              "bounds": [
+                0,
+                200,
+                1080,
+                290
+              ]
+            },
+            {
+              "key": "com.ex.explore:id/delete|삭제",
+              "label": "삭제",
+              "bounds": [
+                0,
+                300,
+                1080,
+                390
+              ],
+              "danger": true
+            },
+            {
+              "key": "com.ex.explore:id/up|뒤로",
+              "label": "뒤로",
+              "bounds": [
+                900,
+                0,
+                1000,
+                90
+              ]
+            },
+            {
+              "key": "com.ex.explore:id/share|Share",
+              "label": "Share",
+              "bounds": [
+                0,
+                400,
+                1080,
+                490
+              ]
+            },
+            {
+              "key": "com.ex.explore:id/freeze|Freeze",
+              "label": "Freeze",
+              "bounds": [
+                0,
+                500,
+                1080,
+                590
+              ]
+            },
+            {
+              "key": "com.ex.explore:id/modal|Modal",
+              "label": "Modal",
+              "bounds": [
+                0,
+                600,
+                1080,
+                690
+              ]
+            },
+            {
+              "key": "com.ex.explore:id/pager|Pager",
+              "label": "Pager",
+              "bounds": [
+                0,
+                800,
+                1080,
+                890
+              ]
+            }
+          ],
+          "selectedKeys": [],
+          "tried": [
+            "com.ex.explore:id/detail|Detail",
+            "com.ex.explore:id/settings|Settings",
+            "com.ex.explore:id/share|Share",
+            "com.ex.explore:id/freeze|Freeze",
+            "com.ex.explore:id/modal|Modal",
+            "com.ex.explore:id/pager|Pager"
+          ]
+        },
+        {
+          "id": "DetailActivity@c45a9ff5be14",
+          "packageName": "com.ex.explore",
+          "activity": "com.ex.explore.DetailActivity",
+          "fragments": [],
+          "signature": "c45a9ff5be14",
+          "label": "DetailActivity",
+          "screenshot": "DetailActivity_c45a9ff5be14.png",
+          "visits": 1,
+          "nodeCount": 3,
+          "maxDepth": 2,
+          "actions": [
+            "More"
+          ],
+          "targets": [
+            {
+              "key": "com.ex.explore:id/more|More",
+              "label": "More",
+              "bounds": [
+                0,
+                100,
+                1080,
+                190
+              ]
+            }
+          ],
+          "selectedKeys": [],
+          "tried": [
+            "com.ex.explore:id/more|More"
+          ]
+        },
+        {
+          "id": "DeepActivity@dcf8e6eb4bba",
+          "packageName": "com.ex.explore",
+          "activity": "com.ex.explore.DeepActivity",
+          "fragments": [],
+          "signature": "dcf8e6eb4bba",
+          "label": "DeepActivity",
+          "screenshot": "DeepActivity_dcf8e6eb4bba.png",
+          "visits": 1,
+          "nodeCount": 3,
+          "maxDepth": 2,
+          "actions": [
+            "Deeper"
+          ],
+          "targets": [
+            {
+              "key": "com.ex.explore:id/deeper|Deeper",
+              "label": "Deeper",
+              "bounds": [
+                0,
+                100,
+                1080,
+                190
+              ]
+            }
+          ],
+          "selectedKeys": [],
+          "tried": [
+            "com.ex.explore:id/deeper|Deeper"
+          ]
+        },
+        {
+          "id": "DeeperActivity@a696f3cdd76b",
+          "packageName": "com.ex.explore",
+          "activity": "com.ex.explore.DeeperActivity",
+          "fragments": [],
+          "signature": "a696f3cdd76b",
+          "label": "DeeperActivity",
+          "screenshot": "DeeperActivity_a696f3cdd76b.png",
+          "visits": 1,
+          "nodeCount": 3,
+          "maxDepth": 2,
+          "actions": [
+            "Deepest"
+          ],
+          "targets": [
+            {
+              "key": "com.ex.explore:id/deepest|Deepest",
+              "label": "Deepest",
+              "bounds": [
+                0,
+                100,
+                1080,
+                190
+              ]
+            }
+          ],
+          "selectedKeys": [],
+          "tried": [
+            "com.ex.explore:id/deepest|Deepest"
+          ]
+        },
+        {
+          "id": "DeepestActivity@5d93d0bba3cb",
+          "packageName": "com.ex.explore",
+          "activity": "com.ex.explore.DeepestActivity",
+          "fragments": [],
+          "signature": "5d93d0bba3cb",
+          "label": "DeepestActivity",
+          "screenshot": "DeepestActivity_5d93d0bba3cb.png",
+          "visits": 1,
+          "nodeCount": 2,
+          "maxDepth": 1,
+          "actions": [],
+          "targets": [],
+          "selectedKeys": []
+        },
+        {
+          "id": "SettingsActivity@0f082cef611c",
+          "packageName": "com.ex.explore",
+          "activity": "com.ex.explore.SettingsActivity",
+          "fragments": [],
+          "signature": "0f082cef611c",
+          "label": "SettingsActivity",
+          "screenshot": "SettingsActivity_0f082cef611c.png",
+          "visits": 2,
+          "nodeCount": 3,
+          "maxDepth": 2,
+          "actions": [
+            "Toggle"
+          ],
+          "targets": [
+            {
+              "key": "com.ex.explore:id/toggle|Toggle",
+              "label": "Toggle",
+              "bounds": [
+                0,
+                100,
+                1080,
+                190
+              ]
+            }
+          ],
+          "selectedKeys": [],
+          "tried": [
+            "com.ex.explore:id/toggle|Toggle"
+          ]
+        },
+        {
+          "id": "ModalActivity@27c75216cffd",
+          "packageName": "com.ex.explore",
+          "activity": "com.ex.explore.ModalActivity",
+          "fragments": [],
+          "signature": "27c75216cffd",
+          "label": "ModalActivity",
+          "screenshot": "ModalActivity_27c75216cffd.png",
+          "visits": 2,
+          "nodeCount": 3,
+          "maxDepth": 2,
+          "actions": [
+            "Ok"
+          ],
+          "targets": [
+            {
+              "key": "com.ex.explore:id/ok|Ok",
+              "label": "Ok",
+              "bounds": [
+                0,
+                100,
+                1080,
+                190
+              ]
+            }
+          ],
+          "selectedKeys": [],
+          "tried": [
+            "com.ex.explore:id/ok|Ok"
+          ]
+        },
+        {
+          "id": "PagerActivity@eebbbb69c126",
+          "packageName": "com.ex.explore",
+          "activity": "com.ex.explore.PagerActivity",
+          "fragments": [],
+          "signature": "eebbbb69c126",
+          "label": "PagerActivity",
+          "screenshot": "PagerActivity_eebbbb69c126.png",
+          "visits": 1,
+          "nodeCount": 4,
+          "maxDepth": 2,
+          "actions": [
+            "Buy",
+            "Next"
+          ],
+          "targets": [
+            {
+              "key": "com.ex.explore:id/buy|Buy",
+              "label": "Buy",
+              "bounds": [
+                0,
+                100,
+                1080,
+                190
+              ],
+              "danger": true
+            },
+            {
+              "key": "com.ex.explore:id/next|Next",
+              "label": "Next",
+              "bounds": [
+                0,
+                200,
+                1080,
+                290
+              ]
+            }
+          ],
+          "selectedKeys": [],
+          "tried": [
+            "com.ex.explore:id/next|Next"
+          ]
+        },
+        {
+          "id": "Pager2Activity@a3df21b5d65e",
+          "packageName": "com.ex.explore",
+          "activity": "com.ex.explore.Pager2Activity",
+          "fragments": [],
+          "signature": "a3df21b5d65e",
+          "label": "Pager2Activity",
+          "screenshot": "Pager2Activity_a3df21b5d65e.png",
+          "visits": 2,
+          "nodeCount": 3,
+          "maxDepth": 2,
+          "actions": [
+            "P2"
+          ],
+          "targets": [
+            {
+              "key": "com.ex.explore:id/p2|P2",
+              "label": "P2",
+              "bounds": [
+                0,
+                100,
+                1080,
+                190
+              ]
+            }
+          ],
+          "selectedKeys": [],
+          "tried": [
+            "com.ex.explore:id/p2|P2"
+          ]
+        }
+      ],
+      "edges": [
+        {
+          "id": "HomeActivity@49875b512dda->DetailActivity@c45a9ff5be14:tap \"Detail\"",
+          "from": "HomeActivity@49875b512dda",
+          "to": "DetailActivity@c45a9ff5be14",
+          "action": {
+            "type": "tap",
+            "x": 540,
+            "y": 145,
+            "label": "Detail",
+            "selector": {
+              "id": "com.ex.explore:id/detail"
+            }
+          },
+          "count": 1
+        },
+        {
+          "id": "DetailActivity@c45a9ff5be14->DeepActivity@dcf8e6eb4bba:tap \"More\"",
+          "from": "DetailActivity@c45a9ff5be14",
+          "to": "DeepActivity@dcf8e6eb4bba",
+          "action": {
+            "type": "tap",
+            "x": 540,
+            "y": 145,
+            "label": "More",
+            "selector": {
+              "id": "com.ex.explore:id/more"
+            }
+          },
+          "count": 1
+        },
+        {
+          "id": "DeepActivity@dcf8e6eb4bba->DeeperActivity@a696f3cdd76b:tap \"Deeper\"",
+          "from": "DeepActivity@dcf8e6eb4bba",
+          "to": "DeeperActivity@a696f3cdd76b",
+          "action": {
+            "type": "tap",
+            "x": 540,
+            "y": 145,
+            "label": "Deeper",
+            "selector": {
+              "id": "com.ex.explore:id/deeper"
+            }
+          },
+          "count": 1
+        },
+        {
+          "id": "DeeperActivity@a696f3cdd76b->DeepestActivity@5d93d0bba3cb:tap \"Deepest\"",
+          "from": "DeeperActivity@a696f3cdd76b",
+          "to": "DeepestActivity@5d93d0bba3cb",
+          "action": {
+            "type": "tap",
+            "x": 540,
+            "y": 145,
+            "label": "Deepest",
+            "selector": {
+              "id": "com.ex.explore:id/deepest"
+            }
+          },
+          "count": 1
+        },
+        {
+          "id": "HomeActivity@49875b512dda->SettingsActivity@0f082cef611c:tap \"Settings\"",
+          "from": "HomeActivity@49875b512dda",
+          "to": "SettingsActivity@0f082cef611c",
+          "action": {
+            "type": "tap",
+            "x": 540,
+            "y": 245,
+            "label": "Settings",
+            "selector": {
+              "id": "com.ex.explore:id/settings"
+            }
+          },
+          "count": 1
+        },
+        {
+          "id": "HomeActivity@49875b512dda->ModalActivity@27c75216cffd:tap \"Modal\"",
+          "from": "HomeActivity@49875b512dda",
+          "to": "ModalActivity@27c75216cffd",
+          "action": {
+            "type": "tap",
+            "x": 540,
+            "y": 645,
+            "label": "Modal",
+            "selector": {
+              "id": "com.ex.explore:id/modal"
+            }
+          },
+          "count": 1
+        },
+        {
+          "id": "HomeActivity@49875b512dda->PagerActivity@eebbbb69c126:tap \"Pager\"",
+          "from": "HomeActivity@49875b512dda",
+          "to": "PagerActivity@eebbbb69c126",
+          "action": {
+            "type": "tap",
+            "x": 540,
+            "y": 845,
+            "label": "Pager",
+            "selector": {
+              "id": "com.ex.explore:id/pager"
+            }
+          },
+          "count": 1
+        },
+        {
+          "id": "PagerActivity@eebbbb69c126->Pager2Activity@a3df21b5d65e:tap \"Next\"",
+          "from": "PagerActivity@eebbbb69c126",
+          "to": "Pager2Activity@a3df21b5d65e",
+          "action": {
+            "type": "tap",
+            "x": 540,
+            "y": 245,
+            "label": "Next",
+            "selector": {
+              "id": "com.ex.explore:id/next"
+            }
+          },
+          "count": 1
+        }
+      ]
+    },
+    "startScreen": "HomeActivity@49875b512dda",
+    "steps": 13,
+    "limited": false,
+    "skipped": [
+      {
+        "screen": "HomeActivity@49875b512dda",
+        "label": "삭제",
+        "reason": "위험 라벨"
+      },
+      {
+        "screen": "PagerActivity@eebbbb69c126",
+        "label": "Buy",
+        "reason": "위험 라벨"
+      }
+    ],
+    "errors": [
+      "HomeActivity@49875b512dda tap \"Freeze\": ANR (응답 없음) 대화상자"
+    ],
+    "touched": {
+      "nodes": [
+        "HomeActivity@49875b512dda",
+        "DetailActivity@c45a9ff5be14",
+        "DeepActivity@dcf8e6eb4bba",
+        "DeeperActivity@a696f3cdd76b",
+        "DeepestActivity@5d93d0bba3cb",
+        "SettingsActivity@0f082cef611c",
+        "ModalActivity@27c75216cffd",
+        "PagerActivity@eebbbb69c126",
+        "Pager2Activity@a3df21b5d65e"
+      ],
+      "edges": [
+        "HomeActivity@49875b512dda->DetailActivity@c45a9ff5be14:tap \"Detail\"",
+        "DetailActivity@c45a9ff5be14->DeepActivity@dcf8e6eb4bba:tap \"More\"",
+        "DeepActivity@dcf8e6eb4bba->DeeperActivity@a696f3cdd76b:tap \"Deeper\"",
+        "DeeperActivity@a696f3cdd76b->DeepestActivity@5d93d0bba3cb:tap \"Deepest\"",
+        "HomeActivity@49875b512dda->SettingsActivity@0f082cef611c:tap \"Settings\"",
+        "HomeActivity@49875b512dda->ModalActivity@27c75216cffd:tap \"Modal\"",
+        "HomeActivity@49875b512dda->PagerActivity@eebbbb69c126:tap \"Pager\"",
+        "PagerActivity@eebbbb69c126->Pager2Activity@a3df21b5d65e:tap \"Next\""
+      ]
+    }
+  },
+  "explore.progress": [
+    [
+      0,
+      "시작 화면: HomeActivity",
+      "HomeActivity@49875b512dda"
+    ],
+    [
+      1,
+      "tap \"Detail\" → DetailActivity",
+      "DetailActivity@c45a9ff5be14"
+    ],
+    [
+      2,
+      "tap \"More\" → DeepActivity",
+      "DeepActivity@dcf8e6eb4bba"
+    ],
+    [
+      3,
+      "tap \"Deeper\" → DeeperActivity",
+      "DeeperActivity@a696f3cdd76b"
+    ],
+    [
+      4,
+      "tap \"Deepest\" → DeepestActivity",
+      "DeepestActivity@5d93d0bba3cb"
+    ],
+    [
+      5,
+      "tap \"Settings\" → SettingsActivity",
+      "SettingsActivity@0f082cef611c"
+    ],
+    [
+      7,
+      "tap \"Share\" → 앱 밖(com.other), 복귀",
+      null
+    ],
+    [
+      8,
+      "tap \"Freeze\" → ANR 감지, 기록 후 계속",
+      null
+    ],
+    [
+      9,
+      "tap \"Modal\" → ModalActivity",
+      "ModalActivity@27c75216cffd"
+    ],
+    [
+      10,
+      "BACK 복귀 실패 → 재실행 후 경로 재생",
+      null
+    ],
+    [
+      11,
+      "tap \"Pager\" → PagerActivity",
+      "PagerActivity@eebbbb69c126"
+    ],
+    [
+      12,
+      "tap \"Next\" → Pager2Activity",
+      "Pager2Activity@a3df21b5d65e"
+    ],
+    [
+      13,
+      "탐색 완료: 화면 9개, 전이 8개, 13스텝",
+      null
+    ]
+  ],
+  "explore.commands": [
+    "am force-stop com.ex.explore",
+    "cmd package resolve-activity --brief -a android.intent.action.MAIN -c android.intent.category.LAUNCHER com.ex.explore",
+    "am start -W -f 0x10008000 -n 'com.ex.explore/com.ex.explore.HomeActivity'",
+    "dumpsys window | grep -E \"mCurrentFocus|mFocusedApp\"",
+    "uiautomator dump --compressed /data/local/tmp/droidlens_ui_X.xml 2>&1; echo __DROIDLENS_XML__; cat /data/local/tmp/droidlens_ui_X.xml 2>/dev/null; rm -f /data/local/tmp/droidlens_ui_X.xml",
+    "screencap -p",
+    "screencap -p",
+    "dumpsys window | grep -E \"mCurrentFocus|mFocusedApp\"",
+    "uiautomator dump --compressed /data/local/tmp/droidlens_ui_X.xml 2>&1; echo __DROIDLENS_XML__; cat /data/local/tmp/droidlens_ui_X.xml 2>/dev/null; rm -f /data/local/tmp/droidlens_ui_X.xml",
+    "dumpsys activity top",
+    "input tap 540 145",
+    "screencap -p",
+    "screencap -p",
+    "dumpsys window | grep -E \"mCurrentFocus|mFocusedApp\"",
+    "uiautomator dump --compressed /data/local/tmp/droidlens_ui_X.xml 2>&1; echo __DROIDLENS_XML__; cat /data/local/tmp/droidlens_ui_X.xml 2>/dev/null; rm -f /data/local/tmp/droidlens_ui_X.xml",
+    "dumpsys activity top",
+    "input tap 540 145",
+    "screencap -p",
+    "screencap -p",
+    "dumpsys window | grep -E \"mCurrentFocus|mFocusedApp\"",
+    "uiautomator dump --compressed /data/local/tmp/droidlens_ui_X.xml 2>&1; echo __DROIDLENS_XML__; cat /data/local/tmp/droidlens_ui_X.xml 2>/dev/null; rm -f /data/local/tmp/droidlens_ui_X.xml",
+    "dumpsys activity top",
+    "input tap 540 145",
+    "screencap -p",
+    "screencap -p",
+    "dumpsys window | grep -E \"mCurrentFocus|mFocusedApp\"",
+    "uiautomator dump --compressed /data/local/tmp/droidlens_ui_X.xml 2>&1; echo __DROIDLENS_XML__; cat /data/local/tmp/droidlens_ui_X.xml 2>/dev/null; rm -f /data/local/tmp/droidlens_ui_X.xml",
+    "dumpsys activity top",
+    "input tap 540 145",
+    "screencap -p",
+    "screencap -p",
+    "dumpsys window | grep -E \"mCurrentFocus|mFocusedApp\"",
+    "uiautomator dump --compressed /data/local/tmp/droidlens_ui_X.xml 2>&1; echo __DROIDLENS_XML__; cat /data/local/tmp/droidlens_ui_X.xml 2>/dev/null; rm -f /data/local/tmp/droidlens_ui_X.xml",
+    "dumpsys activity top",
+    "input keyevent 4",
+    "screencap -p",
+    "screencap -p",
+    "dumpsys window | grep -E \"mCurrentFocus|mFocusedApp\"",
+    "uiautomator dump --compressed /data/local/tmp/droidlens_ui_X.xml 2>&1; echo __DROIDLENS_XML__; cat /data/local/tmp/droidlens_ui_X.xml 2>/dev/null; rm -f /data/local/tmp/droidlens_ui_X.xml",
+    "input keyevent 4",
+    "screencap -p",
+    "screencap -p",
+    "dumpsys window | grep -E \"mCurrentFocus|mFocusedApp\"",
+    "uiautomator dump --compressed /data/local/tmp/droidlens_ui_X.xml 2>&1; echo __DROIDLENS_XML__; cat /data/local/tmp/droidlens_ui_X.xml 2>/dev/null; rm -f /data/local/tmp/droidlens_ui_X.xml",
+    "input keyevent 4",
+    "screencap -p",
+    "screencap -p",
+    "dumpsys window | grep -E \"mCurrentFocus|mFocusedApp\"",
+    "uiautomator dump --compressed /data/local/tmp/droidlens_ui_X.xml 2>&1; echo __DROIDLENS_XML__; cat /data/local/tmp/droidlens_ui_X.xml 2>/dev/null; rm -f /data/local/tmp/droidlens_ui_X.xml",
+    "input keyevent 4",
+    "screencap -p",
+    "screencap -p",
+    "dumpsys window | grep -E \"mCurrentFocus|mFocusedApp\"",
+    "uiautomator dump --compressed /data/local/tmp/droidlens_ui_X.xml 2>&1; echo __DROIDLENS_XML__; cat /data/local/tmp/droidlens_ui_X.xml 2>/dev/null; rm -f /data/local/tmp/droidlens_ui_X.xml",
+    "input tap 540 245",
+    "screencap -p",
+    "screencap -p",
+    "dumpsys window | grep -E \"mCurrentFocus|mFocusedApp\"",
+    "uiautomator dump --compressed /data/local/tmp/droidlens_ui_X.xml 2>&1; echo __DROIDLENS_XML__; cat /data/local/tmp/droidlens_ui_X.xml 2>/dev/null; rm -f /data/local/tmp/droidlens_ui_X.xml",
+    "dumpsys activity top",
+    "input tap 540 145",
+    "screencap -p",
+    "screencap -p",
+    "dumpsys window | grep -E \"mCurrentFocus|mFocusedApp\"",
+    "uiautomator dump --compressed /data/local/tmp/droidlens_ui_X.xml 2>&1; echo __DROIDLENS_XML__; cat /data/local/tmp/droidlens_ui_X.xml 2>/dev/null; rm -f /data/local/tmp/droidlens_ui_X.xml",
+    "input keyevent 4",
+    "screencap -p",
+    "screencap -p",
+    "dumpsys window | grep -E \"mCurrentFocus|mFocusedApp\"",
+    "uiautomator dump --compressed /data/local/tmp/droidlens_ui_X.xml 2>&1; echo __DROIDLENS_XML__; cat /data/local/tmp/droidlens_ui_X.xml 2>/dev/null; rm -f /data/local/tmp/droidlens_ui_X.xml",
+    "input tap 540 445",
+    "screencap -p",
+    "screencap -p",
+    "dumpsys window | grep -E \"mCurrentFocus|mFocusedApp\"",
+    "uiautomator dump --compressed /data/local/tmp/droidlens_ui_X.xml 2>&1; echo __DROIDLENS_XML__; cat /data/local/tmp/droidlens_ui_X.xml 2>/dev/null; rm -f /data/local/tmp/droidlens_ui_X.xml",
+    "input keyevent 4",
+    "screencap -p",
+    "screencap -p",
+    "dumpsys window | grep -E \"mCurrentFocus|mFocusedApp\"",
+    "uiautomator dump --compressed /data/local/tmp/droidlens_ui_X.xml 2>&1; echo __DROIDLENS_XML__; cat /data/local/tmp/droidlens_ui_X.xml 2>/dev/null; rm -f /data/local/tmp/droidlens_ui_X.xml",
+    "input tap 540 545",
+    "screencap -p",
+    "screencap -p",
+    "dumpsys window | grep -E \"mCurrentFocus|mFocusedApp\"",
+    "uiautomator dump --compressed /data/local/tmp/droidlens_ui_X.xml 2>&1; echo __DROIDLENS_XML__; cat /data/local/tmp/droidlens_ui_X.xml 2>/dev/null; rm -f /data/local/tmp/droidlens_ui_X.xml",
+    "input tap 540 145",
+    "screencap -p",
+    "screencap -p",
+    "dumpsys window | grep -E \"mCurrentFocus|mFocusedApp\"",
+    "uiautomator dump --compressed /data/local/tmp/droidlens_ui_X.xml 2>&1; echo __DROIDLENS_XML__; cat /data/local/tmp/droidlens_ui_X.xml 2>/dev/null; rm -f /data/local/tmp/droidlens_ui_X.xml",
+    "input tap 540 645",
+    "screencap -p",
+    "screencap -p",
+    "dumpsys window | grep -E \"mCurrentFocus|mFocusedApp\"",
+    "uiautomator dump --compressed /data/local/tmp/droidlens_ui_X.xml 2>&1; echo __DROIDLENS_XML__; cat /data/local/tmp/droidlens_ui_X.xml 2>/dev/null; rm -f /data/local/tmp/droidlens_ui_X.xml",
+    "dumpsys activity top",
+    "input tap 540 145",
+    "screencap -p",
+    "screencap -p",
+    "dumpsys window | grep -E \"mCurrentFocus|mFocusedApp\"",
+    "uiautomator dump --compressed /data/local/tmp/droidlens_ui_X.xml 2>&1; echo __DROIDLENS_XML__; cat /data/local/tmp/droidlens_ui_X.xml 2>/dev/null; rm -f /data/local/tmp/droidlens_ui_X.xml",
+    "input keyevent 4",
+    "screencap -p",
+    "screencap -p",
+    "dumpsys window | grep -E \"mCurrentFocus|mFocusedApp\"",
+    "uiautomator dump --compressed /data/local/tmp/droidlens_ui_X.xml 2>&1; echo __DROIDLENS_XML__; cat /data/local/tmp/droidlens_ui_X.xml 2>/dev/null; rm -f /data/local/tmp/droidlens_ui_X.xml",
+    "input keyevent 4",
+    "screencap -p",
+    "screencap -p",
+    "dumpsys window | grep -E \"mCurrentFocus|mFocusedApp\"",
+    "uiautomator dump --compressed /data/local/tmp/droidlens_ui_X.xml 2>&1; echo __DROIDLENS_XML__; cat /data/local/tmp/droidlens_ui_X.xml 2>/dev/null; rm -f /data/local/tmp/droidlens_ui_X.xml",
+    "screencap -p",
+    "screencap -p",
+    "dumpsys window | grep -E \"mCurrentFocus|mFocusedApp\"",
+    "uiautomator dump --compressed /data/local/tmp/droidlens_ui_X.xml 2>&1; echo __DROIDLENS_XML__; cat /data/local/tmp/droidlens_ui_X.xml 2>/dev/null; rm -f /data/local/tmp/droidlens_ui_X.xml",
+    "am force-stop com.ex.explore",
+    "cmd package resolve-activity --brief -a android.intent.action.MAIN -c android.intent.category.LAUNCHER com.ex.explore",
+    "am start -W -f 0x10008000 -n 'com.ex.explore/com.ex.explore.HomeActivity'",
+    "dumpsys window | grep -E \"mCurrentFocus|mFocusedApp\"",
+    "uiautomator dump --compressed /data/local/tmp/droidlens_ui_X.xml 2>&1; echo __DROIDLENS_XML__; cat /data/local/tmp/droidlens_ui_X.xml 2>/dev/null; rm -f /data/local/tmp/droidlens_ui_X.xml",
+    "screencap -p",
+    "screencap -p",
+    "dumpsys window | grep -E \"mCurrentFocus|mFocusedApp\"",
+    "uiautomator dump --compressed /data/local/tmp/droidlens_ui_X.xml 2>&1; echo __DROIDLENS_XML__; cat /data/local/tmp/droidlens_ui_X.xml 2>/dev/null; rm -f /data/local/tmp/droidlens_ui_X.xml",
+    "input tap 540 845",
+    "screencap -p",
+    "screencap -p",
+    "dumpsys window | grep -E \"mCurrentFocus|mFocusedApp\"",
+    "uiautomator dump --compressed /data/local/tmp/droidlens_ui_X.xml 2>&1; echo __DROIDLENS_XML__; cat /data/local/tmp/droidlens_ui_X.xml 2>/dev/null; rm -f /data/local/tmp/droidlens_ui_X.xml",
+    "dumpsys activity top",
+    "input tap 540 245",
+    "screencap -p",
+    "screencap -p",
+    "dumpsys window | grep -E \"mCurrentFocus|mFocusedApp\"",
+    "uiautomator dump --compressed /data/local/tmp/droidlens_ui_X.xml 2>&1; echo __DROIDLENS_XML__; cat /data/local/tmp/droidlens_ui_X.xml 2>/dev/null; rm -f /data/local/tmp/droidlens_ui_X.xml",
+    "dumpsys activity top",
+    "input tap 540 145",
+    "screencap -p",
+    "screencap -p",
+    "dumpsys window | grep -E \"mCurrentFocus|mFocusedApp\"",
+    "uiautomator dump --compressed /data/local/tmp/droidlens_ui_X.xml 2>&1; echo __DROIDLENS_XML__; cat /data/local/tmp/droidlens_ui_X.xml 2>/dev/null; rm -f /data/local/tmp/droidlens_ui_X.xml",
+    "input keyevent 4",
+    "screencap -p",
+    "screencap -p",
+    "dumpsys window | grep -E \"mCurrentFocus|mFocusedApp\"",
+    "uiautomator dump --compressed /data/local/tmp/droidlens_ui_X.xml 2>&1; echo __DROIDLENS_XML__; cat /data/local/tmp/droidlens_ui_X.xml 2>/dev/null; rm -f /data/local/tmp/droidlens_ui_X.xml",
+    "input keyevent 4",
+    "screencap -p",
+    "screencap -p",
+    "dumpsys window | grep -E \"mCurrentFocus|mFocusedApp\"",
+    "uiautomator dump --compressed /data/local/tmp/droidlens_ui_X.xml 2>&1; echo __DROIDLENS_XML__; cat /data/local/tmp/droidlens_ui_X.xml 2>/dev/null; rm -f /data/local/tmp/droidlens_ui_X.xml"
+  ],
+  "exploreOnly.result": {
+    "graph": {
+      "packageName": "com.ex.only",
+      "nodes": [
+        {
+          "id": "PagerActivity@eebbbb69c126",
+          "packageName": "com.ex.only",
+          "activity": "com.ex.only.PagerActivity",
+          "fragments": [],
+          "signature": "eebbbb69c126",
+          "label": "PagerActivity",
+          "screenshot": "PagerActivity_eebbbb69c126.png",
+          "visits": 1,
+          "nodeCount": 4,
+          "maxDepth": 2,
+          "actions": [
+            "Buy",
+            "Next"
+          ],
+          "targets": [
+            {
+              "key": "com.ex.only:id/buy|Buy",
+              "label": "Buy",
+              "bounds": [
+                0,
+                100,
+                1080,
+                190
+              ],
+              "danger": true
+            },
+            {
+              "key": "com.ex.only:id/next|Next",
+              "label": "Next",
+              "bounds": [
+                0,
+                200,
+                1080,
+                290
+              ]
+            }
+          ],
+          "selectedKeys": []
+        },
+        {
+          "id": "Pager2Activity@a3df21b5d65e",
+          "packageName": "com.ex.only",
+          "activity": "com.ex.only.Pager2Activity",
+          "fragments": [],
+          "signature": "a3df21b5d65e",
+          "label": "Pager2Activity",
+          "screenshot": "Pager2Activity_a3df21b5d65e.png",
+          "visits": 2,
+          "nodeCount": 3,
+          "maxDepth": 2,
+          "actions": [
+            "P2"
+          ],
+          "targets": [
+            {
+              "key": "com.ex.only:id/p2|P2",
+              "label": "P2",
+              "bounds": [
+                0,
+                100,
+                1080,
+                190
+              ]
+            }
+          ],
+          "selectedKeys": [],
+          "tried": [
+            "com.ex.only:id/p2|P2"
+          ]
+        }
+      ],
+      "edges": [
+        {
+          "id": "PagerActivity@eebbbb69c126->Pager2Activity@a3df21b5d65e:swipe left",
+          "from": "PagerActivity@eebbbb69c126",
+          "to": "Pager2Activity@a3df21b5d65e",
+          "action": {
+            "type": "swipe",
+            "x1": 918,
+            "y1": 1200,
+            "x2": 162,
+            "y2": 1200,
+            "direction": "left"
+          },
+          "count": 1
+        }
+      ]
+    },
+    "startScreen": "PagerActivity@eebbbb69c126",
+    "steps": 2,
+    "limited": false,
+    "skipped": [
+      {
+        "screen": "PagerActivity@eebbbb69c126",
+        "label": "Buy",
+        "reason": "위험 라벨 (허용하지 않음)"
+      },
+      {
+        "screen": "PagerActivity@eebbbb69c126",
+        "label": "Gone",
+        "reason": "현재 화면에서 찾을 수 없음"
+      }
+    ],
+    "errors": [],
+    "touched": {
+      "nodes": [
+        "PagerActivity@eebbbb69c126",
+        "Pager2Activity@a3df21b5d65e"
+      ],
+      "edges": [
+        "PagerActivity@eebbbb69c126->Pager2Activity@a3df21b5d65e:swipe left"
+      ]
+    }
+  },
+  "exploreOnly.progress": [
+    [
+      0,
+      "시작 화면: PagerActivity",
+      "PagerActivity@eebbbb69c126"
+    ],
+    [
+      1,
+      "swipe left → Pager2Activity",
+      "Pager2Activity@a3df21b5d65e"
+    ],
+    [
+      2,
+      "탐색 완료: 화면 2개, 전이 1개, 2스텝",
+      null
+    ]
+  ],
+  "exploreOnly.commands": [
+    "screencap -p",
+    "screencap -p",
+    "dumpsys window | grep -E \"mCurrentFocus|mFocusedApp\"",
+    "uiautomator dump --compressed /data/local/tmp/droidlens_ui_X.xml 2>&1; echo __DROIDLENS_XML__; cat /data/local/tmp/droidlens_ui_X.xml 2>/dev/null; rm -f /data/local/tmp/droidlens_ui_X.xml",
+    "dumpsys activity top",
+    "input swipe 918 1200 162 1200 300",
+    "screencap -p",
+    "screencap -p",
+    "dumpsys window | grep -E \"mCurrentFocus|mFocusedApp\"",
+    "uiautomator dump --compressed /data/local/tmp/droidlens_ui_X.xml 2>&1; echo __DROIDLENS_XML__; cat /data/local/tmp/droidlens_ui_X.xml 2>/dev/null; rm -f /data/local/tmp/droidlens_ui_X.xml",
+    "dumpsys activity top",
+    "input tap 540 145",
+    "screencap -p",
+    "screencap -p",
+    "dumpsys window | grep -E \"mCurrentFocus|mFocusedApp\"",
+    "uiautomator dump --compressed /data/local/tmp/droidlens_ui_X.xml 2>&1; echo __DROIDLENS_XML__; cat /data/local/tmp/droidlens_ui_X.xml 2>/dev/null; rm -f /data/local/tmp/droidlens_ui_X.xml",
+    "input swipe 162 1200 918 1200 300",
+    "screencap -p",
+    "screencap -p",
+    "dumpsys window | grep -E \"mCurrentFocus|mFocusedApp\"",
+    "uiautomator dump --compressed /data/local/tmp/droidlens_ui_X.xml 2>&1; echo __DROIDLENS_XML__; cat /data/local/tmp/droidlens_ui_X.xml 2>/dev/null; rm -f /data/local/tmp/droidlens_ui_X.xml"
+  ]
+}
