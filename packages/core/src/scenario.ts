@@ -20,7 +20,7 @@ import {
 export class Scenario {
   constructor(readonly data: ScenarioData) {}
 
-  static async start(name: string, meta: { goal?: string; packageName?: string; device?: string } = {}): Promise<Scenario> {
+  static async start(name: string, meta: { goal?: string; packageName?: string; device?: string; tc?: ScenarioData['tc'] } = {}): Promise<Scenario> {
     const id = `${timestamp()}_${safeName(name)}`;
     const dir = await ensureDir('scenarios', id);
     const s = new Scenario({ id, name, ...meta, startedAt: Date.now(), steps: [], dir });
