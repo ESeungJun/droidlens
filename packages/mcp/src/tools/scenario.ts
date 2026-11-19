@@ -83,7 +83,11 @@ export function register(server: McpServer): void {
         goal: z.string().optional().describe('무엇을 검증하는지 한 줄'),
         packageName: z.string().optional().describe('대상 앱. 스크립트로 저장하려면 필요 (TC 를 실행하면 기본은 계획의 앱)'),
         tc: z
-          .object({ plan: z.string().describe('QA 계획 id'), case: z.string().describe('TC 번호 (TC-001)') })
+          .object({
+            plan: z.string().describe('QA 계획 id'),
+            case: z.string().describe('TC 번호 (TC-001)'),
+            run: z.string().optional().describe('QA 회차 id (qa_run_scripts 가 알려 준 것). 주면 scenario_finish 가 이 회차에 TC 결과를 적는다'),
+          })
           .optional()
           .describe('QA 계획의 TC 를 실행할 때. 사람이 고른 TC 만 실행되고, allowDanger 는 사람이 그 TC 에 허용했을 때만 쓸 수 있다'),
       },
@@ -99,6 +103,7 @@ export function register(server: McpServer): void {
         if (!tcCase.selected) throw new Error(`${tc.case} 는 고르지 않은 TC 라 실행하지 않습니다. 사용자가 고른 TC 만 실행하세요`);
         if (tcCase.review?.length) throw new Error(`${tc.case} 에 다시 보기 표시가 있어 실행하지 않습니다. 사용자가 확인한 뒤에 실행하세요`);
         packageName ??= plan.app;
+        if (tc.run) await dl.loadQaRun(tc.plan, tc.run);
       }
       const dev = await device(serial);
       const info = await dl.getDeviceInfo(dev).catch(() => undefined);
@@ -106,11 +111,16 @@ export function register(server: McpServer): void {
       let dropped = '';
       if (scenario) {
         const prev = scenario;
+        const prevTc = recorder.tc;
         scenario = undefined;
         // 새 시나리오 시작이 실패해도 앞 TC 의 녹화·허용 상태가 남지 않게 먼저 비운다
         recorder.active = false;
         recorder.tc = undefined;
         const html = await prev.finish('blocked', '끝내지 않은 채 다음 시나리오를 시작해 중단됨', recorder.actions).catch(() => undefined);
+        if (prevTc?.run)
+          await dl
+            .recordQaResult(prevTc.plan, prevTc.run, { case: prevTc.case, status: 'blocked', mode: 'agent', detail: 'scenario_finish 없이 다음 시나리오를 시작해 중단됨', ...(html ? { report: html } : {}) })
+            .catch(() => undefined);
         dropped = `\n앞 시나리오 "${prev.data.name}" 는 scenario_finish 없이 남아 있어 중단(blocked)으로 마무리했습니다${html ? `: ${html}` : ''}`;
       }
       scenario = await dl.Scenario.start(name, {
@@ -126,7 +136,7 @@ export function register(server: McpServer): void {
       recorder.steps = [];
       recorder.mocks = new Map();
       recorder.actions = [];
-      recorder.tc = tc && tcCase ? { plan: tc.plan, case: tc.case, fingerprint: dl.dangerFingerprint(tcCase) } : undefined;
+      recorder.tc = tc && tcCase ? { plan: tc.plan, case: tc.case, fingerprint: dl.dangerFingerprint(tcCase), ...(tc.run ? { run: tc.run } : {}) } : undefined;
       // 온디바이스 에이전트를 지금 띄워 둔다. 단계 도중에 처음 설치되면 Play 프로텍트 창이 앱을 가린 채 스크린샷에 찍힌다
       await dl.ensureAgent(dev).catch(() => undefined);
       const top = await dl.currentScreen(dev).catch(() => undefined);
@@ -240,6 +250,7 @@ export function register(server: McpServer): void {
       const d = scenario.data;
       scenario = undefined;
       const lines = [`리포트: ${html}`, `${d.steps.length}단계 · 실패 ${d.steps.filter((s) => s.status === 'fail').length} · 판정 ${verdict}`];
+      let savedScript: string | undefined;
 
       // 스크립트는 setup에서 앱을 새로 띄우므로, 녹화 맨 앞의 앱 실행 단계는 중복이라 뺀다
       const firstAction = recorder.steps.findIndex((st) => !('launch' in st));
@@ -247,6 +258,9 @@ export function register(server: McpServer): void {
       const app = recorder.app;
       const tc = recorder.tc;
       recorder.tc = undefined;
+      // TC 를 pass 로 끝냈어도 DroidLens 가 검사한 통과 근거가 없으면 TC 결과는 막힘으로 적고 스크립트도 잇지 않는다
+      const noEvidence = tc && verdict === 'pass' ? dl.missingPassEvidence(d) : undefined;
+      if (noEvidence) lines.push(`${tc!.case} 는 통과로 보지 않았습니다: ${noEvidence}. 기대 결과마다 scenario_step(assert=…) 로 판정하세요`);
       // 녹화 중 켠 목은 재실행 때도 같은 조건이 되도록 setup 에서 켜고 끝나면 지우게 한다
       const mocks = [...recorder.mocks.values()].map(({ id: _id, enabled: _enabled, hits: _hits, delayMs, fail, ...m }) => ({
         ...m,
@@ -260,7 +274,7 @@ export function register(server: McpServer): void {
         // 녹화는 이미 앱이 열린 상태에서 시작되므로, 재실행 시에는 앱을 새로 띄우고 시작한다
         const setup: dl.Script['setup'] = { restart: true, ...(mocks.length ? { mocks } : {}) };
         const script: dl.Script = {
-          name: scriptName ?? (tc ? `${tc.case} ${d.name}` : d.name),
+          name: tc ? (scriptName?.startsWith(`${tc.case} `) ? scriptName : `${tc.case} ${scriptName ?? d.name}`) : (scriptName ?? d.name),
           app,
           ...(tc ? { tc: { plan: tc.plan, case: tc.case } } : {}),
           setup,
@@ -268,13 +282,19 @@ export function register(server: McpServer): void {
         };
         const yaml = dl.toYaml(script);
         await writeFile(join(d.dir, 'script.yaml'), yaml);
-        if (verdict === 'pass' && saveScript !== false) {
+        if (verdict === 'pass' && saveScript !== false && !noEvidence) {
           const p = await dl.saveScript(script);
           lines.push(`스크립트 저장: ${p} (${steps.length}단계) — script_run("${basename(p, '.yaml')}")으로 재실행, 내용은 script_read`);
           if (tc) {
             // 통과한 TC 에 스크립트를 잇는다. 다음 실행부터 이 TC 는 스크립트로 돈다 (#76)
-            const linked = await dl.linkQaCaseScript(tc.plan, tc.case, basename(p, '.yaml'), tc.fingerprint).then(
-              () => `${tc.case} 에 스크립트를 이었습니다`,
+            // 잇는 순간의 파일 해시를 남긴다. 나중에 파일이 바뀌면 그 스크립트로는 확인 필수 동작을 누르지 않는다.
+            // 디스크를 다시 읽지 않고 저장한 바이트로 만든다 (그 사이 script_write 가 끼어도 그 내용을 믿지 않게)
+            const hash = dl.sha256(Buffer.from(yaml));
+            const linked = await dl.linkQaCaseScript(tc.plan, tc.case, basename(p, '.yaml'), { hash, fingerprint: tc.fingerprint }).then(
+              () => {
+                savedScript = basename(p, '.yaml');
+                return `${tc.case} 에 스크립트를 이었습니다`;
+              },
               (e) => `${tc.case} 에 스크립트를 잇지 못했습니다: ${(e as Error).message.split('\n')[0]}`,
             );
             lines.push(linked);
@@ -283,6 +303,24 @@ export function register(server: McpServer): void {
           lines.push(`녹화된 스크립트: ${join(d.dir, 'script.yaml')} (저장하지 않음)`);
         }
         // YAML 전문은 붙이지 않는다 (방금 한 조작의 반복이라 응답만 길어진다). 볼 일이 있으면 script_read
+      }
+      if (tc?.run) {
+        // 회차에 이 TC 의 결과를 적는다 (에이전트가 돌린 것)
+        const recorded = await dl
+          .recordQaResult(tc.plan, tc.run, {
+            case: tc.case,
+            status: noEvidence ? 'blocked' : verdict,
+            mode: 'agent',
+            report: html,
+            detail: (noEvidence ? `통과 근거 없음: ${noEvidence} · ${summary}` : summary).slice(0, 2000) || undefined,
+            durationMs: Math.max(0, Date.now() - d.startedAt),
+            ...(savedScript ? { script: savedScript } : {}),
+          })
+          .then(
+            () => `회차 ${tc.run} 에 ${tc.case} 결과(${noEvidence ? 'blocked' : verdict})를 적었습니다`,
+            (e) => `회차 ${tc.run} 에 ${tc.case} 결과를 적지 못했습니다: ${(e as Error).message.split('\n')[0]}`,
+          );
+        lines.push(recorded);
       }
       return text(lines.join('\n'));
     },
@@ -353,8 +391,12 @@ export function register(server: McpServer): void {
       const allowAll = await dangerAllowed(allowDanger, true, 'script_run');
       const dev = await device(serial);
       const p = await scriptPath(script, true);
+      const loaded = await dl.loadScript(p);
+      // TC 에 이은 스크립트의 확인 필수 동작은 사람 허용과 스크립트 해시를 보는 qa_run_scripts 로만 누른다
+      if (allowAll && loaded.tc)
+        throw new Error(`${loaded.tc.case} 의 스크립트입니다. 확인 필수 동작까지 돌리려면 qa_run_scripts(plan: "${loaded.tc.plan}") 를 쓰세요 (사람이 그 TC 에 허용했을 때만 누른다)`);
       const lines: string[] = [];
-      const r = await dl.runScript(dev, await dl.loadScript(p), {
+      const r = await dl.runScript(dev, loaded, {
         sourcePath: p,
         signal: extra.signal,
         guardDanger: !allowAll,
