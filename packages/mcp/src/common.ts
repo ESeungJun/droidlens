@@ -144,8 +144,8 @@ export async function confirmDestructive(
 }
 
 /**
- * 좌표 (x, y)를 누르기 전 위험 버튼 검사. 기기를 누르는 MCP 도구(tap·graph_record·type_text)가 모두 이 한 곳을 거친다.
- * node: 셀렉터로 찾은 요소, tree: 이미 받은 뷰 계층(없으면 새로 덤프). 위험하면 던진다
+ * 좌표 (x, y)를 누르기 전 확인 필수 버튼 검사. 기기를 누르는 MCP 도구(tap·graph_record·type_text)가 모두 이 한 곳을 거친다.
+ * node: 셀렉터로 찾은 요소, tree: 이미 받은 뷰 계층(없으면 새로 덤프). 확인 필수면 던진다
  */
 export async function refuseRisky(dev: dl.DeviceAdb, x: number, y: number, node?: dl.ViewNode, tree?: dl.ViewNode): Promise<void> {
   const risky = dl.riskyTapLabel(tree ?? (await dl.dumpHierarchy(dev)).root, x, y, node);
@@ -156,7 +156,7 @@ export const allowDangerArg = {
   allowDanger: z
     .boolean()
     .optional()
-    .describe('위험 버튼(삭제·결제·로그아웃·전송)도 누른다. 사용자가 직접 요청했을 때만 true'),
+    .describe('확인 필수 버튼(삭제·결제·로그아웃·전송)도 누른다. 사용자가 직접 요청했을 때만 true'),
 };
 
 // ---------- 시나리오 녹화 ----------

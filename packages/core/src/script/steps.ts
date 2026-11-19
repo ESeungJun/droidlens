@@ -27,7 +27,7 @@ export interface StepContext {
   signal?: AbortSignal;
   /** 단계가 만든 이미지를 기록 쪽에 넘기는 칸 */
   out: StepOutput;
-  /** 누르기 직전에 위험 버튼이면 실패시킨다 (ScriptRunOptions.guardDanger) */
+  /** 누르기 직전에 확인 필수 버튼이면 실패시킨다 (ScriptRunOptions.guardDanger) */
   guardDanger: boolean;
 }
 
@@ -39,7 +39,7 @@ type StepArg<K extends StepKind> = ScriptStep extends infer S ? (S extends unkno
 type Runner<K extends StepKind> = (arg: StepArg<K>, c: StepContext) => Promise<string>;
 
 /**
- * 누를 좌표에서 실제로 반응할 요소(와 셀렉터로 찾은 요소)의 라벨을 보고 위험하면 단계를 실패시킨다.
+ * 누를 좌표에서 실제로 반응할 요소(와 셀렉터로 찾은 요소)의 라벨을 보고 확인 필수면 단계를 실패시킨다.
  * MCP tap 도구와 같은 검사다. 검사가 '어떤 경로로 눌렀나'가 아니라 '무엇이 눌리나'를 따라가게 한다
  */
 async function refuseRiskyTap(dev: DeviceAdb, x: number, y: number, node?: ViewNode): Promise<void> {

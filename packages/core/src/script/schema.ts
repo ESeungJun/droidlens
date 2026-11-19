@@ -4,6 +4,7 @@ import YAML from 'yaml';
 import { z } from 'zod';
 import { KEYCODES } from '../device.js';
 import { MAX_STARTUP_RUNS } from '../perf.js';
+import { CASE_ID, PLAN_ID } from '../qa/plan.js';
 import { ensureDir, safeName } from '../workspace.js';
 
 /**
@@ -178,6 +179,14 @@ export const scriptSchema = z
     screenshots: z.enum(['all', 'failures']).optional(),
     /** 요소를 기다리는 기본 시간 (ms) */
     timeout: z.number().int().optional(),
+    /** QA 계획의 어느 TC에서 나온 스크립트인지 (qa/plan.ts). 회귀 실행 때 TC 결과로 묶는다 */
+    tc: z
+      .object({
+        plan: z.string().max(120).regex(PLAN_ID, 'QA 계획 id 형식이 아닙니다'),
+        case: z.string().regex(CASE_ID, 'TC 번호는 TC-001 형식입니다'),
+      })
+      .strict()
+      .optional(),
     steps: z.array(stepSchema).min(1),
   })
   .strict();

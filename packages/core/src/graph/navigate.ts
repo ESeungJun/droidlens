@@ -1,7 +1,7 @@
 /**
  * 기기에서 행동하고 화면 지도를 따라 움직이기: 행동 실행(performAction), 행동 전후 화면을 지도에 기록(recordTransition·startTransition),
  * 기록된 경로 다시 따라가기(followPath), 지금 화면에서 목표 화면까지 단계 짜기(planRoute), 앱을 다시 열고 그 화면으로 이동(navigateTo).
- * 다시 따라갈 때는 기록된 좌표 대신 같은 요소를 지금 화면에서 다시 찾아 누르고, 위험 버튼·다시 실행할 수 없는 연결은 쓰지 않는다.
+ * 다시 따라갈 때는 기록된 좌표 대신 같은 요소를 지금 화면에서 다시 찾아 누르고, 확인 필수 버튼·다시 실행할 수 없는 연결은 쓰지 않는다.
  * 자동 탐색(explore)·흐름 수집(flow)·MCP graph 도구가 쓴다.
  */
 import type { DeviceAdb } from '../adb.js';
@@ -113,7 +113,7 @@ export type PathStep = Pick<ScreenEdge, 'action' | 'to'>;
 /**
  * 기록된 경로를 지금 화면부터 차례로 다시 실행. 탭·길게 누르기는 기록한 좌표가 아니라
  * 같은 요소(라벨·리소스 id)를 지금 화면에서 다시 찾아 누른다.
- * 위험 버튼·앱 밖으로 나가는 키·다시 실행할 수 없는 연결은 누르지 않고, 단계마다 기록된 화면에 도착했는지 확인해
+ * 확인 필수 버튼·앱 밖으로 나가는 키·다시 실행할 수 없는 연결은 누르지 않고, 단계마다 기록된 화면에 도착했는지 확인해
  * 어긋나면 멈춘다 (엉뚱한 화면에서 다음 단계를 누르지 않게).
  */
 export async function followPath(dev: DeviceAdb, pkg: string, start: Snapshot, path: PathStep[]): Promise<Snapshot> {
@@ -124,7 +124,7 @@ export async function followPath(dev: DeviceAdb, pkg: string, start: Snapshot, p
     if (a.type === 'tap' || a.type === 'longpress') {
       const c = locate(s, a, pkg);
       if (!c) throw new Error(`경로 재생 실패: "${a.label}"을(를) 찾을 수 없습니다`);
-      if (DANGEROUS_LABELS.test(c.label)) throw new Error(`위험 버튼("${c.label}")을 누르게 되어 멈춥니다`);
+      if (DANGEROUS_LABELS.test(c.label)) throw new Error(`확인 필수 버튼("${c.label}")을 누르게 되어 멈춥니다`);
       const { x, y } = center(c.node);
       await (a.type === 'tap' ? tap(dev, x, y) : longPress(dev, x, y));
     } else if (a.type === 'swipe') {
@@ -143,7 +143,7 @@ export async function followPath(dev: DeviceAdb, pkg: string, start: Snapshot, p
  * 실마리로 아는 화면으로 건너간 뒤 기록된 경로를 따른다:
  * - 다른 화면에서 같은 요소(key)를 눌러 간 연결이 있으면 그 도착 화면
  * - 그 요소가 선택된 상태(선택된 탭)로 기록된 화면
- * 건너가는 첫 단계는 짐작이므로 followPath 가 도착 화면을 확인해 어긋나면 멈춘다. 위험 라벨 요소는 쓰지 않는다.
+ * 건너가는 첫 단계는 짐작이므로 followPath 가 도착 화면을 확인해 어긋나면 멈춘다. 확인 필수 라벨 요소는 쓰지 않는다.
  */
 export function planRoute(graph: ScreenGraph, s: Snapshot, target: string): PathStep[] | undefined {
   const here = screenId(s);
@@ -199,7 +199,7 @@ export async function navigateTo(
   if (!path) {
     throw new Error(
       graph.path(root, target)
-        ? '위험 버튼·딥링크·앱 밖 이동을 거치는 경로만 기록돼 있어 자동으로 이동하지 않습니다. 기기에서 직접 이 화면을 열어 두고 다시 시도하세요'
+        ? '확인 필수 버튼·딥링크·앱 밖 이동을 거치는 경로만 기록돼 있어 자동으로 이동하지 않습니다. 기기에서 직접 이 화면을 열어 두고 다시 시도하세요'
         : '앱 첫 화면에서 이 화면까지 기록된 경로가 없습니다. 기기에서 직접 이 화면을 열어 두고 다시 시도하세요',
     );
   }

@@ -23,7 +23,7 @@ export const INSTRUCTIONS = [
   'DroidLens: adb 로 연결된 Android 기기를 보고 조작한다.',
   '순서: devices(기기 확인) → current_screen(지금 앱·Activity) → view_hierarchy(interactiveOnly=true, 화면 글자와 누를 수 있는 요소) → tap·type_text(셀렉터로 지정) → wait_for(다음 화면의 요소) → 필요하면 screenshot.',
   '요소는 좌표보다 셀렉터(text·id·desc)로 지정한다. 좌표는 기기 픽셀이다: view_hierarchy 의 @bounds 와 같고, screenshot 이미지는 줄여서 오므로 응답에 적힌 배율을 곱한다.',
-  '삭제·결제·로그아웃·전송 같은 위험 버튼은 tap·graph_record·type_text·script_run 이 기본으로 누르지 않는다. 사용자가 그 행동을 직접 요청했을 때만 allowDanger=true.',
+  '삭제·결제·로그아웃·전송 같은 확인 필수 버튼은 tap·graph_record·type_text·script_run 이 기본으로 누르지 않는다. 사용자가 그 행동을 직접 요청했을 때만 allowDanger=true.',
   'clear_app_data·db_query(write=true)·prefs_set 처럼 앱 상태를 바꾸는 도구도 사용자가 요청했을 때만 쓴다.',
   'network_*·prefs_*·db_*·app_events 는 앱에 DroidLens SDK 가 들어 있을 때만 동작한다. sdk_apps 가 그 앱을 돌려줄 때만 쓴다.',
   '검증 흐름을 남기려면 scenario_start → 조작 → scenario_step(assert) → scenario_finish. 통과한 흐름은 YAML 스크립트로 저장되어 script_run 으로 다시 돌린다.',

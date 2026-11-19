@@ -47,7 +47,7 @@ export const inspect: Record<string, string> = {
 
   // 화면 흐름
   '{n}회': '{n}×',
-  ', 위험 라벨 {n}개 건너뜀': ', skipped {n} risky labels',
+  ', 확인 필수 라벨 {n}개 건너뜀': ', skipped {n} buttons that need confirmation',
   '탐색 중…': 'Exploring…',
   '▶ 자동 탐색': '▶ Auto-explore',
   '중지': 'Stop',
@@ -123,15 +123,15 @@ export const inspect: Record<string, string> = {
   '앱 첫 화면에서 이 화면까지 기록된 경로가 없습니다. 기기에서 직접 이 화면을 열어 두고 다시 시도하세요': "No recorded path from the app's first screen to this one. Open it on the device yourself and try again",
   '에이전트가 켜져 있고 선택한 앱 화면일 때만 기록합니다': 'Recorded only while the agent is on and the selected app is on screen',
   ' — 실행하지 못한 동작 {n}개: {list}': ' — {n} chosen actions not run: {list}',
-  '위험 라벨': 'risky label',
-  '위험 라벨 (허용하지 않음)': 'risky label (not allowed)',
+  '확인 필수 라벨': 'needs confirmation',
+  '확인 필수 라벨 (허용하지 않음)': 'needs confirmation (not allowed)',
   '현재 화면에서 찾을 수 없음': 'not found on the current screen',
   '지도를 내보냈습니다: {path} — 화면 스크린샷이 그대로 들어 있으니 공유 전에 확인하세요': 'Map exported: {path} — it contains the screen screenshots as-is, so check before sharing',
   ' (형식이 맞지 않아 버린 항목 {n}개)': ' ({n} malformed items dropped)',
   '스크린샷을 포함한 지도 파일로 저장합니다. 다른 사람이 가져오면 그 사람 지도에 합쳐집니다. 화면 스크린샷(계정·메시지 등)이 그대로 들어갑니다': "Save the map with screenshots as one file. Importing it merges it into the other person's map. Screenshots (accounts, messages…) are included as-is",
-  '⚠ 결제·삭제·전송 같은 위험 버튼이 포함돼 있습니다. 체크하면 실제로 누르고, 체크하지 않으면 건너뜁니다.': '⚠ Includes risky buttons (payment, delete, send…). Check to really press them; otherwise they are skipped.',
+  '⚠ 결제·삭제·전송 같은 확인 필수 버튼이 포함돼 있습니다. 체크하면 실제로 누르고, 체크하지 않으면 건너뜁니다.': '⚠ Includes buttons that need confirmation (payment, delete, send…). Check to really press them; otherwise they are skipped.',
   '탐색 중입니다. 끝나거나 중지한 뒤 다시 시도하세요': 'Exploring. Try again after it finishes or you stop it',
   '화면 이동 중입니다. 끝난 뒤 다시 시도하세요': 'Moving to a screen. Try again when it finishes',
   '파일이 너무 큽니다 (50MB 초과)': 'File too large (over 50MB)',
-  '위험 버튼·딥링크·앱 밖 이동을 거치는 경로만 기록돼 있어 자동으로 이동하지 않습니다. 기기에서 직접 이 화면을 열어 두고 다시 시도하세요': 'The only recorded paths go through risky buttons, deep links or other apps, so it will not move automatically. Open this screen on the device yourself and try again',
+  '확인 필수 버튼·딥링크·앱 밖 이동을 거치는 경로만 기록돼 있어 자동으로 이동하지 않습니다. 기기에서 직접 이 화면을 열어 두고 다시 시도하세요': 'The only recorded paths go through buttons that need confirmation, deep links or other apps, so it will not move automatically. Open this screen on the device yourself and try again',
 };

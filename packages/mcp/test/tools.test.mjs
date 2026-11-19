@@ -53,19 +53,19 @@ test('wait_for: 시간 초과 메시지에 지금 화면과 비슷한 글자 후
   assert.match(r.text, /주문 내역/);
 });
 
-test('tap: 위험 버튼은 누르지 않고, allowDanger 면 누른다', async () => {
+test('tap: 확인 필수 버튼은 누르지 않고, allowDanger 면 누른다', async () => {
   s.setUi(home());
   s.clearLog();
   const r = await s.call('tap', { text: '삭제' });
   assert.equal(r.isError, true);
-  assert.match(r.text, /위험해 보이는 버튼\("삭제"\)/);
+  assert.match(r.text, /확인 필수 버튼\("삭제"\)/);
   assert.deepEqual(taps(), []);
   const ok = await s.call('tap', { text: '삭제', allowDanger: true });
   assert.equal(ok.isError, false, ok.text);
   assert.deepEqual(taps(), ['input tap 800 350']);
 });
 
-test('tap: 좌표로 눌러도 그 자리의 위험 버튼(부모 행)을 본다', async () => {
+test('tap: 좌표로 눌러도 그 자리의 확인 필수 버튼(부모 행)을 본다', async () => {
   s.setUi(home());
   s.clearLog();
   const r = await s.call('tap', { x: 900, y: 550 });
@@ -74,19 +74,19 @@ test('tap: 좌표로 눌러도 그 자리의 위험 버튼(부모 행)을 본다
   assert.deepEqual(taps(), []);
 });
 
-test('graph_record(action=tap): tap 과 같은 위험 버튼 거부', async () => {
+test('graph_record(action=tap): tap 과 같은 확인 필수 버튼 거부', async () => {
   s.setUi(home());
   s.clearLog();
   const r = await s.call('graph_record', { packageName: 'com.example.app', action: { type: 'tap', text: '삭제' } });
   assert.equal(r.isError, true);
-  assert.match(r.text, /위험해 보이는 버튼\("삭제"\)/);
+  assert.match(r.text, /확인 필수 버튼\("삭제"\)/);
   const xy = await s.call('graph_record', { packageName: 'com.example.app', action: { type: 'longpress', x: 900, y: 550 } });
   assert.equal(xy.isError, true);
   assert.match(xy.text, /로그아웃/);
   assert.deepEqual(taps(), []);
 });
 
-test('graph_record(action=tap): 위험하지 않은 버튼은 누른다', async () => {
+test('graph_record(action=tap): 확인 필수가 아닌 버튼은 누른다', async () => {
   s.setUi(home());
   s.clearLog();
   const r = await s.call('graph_record', { packageName: 'com.example.app', action: { type: 'tap', text: '다음' } });
@@ -102,12 +102,12 @@ test('graph_record(action=tap, allowDanger): 사용자가 요청했으면 누른
   assert.deepEqual(taps(), ['input tap 800 350']);
 });
 
-test('type_text: 셀렉터가 위험 버튼이면 포커스 탭을 하지 않는다', async () => {
+test('type_text: 셀렉터가 확인 필수 버튼이면 포커스 탭을 하지 않는다', async () => {
   s.setUi(home());
   s.clearLog();
   const r = await s.call('type_text', { text: '삭제', value: 'x' });
   assert.equal(r.isError, true);
-  assert.match(r.text, /위험해 보이는 버튼/);
+  assert.match(r.text, /확인 필수 버튼/);
   assert.deepEqual(taps(), []);
   const ok = await s.call('type_text', { id: 'memo', value: 'hello' });
   assert.equal(ok.isError, false, ok.text);
