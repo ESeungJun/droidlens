@@ -45,7 +45,7 @@ const basePlan = () => ({
 test('계획 형식: 기본값과 선택 규칙', () => {
   const p = qa.validatePlan(basePlan());
   assert.equal(p.cases[0].selected, true);
-  assert.equal(p.cases[2].selected, false, '위험 행동이 있는 TC 는 기본으로 고르지 않는다');
+  assert.equal(p.cases[2].selected, false, '확인 필수 TC 는 기본으로 고르지 않는다');
   assert.equal(p.cases[0].allowDanger, false);
   assert.equal(p.cases[0].automatable, 'yes');
   assert.deepEqual(p.cases[0].preconditions, []);
@@ -84,7 +84,7 @@ test('계획 형식: 번호·디자인 TC·계획 id', () => {
   assert.throws(() => qa.validatePlan(noReq), /덮는 요구사항/);
 });
 
-test('에이전트 계획: 위험 허용은 지우고 사람 결정은 이어받는다', () => {
+test('에이전트 계획: 실제로 누르기 허용은 지우고 사람 결정은 이어받는다', () => {
   const prev = qa.validatePlan(basePlan());
   prev.cases[2].allowDanger = true;
   prev.cases[2].selected = true;
@@ -95,13 +95,13 @@ test('에이전트 계획: 위험 허용은 지우고 사람 결정은 이어받
   draft.cases[0].allowDanger = true; // 에이전트가 넣은 값
   draft.cases[0].danger = undefined;
   const next = qa.acceptAgentPlan(draft, prev);
-  assert.equal(next.cases[0].allowDanger, false, '에이전트는 위험 허용을 켤 수 없다');
+  assert.equal(next.cases[0].allowDanger, false, '에이전트는 실제로 누르기 허용을 켤 수 없다');
   assert.equal(next.cases[0].script, 'login-tc001');
   assert.equal(next.cases[1].selected, false);
   assert.equal(next.cases[2].allowDanger, true, '사람이 허용한 TC 는 그대로');
   assert.equal(next.cases[2].selected, true);
 
-  // 위험 설명이 바뀌거나 새로 위험이 붙으면 다시 사람 몫
+  // 확인 필수 설명이 바뀌거나 새로 확인 필수가 붙으면 다시 사람 몫
   const changed = basePlan();
   changed.cases[2].danger = '계정 삭제 + 결제 취소';
   changed.cases[0].danger = '알림 전송';
@@ -287,7 +287,7 @@ test('저장: 만들기·문서 넣기·중복·목록·고치기', async () => 
   await assert.rejects(qa.updateQaCase(plan.id, 'TC-404', { selected: true }), /TC 가 없습니다/);
   await assert.rejects(qa.updateQaCase(plan.id, 'TC-001', { requirements: ['R-77'] }), /없는 요구사항/);
 
-  // 에이전트가 다시 뽑아도 사람이 허용한 위험 TC 는 그대로
+  // 에이전트가 다시 뽑아도 사람이 허용한 확인 필수 TC 는 그대로
   const re = await qa.saveAgentQaPlan(plan.id, { requirements: draft.requirements, cases: draft.cases });
   assert.equal(re.cases[2].allowDanger, true);
 
@@ -314,10 +314,10 @@ test('에이전트 계획: 실행 내용이 바뀌면 허용·선택을 다시 �
   prev.cases[2].selected = true;
   prev.cases[0].script = 'real';
   const draft = basePlan();
-  draft.cases[2].steps = ['설정 → 탈퇴', '100만원 결제']; // 위험 설명은 그대로, 단계만 바꿈
+  draft.cases[2].steps = ['설정 → 탈퇴', '100만원 결제']; // 확인 필수 설명은 그대로, 단계만 바꿈
   draft.cases[2].data = 'card=real';
   draft.cases[0].script = 'attacker-script';
-  draft.cases[1].danger = '   '; // 공백뿐인 위험 설명은 없는 것으로
+  draft.cases[1].danger = '   '; // 공백뿐인 확인 필수 설명은 없는 것으로
   const next = qa.acceptAgentPlan(draft, prev);
   assert.equal(next.cases[2].allowDanger, false);
   assert.equal(next.cases[2].selected, false);
@@ -412,8 +412,8 @@ test('저장: 동시에 문서를 넣어도 번호가 겹치지 않고, TC 형�
   assert.equal(out.createdAt, p.createdAt);
 });
 
-test('다시 확인 표시: 위험 표시가 빠지거나 바뀌면 붙고, 사람이 정하면 지워진다', async () => {
-  const prev = qa.validatePlan(basePlan()); // TC-003 은 위험 "계정 삭제", 기본 선택 꺼짐
+test('다시 보기 표시: 확인 필수 표시가 빠지거나 바뀌면 붙고, 사람이 정하면 지워진다', async () => {
+  const prev = qa.validatePlan(basePlan()); // TC-003 은 확인 필수 "계정 삭제", 기본 선택 꺼짐
   const removed = basePlan();
   delete removed.cases[2].danger;
   removed.cases[0].review = ['danger-changed']; // 에이전트가 낸 표시는 무시
@@ -434,7 +434,7 @@ test('다시 확인 표시: 위험 표시가 빠지거나 바뀌면 붙고, 사�
   assert.deepEqual(r2.cases[2].review, ['danger-changed']);
   assert.equal(r2.cases[2].allowDanger, false);
   assert.equal(r2.cases[2].selected, false);
-  // 처음부터 위험한 새 TC 는 기본으로 꺼질 뿐 표시는 없다
+  // 처음부터 확인 필수인 새 TC 는 기본으로 꺼질 뿐 표시는 없다
   assert.equal(qa.acceptAgentPlan(basePlan()).cases[2].review, undefined);
 
   // 저장소: 사람이 선택을 정하면 표시가 지워지고, 문구만 고치면 남는다

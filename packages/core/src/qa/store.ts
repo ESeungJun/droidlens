@@ -82,7 +82,7 @@ export async function loadQaPlan(id: string): Promise<QaPlan> {
 
 /**
  * 사람이 고친 계획 저장 (형식 검사 후). id·만든 시각·문서 목록은 저장된 것을 지킨다.
- * 사람 전용: 위험 허용·선택·스크립트를 그대로 저장하므로 MCP 도구나 대화창 에이전트에서 부르지 않는다.
+ * 사람 전용: 실제로 누르기 허용·선택·스크립트를 그대로 저장하므로 MCP 도구나 대화창 에이전트에서 부르지 않는다.
  * 에이전트 결과는 saveAgentQaPlan 으로 저장한다.
  */
 export function saveQaPlan(plan: QaPlan): Promise<QaPlan> {
@@ -102,7 +102,7 @@ async function writeHumanPlan(plan: QaPlan): Promise<QaPlan> {
 }
 
 /**
- * 에이전트가 뽑은 요구사항·TC 저장. 문서 목록과 사람이 정한 값(위험 허용·선택·스크립트)은
+ * 에이전트가 뽑은 요구사항·TC 저장. 문서 목록과 사람이 정한 값(실제로 누르기 허용·선택·스크립트)은
  * 저장된 계획에서 이어받고, 에이전트가 넣은 allowDanger 는 지운다.
  */
 export async function saveAgentQaPlan(
@@ -127,13 +127,13 @@ export async function saveAgentQaPlan(
   });
 }
 
-/** 사람이 TC 하나를 고칠 때 (선택·위험 허용·문구). 사람 전용: MCP 도구나 대화창 에이전트에서 부르지 않는다 */
+/** 사람이 TC 하나를 고칠 때 (선택·실제로 누르기 허용·문구). 사람 전용: MCP 도구나 대화창 에이전트에서 부르지 않는다 */
 export function updateQaCase(id: string, caseId: string, patch: Partial<Omit<QaCase, 'id'>>): Promise<QaPlan> {
   return withPlanLock(id, async () => {
     const plan = await loadQaPlan(id);
     const i = plan.cases.findIndex((c) => c.id === caseId);
     if (i < 0) throw new Error(`TC 가 없습니다: ${caseId}`);
-    // 사람이 선택·허용을 정하면 확인한 것으로 보고 다시 확인 표시를 지운다
+    // 사람이 선택·허용을 정하면 확인한 것으로 보고 다시 보기 표시를 지운다
     const decided = 'selected' in patch || 'allowDanger' in patch;
     const parsed = qaCaseSchema.safeParse({
       ...plan.cases[i],

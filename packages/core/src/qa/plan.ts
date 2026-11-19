@@ -22,14 +22,14 @@ export const CASE_KINDS = ['normal', 'exception', 'boundary', 'design'] as const
 export const AUTOMATABLE = ['yes', 'partial', 'manual'] as const;
 /**
  * 사람이 다시 봐야 하는 이유. 에이전트가 다시 뽑을 때 core 가 붙이고, 사람이 TC 를 확인(선택·허용을 정함)하면 지운다.
- * danger-removed: 위험 표시가 빠짐 (선택은 이전 값 그대로라 꺼져 있을 수 있다)
- * danger-changed: 사람이 본 뒤 위험 TC 의 실행 내용이 바뀜 (허용·선택을 풀었다)
+ * danger-removed: 확인 필수 표시가 빠짐 (선택은 이전 값 그대로라 꺼져 있을 수 있다)
+ * danger-changed: 사람이 본 뒤 확인 필수 TC 의 실행 내용이 바뀜 (허용·선택을 풀었다)
  */
 export const REVIEW_REASONS = ['danger-removed', 'danger-changed'] as const;
 export type QaReviewReason = (typeof REVIEW_REASONS)[number];
 export const REVIEW_LABEL: Record<QaReviewReason, string> = {
-  'danger-removed': '위험 표시가 빠졌어요. 실행할지 확인해 주세요',
-  'danger-changed': '위험 TC 내용이 바뀌었어요. 다시 허용해 주세요',
+  'danger-removed': '다시 보기: 확인 필수 표시가 빠졌어요. 실행할지 정해 주세요',
+  'danger-changed': '다시 보기: 확인 필수 TC 내용이 바뀌었어요. 다시 허용해 주세요',
 };
 
 export const CASE_KIND_LABEL: Record<(typeof CASE_KINDS)[number], string> = {
@@ -85,14 +85,14 @@ export const qaCaseSchema = z
     expected: z.array(line).min(1, '기대 결과가 하나 이상 필요합니다'),
     /** 입력값 (계정·검색어 등) */
     data: z.string().max(2000).optional(),
-    /** 위험 행동 설명 (결제·삭제·전송·탈퇴 등). 없으면 비움 */
+    /** 확인 필수 동작 설명 (결제·삭제·전송·탈퇴 등). 없으면 비움 */
     danger: z
       .string()
       .trim()
       .max(500)
       .optional()
       .transform((v) => v || undefined),
-    /** 위험 행동을 실제로 해도 되는지. 사람만 켠다 (에이전트가 저장한 값은 무시) */
+    /** 확인 필수 동작을 실제로 해도 되는지. 사람만 켠다 (에이전트가 저장한 값은 무시) */
     allowDanger: z.boolean().default(false),
     automatable: z.enum(AUTOMATABLE).default('yes'),
     /** 이번 회차에 실행할지 */
@@ -109,7 +109,7 @@ export const qaCaseSchema = z
       .optional(),
     source: sourceRefSchema.optional(),
     notes: z.string().max(2000).optional(),
-    /** 다시 확인 필요 표시 (REVIEW_REASONS) */
+    /** 다시 보기 표시 (REVIEW_REASONS) */
     review: z.array(z.enum(REVIEW_REASONS)).optional(),
   })
   .strict();
@@ -179,13 +179,13 @@ export function validatePlan(raw: unknown): QaPlan {
   return withDefaults(r.data);
 }
 
-/** selected 를 정하지 않은 TC: 위험 행동이 없을 때만 기본 선택 */
+/** selected 를 정하지 않은 TC: 확인 필수 동작이 없을 때만 기본 선택 */
 function withDefaults(p: QaPlan): QaPlan {
   return { ...p, cases: p.cases.map((c) => ({ ...c, selected: c.selected ?? !c.danger })) };
 }
 
 /**
- * 에이전트가 만든 계획을 받을 때. 위험 허용은 사람만 켤 수 있으므로 지우고,
+ * 에이전트가 만든 계획을 받을 때. 실제로 누르기 허용은 사람만 켤 수 있으므로 지우고,
  * 이미 저장된 계획(prev)이 있으면 같은 번호 TC의 사람 결정(allowDanger·selected·script)을 이어받는다.
  */
 export function acceptAgentPlan(raw: unknown, prev?: QaPlan): QaPlan {
@@ -195,12 +195,12 @@ export function acceptAgentPlan(raw: unknown, prev?: QaPlan): QaPlan {
     ...plan,
     cases: plan.cases.map((c) => {
       const old = before.get(c.id);
-      // 사람이 허용한 뒤 실행 내용(위험 설명·단계·입력값 등)이 하나라도 바뀌면 다시 허용받아야 한다
+      // 사람이 허용한 뒤 실행 내용(확인 필수 설명·단계·입력값 등)이 하나라도 바뀌면 다시 허용받아야 한다
       const same = !!old && dangerFingerprint(c) === dangerFingerprint(old);
       const allowDanger = old?.allowDanger === true && !!c.danger && same;
-      // 위험 TC 가 새로 생기거나 내용이 바뀌면 선택을 풀고, 그 밖에는 사람이 고른 값을 따른다
+      // 확인 필수 TC 가 새로 생기거나 내용이 바뀌면 선택을 풀고, 그 밖에는 사람이 고른 값을 따른다
       const unselect = !!c.danger && !same;
-      // 다시 확인 표시: 사람이 아직 확인하지 않은 표시는 내용이 그대로면 이어 간다
+      // 다시 보기 표시: 사람이 아직 확인하지 않은 표시는 내용이 그대로면 이어 간다
       const review = new Set<QaReviewReason>(same ? (old?.review ?? []) : []);
       if (old?.danger && !c.danger) review.add('danger-removed');
       if (old?.danger && c.danger && !same) review.add('danger-changed');
@@ -217,7 +217,7 @@ export function acceptAgentPlan(raw: unknown, prev?: QaPlan): QaPlan {
   };
 }
 
-/** 위험 허용이 가리키는 실행 내용. 이 값이 같아야 이전 허용을 이어받는다 */
+/** 실제로 누르기 허용이 가리키는 실행 내용. 이 값이 같아야 이전 허용을 이어받는다 */
 export function dangerFingerprint(c: Pick<QaCase, 'danger' | 'steps' | 'preconditions' | 'expected' | 'data'>): string {
   return JSON.stringify([c.danger ?? '', c.preconditions, c.steps, c.expected, c.data ?? '']);
 }
@@ -231,7 +231,7 @@ function isFigmaHttpsUrl(v: string): boolean {
   }
 }
 
-/** 다시 확인이 필요한 TC 와 이유 (데스크톱·MCP 가 계획을 보여 줄 때 맨 위에 띄운다) */
+/** 다시 봐야 하는 TC 와 이유 (데스크톱·MCP 가 계획을 보여 줄 때 맨 위에 띄운다) */
 export function qaReviewList(plan: QaPlan): { id: string; title: string; reasons: QaReviewReason[]; selected: boolean }[] {
   return plan.cases.filter((c) => c.review?.length).map((c) => ({ id: c.id, title: c.title, reasons: c.review!, selected: !!c.selected }));
 }
