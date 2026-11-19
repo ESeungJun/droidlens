@@ -136,7 +136,8 @@ export function register(server: McpServer): void {
         // ../ 같은 표기를 풀어 실제로 읽을 경로를 보여 준다
         target = resolve(c.file);
         // 대화창은 내장 파일 읽기를 막아 두었으므로, 이 도구로 파일을 읽을 때는 사용자가 고른 파일인지 묻는다
-        if (process.env.DROIDLENS_CONFIRM === '1') {
+        // 에이전트가 정한 경로라 묻는다: 대화창은 언제나, Claude Code 는 확인을 물을 수 있을 때(elicitation)
+        if (process.env.DROIDLENS_CONFIRM === '1' || server.server.getClientCapabilities()?.elicitation) {
           const what = `QA 계획에 파일 넣기: ${basename(target)} — ${target} (계획 "${oneLine(p.name, 60)}")`;
           if (what.length > CONFIRM_MAX)
             throw new Error(
@@ -289,9 +290,19 @@ export function register(server: McpServer): void {
         if (!c.danger) throw new Error(`${caseId} 에는 확인 필수 표시가 없어 허용할 것이 없습니다`);
         const qaTab = `사용자에게 DroidLens 앱의 QA 탭에서 허용하거나, 터미널에서 직접 \`droidlens-mcp qa allow ${plan} ${caseId}\` 를 실행하도록 안내하세요`;
         // 제목·확인 필수 설명은 에이전트·문서가 쓴 글이라, 실제로 할 단계와 기대 결과까지 보여 주고 묻는다
-        const steps = c.steps.map((x, i) => `${i + 1}) ${oneLine(x, 120)}`).join(' ');
-        const what = `${caseId} 실제로 누르기 허용 — 확인 필수: ${oneLine(c.danger, 100)} · 단계: ${steps} · 기대: ${oneLine(c.expected.join(' / '), 120)}`;
-        if (what.length > CONFIRM_MAX) throw new Error(`${caseId} 는 단계가 길어 확인 창에 다 보이지 않습니다. ${qaTab}`);
+        // 허용이 가리키는 실행 내용(지문의 모든 칸)을 자르지 않고 보여 준다. 다 못 보이면 묻지 않는다
+        const flat = (x: string) => oneLine(x, Number.MAX_SAFE_INTEGER);
+        const list = (xs: string[]) => xs.map((x, i) => `${i + 1}) ${flat(x)}`).join(' ');
+        const what = [
+          `${caseId} 실제로 누르기 허용 — 확인 필수: ${flat(c.danger)}`,
+          c.preconditions.length ? `사전 조건: ${list(c.preconditions)}` : '',
+          `단계: ${list(c.steps)}`,
+          `기대: ${list(c.expected)}`,
+          c.data ? `입력값: ${flat(c.data)}` : '',
+        ]
+          .filter(Boolean)
+          .join(' · ');
+        if (what.length > CONFIRM_MAX) throw new Error(`${caseId} 는 내용이 길어 확인 창에 다 보이지 않습니다. ${qaTab}`);
         shown = dl.dangerFingerprint(c);
         await askUser(server, what, { question: `DroidLens: ${what}\n허용할까요?`, refuse: qaTab, ctx: { tool: 'qa_case_allow' } });
       }

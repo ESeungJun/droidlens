@@ -155,13 +155,19 @@ test('대화창(DROIDLENS_CONFIRM=1): 파일 넣기·허용은 확인 창으로 
     assert.equal((await c.call('qa_plan_save', { plan: id, requirements: noSource, cases })).isError, false);
     const p3 = c.call('qa_case_allow', { plan: id, case: 'TC-002' });
     const a3 = await waitAsk(3);
-    assert.equal(a3.what, 'TC-002 실제로 누르기 허용 — 확인 필수: 계정 삭제 · 단계: 1) 삭제 누르기 · 기대: 삭제 완료');
+    assert.equal(a3.what, 'TC-002 실제로 누르기 허용 — 확인 필수: 계정 삭제 · 단계: 1) 삭제 누르기 · 기대: 1) 삭제 완료');
     broker.answer(a3.id, true);
     const r3 = await p3;
     assert.equal(r3.isError, false, r3.text);
     assert.match(r3.text, /✓ 확인 필수\(허용\) TC-002/);
 
-    // TC 밖에서 allowDanger 로 확인 필수 버튼을 누르려 하면 그 버튼을 보여 주고 묻는다. 거부하면 누르지 않는다
+    // 확인 창에 다 보이지 않을 만큼 긴 TC 는 일부만 보여 주고 묻지 않는다
+    await c.call('qa_case_update', { plan: id, case: 'TC-002', patch: { steps: ['삭제 누르기', '가'.repeat(500)] } });
+    const longAllow = await c.call('qa_case_allow', { plan: id, case: 'TC-002' });
+    assert.match(longAllow.text, /내용이 길어 확인 창에 다 보이지 않습니다/);
+    assert.equal(asks.length, 3);
+
+    // allowDanger 로 확인 필수 버튼을 누르려 하면 그 버튼을 보여 주고 묻는다. 거부하면 누르지 않는다
     c.setUi(
       ui(
         { cls: 'android.widget.Button', text: '계정 삭제', bounds: [0, 0, 100, 100], clickable: true },

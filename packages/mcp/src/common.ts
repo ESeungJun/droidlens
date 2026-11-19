@@ -202,7 +202,7 @@ async function askConfirm(what: string, tool?: string): Promise<void> {
 /**
  * 좌표 (x, y)를 누르기 전 확인 필수 버튼 검사 (allowDanger 포함). 기기를 누르는 도구가 모두 이 한 곳을 거친다.
  * allowDanger 가 없으면 확인 필수 버튼을 거부하고, 있으면 TC 시나리오에서는 그 TC 의 허용을 확인한다.
- * TC 밖의 대화창(DROIDLENS_CONFIRM=1)에서는 누르려는 버튼이 확인 필수일 때 사용자에게 묻는다
+ * 대화창(DROIDLENS_CONFIRM=1)에서는 TC 안팎 모두, 누르려는 버튼이 확인 필수일 때 그 버튼을 보여 주고 묻는다
  */
 export async function guardRisky(
   requested: boolean | undefined,
@@ -214,7 +214,8 @@ export async function guardRisky(
   tool: string,
 ): Promise<void> {
   if (!(await dangerAllowed(requested))) return refuseRisky(dev, x, y, node, tree);
-  if ((recorder.active && recorder.tc) || process.env.DROIDLENS_CONFIRM !== '1') return;
+  // 대화창에서는 TC 허용이 있어도 누를 버튼마다 묻는다 (TC 허용이 그 시나리오의 다른 확인 필수 버튼까지 열지 않게)
+  if (process.env.DROIDLENS_CONFIRM !== '1') return;
   const risky = dl.riskyTapLabel(tree ?? (await dl.dumpHierarchy(dev)).root, x, y, node);
   if (risky) await askConfirm(`확인 필수 버튼 "${risky.replace(/\s+/g, ' ').slice(0, 100)}" 실제로 누르기`, tool);
 }
