@@ -243,16 +243,28 @@ export interface CoverageRow {
   selected: string[];
 }
 
-/** 요구사항별로 덮는 TC (추적표) */
-export function qaCoverage(plan: QaPlan): { rows: CoverageRow[]; uncovered: string[]; unselected: string[] } {
+/** 요구사항별로 덮는 TC (추적표). missingKinds: 정상 또는 예외 TC 가 빠진 요구사항 (디자인 TC 로만 덮인 것은 뺀다) */
+export function qaCoverage(plan: QaPlan): {
+  rows: CoverageRow[];
+  uncovered: string[];
+  unselected: string[];
+  missingKinds: { id: string; missing: ('normal' | 'exception')[] }[];
+} {
   const rows = plan.requirements.map((requirement) => {
     const cases = plan.cases.filter((c) => c.requirements.includes(requirement.id));
     return { requirement, cases: cases.map((c) => c.id), selected: cases.filter((c) => c.selected).map((c) => c.id) };
+  });
+  const missingKinds = plan.requirements.flatMap((r) => {
+    const kinds = new Set(plan.cases.filter((c) => c.requirements.includes(r.id)).map((c) => c.kind));
+    if (!kinds.size || (kinds.size === 1 && kinds.has('design'))) return [];
+    const missing = (['normal', 'exception'] as const).filter((k) => !kinds.has(k));
+    return missing.length ? [{ id: r.id, missing }] : [];
   });
   return {
     rows,
     uncovered: rows.filter((r) => r.cases.length === 0).map((r) => r.requirement.id),
     unselected: rows.filter((r) => r.cases.length > 0 && r.selected.length === 0).map((r) => r.requirement.id),
+    missingKinds,
   };
 }
 

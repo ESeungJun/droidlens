@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import { droidlensHome, ensureDir, readJson, safeName, timestamp, writeFileAtomic, writeJson } from '../workspace.js';
 import {
   acceptAgentPlan,
+  dangerFingerprint,
   formatIssues,
   nextId,
   PLAN_ID,
@@ -145,6 +146,94 @@ export function updateQaCase(id: string, caseId: string, patch: Partial<Omit<QaC
     const merged = parsed.data;
     const cases = plan.cases.slice();
     cases[i] = merged;
+    return writeHumanPlan({ ...plan, cases });
+  });
+}
+
+/** 에이전트가 TC 하나를 고칠 때 받는 칸. 실제로 누르기 허용·스크립트·다시 보기 표시는 받지 않는다 */
+export const AGENT_CASE_FIELDS = [
+  'title',
+  'requirements',
+  'priority',
+  'kind',
+  'preconditions',
+  'steps',
+  'expected',
+  'data',
+  'danger',
+  'automatable',
+  'design',
+  'source',
+  'notes',
+  'selected',
+] as const;
+export type AgentCasePatch = Partial<Pick<QaCase, (typeof AGENT_CASE_FIELDS)[number]>>;
+
+/**
+ * 에이전트가 TC 하나를 고칠 때 (MCP qa_case_update).
+ * 고친 계획을 saveAgentQaPlan 과 같은 규칙(acceptAgentPlan)으로 받아 실행 내용이 바뀌면 허용을 풀고 다시 보기를 단다.
+ * 선택: 끄기는 언제나 되고, 켜기는 확인 필수 표시가 없는 TC 만 된다 (확인 필수 TC 는 사람이 고른다)
+ */
+export function updateQaCaseByAgent(id: string, caseId: string, patch: AgentCasePatch): Promise<QaPlan> {
+  const extra = Object.keys(patch).filter((k) => !(AGENT_CASE_FIELDS as readonly string[]).includes(k));
+  if (extra.length) return Promise.reject(new Error(`에이전트가 고칠 수 없는 칸입니다: ${extra.join(', ')}`));
+  return withPlanLock(id, async () => {
+    const prev = await loadQaPlan(id);
+    const i = prev.cases.findIndex((c) => c.id === caseId);
+    if (i < 0) throw new Error(`TC 가 없습니다: ${caseId}`);
+    const { selected, ...rest } = patch;
+    if (selected !== undefined && typeof selected !== 'boolean') throw new Error('selected 는 true 나 false 입니다');
+    const parsed = qaCaseSchema.safeParse({ ...prev.cases[i], ...rest, id: caseId });
+    if (!parsed.success) throw new Error(`TC 형식 오류:\n${formatIssues(parsed.error)}`);
+    const cases = prev.cases.slice();
+    cases[i] = parsed.data;
+    const next = acceptAgentPlan({ ...prev, cases, updatedAt: Date.now() }, prev);
+    const c = next.cases[i];
+    // 확인 필수였거나, 지금 확인 필수거나, 다시 보기 표시가 있으면 사람이 고른다 (표시를 지우면서 고르는 것도 막는다)
+    if (selected === true && !c.selected && (c.danger || prev.cases[i].danger || c.review?.length)) {
+      throw new Error(`${caseId} 는 확인 필수 TC 이거나 다시 보기 표시가 있어 에이전트가 고를 수 없습니다. 사용자가 고르게 안내하세요`);
+    }
+    if (selected !== undefined) c.selected = selected;
+    const checked = validatePlan(next);
+    await writeJson(planFile(id), checked);
+    return checked;
+  });
+}
+
+/**
+ * 통과해 저장한 회귀 스크립트를 TC 에 잇는다 (실행기 전용: scenario_finish 가 통과한 TC 에만 부른다)
+ */
+export function linkQaCaseScript(id: string, caseId: string, script: string, fingerprint?: string): Promise<QaPlan> {
+  return withPlanLock(id, async () => {
+    const plan = await loadQaPlan(id);
+    const i = plan.cases.findIndex((c) => c.id === caseId);
+    if (i < 0) throw new Error(`TC 가 없습니다: ${caseId}`);
+    if (fingerprint !== undefined && dangerFingerprint(plan.cases[i]) !== fingerprint) throw new Error('실행하는 동안 TC 내용이 바뀌어 스크립트를 잇지 않았습니다');
+    const cases = plan.cases.slice();
+    cases[i] = { ...cases[i], script };
+    const next = validatePlan({ ...plan, cases, updatedAt: Date.now() });
+    await writeJson(planFile(id), next);
+    return next;
+  });
+}
+
+/**
+ * 확인 필수 TC 의 실제로 누르기 허용을 켜거나 끈다. 켜면 고른 것으로 보고 다시 보기 표시를 지운다.
+ * 켤 때는 사람에게 보여 준 내용의 dangerFingerprint 를 받아, 묻는 동안 TC 가 바뀌었으면 허용하지 않는다.
+ * 사람 전용: 사람이 직접 고른 화면·CLI, 또는 사용자 확인 창을 통과한 뒤에만 부른다
+ */
+export function setQaCaseAllowDanger(id: string, caseId: string, allow: boolean, shownFingerprint?: string): Promise<QaPlan> {
+  return withPlanLock(id, async () => {
+    const plan = await loadQaPlan(id);
+    const i = plan.cases.findIndex((c) => c.id === caseId);
+    if (i < 0) throw new Error(`TC 가 없습니다: ${caseId}`);
+    if (allow) {
+      if (!plan.cases[i].danger) throw new Error(`${caseId} 에는 확인 필수 표시가 없어 허용할 것이 없습니다`);
+      if (shownFingerprint === undefined) throw new Error('허용하려면 사람에게 보여 준 TC 내용이 필요합니다');
+      if (dangerFingerprint(plan.cases[i]) !== shownFingerprint) throw new Error(`${caseId} 내용이 확인하는 동안 바뀌어 허용하지 않았습니다. 바뀐 내용으로 다시 확인하세요`);
+    }
+    const cases = plan.cases.slice();
+    cases[i] = { ...cases[i], allowDanger: allow, review: undefined, ...(allow ? { selected: true } : {}) };
     return writeHumanPlan({ ...plan, cases });
   });
 }

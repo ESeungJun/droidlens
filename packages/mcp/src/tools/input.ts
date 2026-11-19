@@ -1,7 +1,7 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import * as dl from '@droidlens/core';
-import { device, hasSelector, resolveNode, recordStep, logAction, nodeLabel, recorder, cleanSelector, text, serialArg, selectorShape, pickSelector, describeNode, readOnly, acts, refuseRisky, allowDangerArg, PIXELS } from '../common.js';
+import { device, hasSelector, resolveNode, recordStep, logAction, nodeLabel, recorder, cleanSelector, text, serialArg, selectorShape, pickSelector, describeNode, readOnly, acts, allowDangerArg, guardRisky, PIXELS } from '../common.js';
 
 export function register(server: McpServer): void {
   // ---------- 조작 ----------
@@ -35,7 +35,7 @@ export function register(server: McpServer): void {
         what = describeNode(node);
       }
       if (x === undefined || y === undefined) throw new Error('셀렉터나 x/y 중 하나가 필요합니다');
-      if (!a.allowDanger) await refuseRisky(dev, x, y, node, tree);
+      await guardRisky(a.allowDanger, dev, x, y, node, tree, 'tap');
       if (a.long) await dl.longPress(dev, x, y);
       else await dl.tap(dev, x, y);
       // 녹화: 셀렉터로 눌렀으면 셀렉터를, 아니면 좌표를 남긴다 (셀렉터 쪽이 해상도·레이아웃 변화에 강하다)
@@ -101,7 +101,7 @@ export function register(server: McpServer): void {
         into = await resolveNode(dev, sel, tree);
         const { x, y } = dl.center(into);
         // 포커스를 주려는 탭도 기기를 누르는 것이라 tap 과 같은 검사를 거친다
-        if (!a.allowDanger) await refuseRisky(dev, x, y, into, tree);
+        await guardRisky(a.allowDanger, dev, x, y, into, tree, 'type_text');
         await dl.tap(dev, x, y);
         await dl.sleep(300);
       }

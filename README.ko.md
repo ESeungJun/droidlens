@@ -119,20 +119,21 @@ DroidLens.event("purchase_clicked", JSONObject().put("itemId", 42))
 
 앱의 **설정** 탭에서 버튼 두 개만 누르면 됩니다.
 
-1. **MCP 자동 등록** — 앱에 내장된 MCP 서버(도구 52개)를 `claude mcp add --scope user`로 등록합니다. Node를 따로 설치할 필요가 없습니다.
+1. **MCP 자동 등록** — 앱에 내장된 MCP 서버(도구 60개)를 `claude mcp add --scope user`로 등록합니다. Node를 따로 설치할 필요가 없습니다.
 2. **에이전트 설치** — 전용 에이전트를 `~/.claude/agents/`에 복사합니다.
 
 | 에이전트 | 하는 일 |
 | --- | --- |
 | `droidlens-verifier` | 자연어 시나리오를 실제 기기에서 단계별로 검증하고, 스크린샷이 포함된 HTML 리포트를 남깁니다 |
 | `droidlens-analyst` | 기술 스택, UI 구조(View/Compose), 화면 지도를 분석합니다. [REA](https://github.com/morluto/rea)가 있으면 코드 수준까지 추적합니다 |
+| `droidlens-qa-planner` | 기획서·TC 문서(md·txt·PDF·CSV·엑셀, Confluence·Figma 링크)로 요구사항 목록과 TC 표를 만듭니다. 기기는 건드리지 않고, 사용자가 고른 TC 는 `droidlens-verifier` 가 실행합니다. Confluence·Figma 커넥터 도구 이름이 다르면 에이전트 파일의 `tools` 줄을 내 커넥터의 읽기 도구 이름으로 고치세요 |
 
 Claude Code를 재시작한 뒤 이렇게 요청하세요.
 > droidlens-verifier로 쇼핑 앱에서 검색 → 상품 상세 → 찜하기 시나리오 검증해줘
 >
 > droidlens-analyst로 이 앱 기술 스택이랑 화면 구조 분석해줘
 
-MCP 서버 환경 변수 `DROIDLENS_TOOLS=core,graph` (`core`·`perf`·`graph`·`sdk`·`scenario` 중 골라 쉼표로, 기본은 전부)로 등록할 도구 묶음을 고르면 도구 목록이 줄어듭니다. 예: 앱에 DroidLens SDK 가 없으면 `sdk` 를 뺍니다.
+MCP 서버 환경 변수 `DROIDLENS_TOOLS=core,graph` (`core`·`perf`·`graph`·`sdk`·`scenario`·`qa` 중 골라 쉼표로, 기본은 전부)로 등록할 도구 묶음을 고르면 도구 목록이 줄어듭니다. 예: 앱에 DroidLens SDK 가 없으면 `sdk` 를 뺍니다.
 
 앱 없이 MCP만 쓰려면 Releases의 `droidlens-mcp.mjs`(Node 20+)를 받아 `claude mcp add --scope user droidlens -- node /path/to/droidlens-mcp.mjs`로 등록하세요. 같은 릴리스의 `droidlens-agent.apk` 를 `droidlens-mcp.mjs` 와 같은 폴더에 두면 온디바이스 에이전트가 설치되어 한글 입력과 빠른 뷰 계층 조회(0.1~0.3초)가 됩니다. 없어도 동작하지만 뷰 계층 조회가 `uiautomator dump`(1.5~3초)로 돌고 영문·숫자만 입력할 수 있습니다.
 
@@ -203,7 +204,7 @@ steps:
 
 SDK 는 앱이 디버그 빌드가 아니면 켜지지 않습니다. debuggable 을 끈 사내 QA 빌드에서 쓰려면 `DroidLens.allowNonDebuggable()` 을 부른 뒤 `DroidLens.init(context)` 를 직접 부릅니다.
 
-대화창에서 에이전트가 앱 데이터 삭제·DB 쓰기·앱 밖 URI 열기를 하려 하면 승인·거부 버튼이 뜹니다. 60초 안에 누르지 않으면 거부되고, 승인은 그 호출 한 번에만 적용됩니다.
+대화창에서 에이전트가 앱 데이터 삭제·DB 쓰기·앱 밖 URI 열기를 하거나, 삭제·결제·전송 같은 확인 필수 버튼을 실제로 누르려 하면 승인·거부 버튼이 뜹니다. 60초 안에 누르지 않으면 거부되고, 승인은 그 호출 한 번에만 적용됩니다.
 
 ## 온디바이스 에이전트
 
