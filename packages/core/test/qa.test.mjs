@@ -201,6 +201,21 @@ test('엑셀: 공유 문자열·서식 조각·빈 칸·여러 시트', async ()
   const md = qa.xlsxToMarkdown(makeXlsx());
   assert.equal(md, '## 시트: TC\n\n| ID | 제목 |  | 비고 |\n| --- | --- | --- | --- |\n| 001 | 굵은 조각 | 3.5 | TRUE |');
   assert.throws(() => qa.xlsxToMarkdown(new Uint8Array([1, 2, 3])), /엑셀 파일을 열 수 없습니다/);
+
+  // 셀 주소로 거대한 열 번호를 주어도 큰 배열을 만들지 않는다
+  const huge = zipSync({
+    'xl/workbook.xml': strToU8('<workbook><sheets><sheet name="S" r:id="rId1"/></sheets></workbook>'),
+    'xl/_rels/workbook.xml.rels': strToU8('<Relationships><Relationship Id="rId1" Target="worksheets/sheet1.xml"/></Relationships>'),
+    'xl/worksheets/sheet1.xml': strToU8(
+      '<worksheet><sheetData><row><c r="A1" t="inlineStr"><is><t>ID</t></is></c><c r="ZZZZZZZ1" t="inlineStr"><is><t>x</t></is></c><c r="IW1" t="inlineStr"><is><t>y</t></is></c></row></sheetData></worksheet>',
+    ),
+  });
+  const w = [];
+  assert.equal(qa.xlsxToMarkdown(huge, w), '## 시트: S\n\n| ID |\n| --- |');
+  assert.match(w.join(), /앞 256열만/);
+  const wide = [];
+  assert.equal(qa.tableToMarkdown([Array.from({ length: 300 }, (_, i) => `c${i}`)], wide).split('\n')[0].split(' | ').length, 256);
+  assert.match(wide.join(), /앞 256열만/);
   const f = await qa.readQaSourceFile(put('tc.xlsx', makeXlsx()));
   assert.equal(f.kind, 'xlsx');
   assert.match(f.text, /굵은 조각/);
@@ -289,4 +304,110 @@ test('저장: 만들기·문서 넣기·중복·목록·고치기', async () => 
   await assert.rejects(qa.loadQaPlan('../etc'), /id 형식/);
   await assert.rejects(qa.loadQaPlan('nothing'), /QA 계획이 없습니다/);
   await assert.rejects(qa.addQaSource(plan.id, join(files, 'none.md')), /파일이 없습니다/);
+});
+
+// ---------- 리뷰 1회차에서 고친 것 ----------
+
+test('에이전트 계획: 실행 내용이 바뀌면 허용·선택을 다시 사람에게, 스크립트는 받지 않는다', () => {
+  const prev = qa.validatePlan(basePlan());
+  prev.cases[2].allowDanger = true;
+  prev.cases[2].selected = true;
+  prev.cases[0].script = 'real';
+  const draft = basePlan();
+  draft.cases[2].steps = ['설정 → 탈퇴', '100만원 결제']; // 위험 설명은 그대로, 단계만 바꿈
+  draft.cases[2].data = 'card=real';
+  draft.cases[0].script = 'attacker-script';
+  draft.cases[1].danger = '   '; // 공백뿐인 위험 설명은 없는 것으로
+  const next = qa.acceptAgentPlan(draft, prev);
+  assert.equal(next.cases[2].allowDanger, false);
+  assert.equal(next.cases[2].selected, false);
+  assert.equal(next.cases[0].script, 'real', '에이전트가 낸 script 는 무시');
+  assert.equal(next.cases[1].danger, undefined);
+  assert.equal(next.cases[1].selected, true);
+  // 내용이 같으면 허용을 이어받는다
+  assert.equal(qa.acceptAgentPlan(basePlan(), prev).cases[2].allowDanger, true);
+});
+
+test('형식: 스크립트 이름·Figma 링크·https·시나리오 tc', async () => {
+  const p = basePlan();
+  p.cases[0].script = '../../etc/x';
+  assert.throws(() => qa.validatePlan(p), /스크립트 이름/);
+  const d = basePlan();
+  d.cases.push({ id: 'TC-004', title: '디자인', priority: 'P2', kind: 'design', steps: ['열기'], expected: ['같음'], design: { figma: 'javascript:alert(1)' } });
+  assert.throws(() => qa.validatePlan(d), /Figma 디자인 링크/);
+  d.cases[3].design.figma = 'http://www.figma.com/design/abc/x';
+  assert.throws(() => qa.validatePlan(d), /Figma 디자인 링크/);
+  assert.throws(() => qa.classifyQaSource('http://acme.atlassian.net/wiki/x'), /https 링크만/);
+  await assert.rejects(Scenario.start('bad', { tc: { plan: '../x', case: 'TC-001' } }), /TC 연결 형식/);
+});
+
+test('CSV: .tsv 는 탭으로, 닫히지 않은 따옴표 경고, UTF-16·CP949 표시', async () => {
+  const f = await qa.readQaSourceFile(put('tc.tsv', 'ID\t제목, 설명, 비고\t단계\nTC-001\ta, b\tc\n'));
+  assert.match(f.text, /^\| ID \| 제목, 설명, 비고 \| 단계 \|/);
+  const w = [];
+  assert.deepEqual(qa.parseCsv('a,"b\nc,d', undefined, w), [['a', 'b\nc,d']]);
+  assert.match(w.join(), /닫히지 않은 따옴표/);
+  const u16 = Buffer.concat([Buffer.from([0xff, 0xfe]), Buffer.from('가,나\n1,2', 'utf16le')]);
+  const g = await qa.readQaSourceFile(put('u16.csv', u16));
+  assert.match(g.text, /\| 가 \| 나 \|/);
+  assert.deepEqual(g.warnings, []);
+  const k = await qa.readQaSourceFile(put('cp.txt', Buffer.from([0xb0, 0xa1])));
+  assert.match(k.warnings.join(), /CP949/);
+});
+
+test('엑셀: 서식만 있는 빈 칸, _x000D_, 다른 접두어, 큰 시트는 행 상한에서 잘라 읽기', () => {
+  const book = (sheetRows, wbAttr = 'r:id', extra = {}) =>
+    zipSync({
+      'xl/workbook.xml': strToU8(`<workbook><sheets><sheet name="S" ${wbAttr}="rId1"/></sheets></workbook>`),
+      'xl/_rels/workbook.xml.rels': strToU8('<Relationships><Relationship Id="rId1" Target="worksheets/sheet1.xml"/></Relationships>'),
+      'xl/worksheets/sheet1.xml': strToU8(`<worksheet><sheetData>${sheetRows}</sheetData></worksheet>`),
+      ...extra,
+    });
+  const row = '<row><c r="A1" t="inlineStr"><is><t>줄1_x000D_\n줄2</t></is></c><c r="H1" s="2"/></row>';
+  assert.equal(qa.xlsxToMarkdown(book(row)), '## 시트: S\n\n| 줄1<br>줄2 |\n| --- |');
+  assert.equal(qa.xlsxToMarkdown(book(row, 'ns1:id')), '## 시트: S\n\n| 줄1<br>줄2 |\n| --- |');
+  const w = [];
+  qa.xlsxToMarkdown(book(row, 'x'), w);
+  assert.match(w.join(), /시트 위치를 찾지 못해/);
+
+  const many = Array.from({ length: 6000 }, (_, i) => `<row><c t="inlineStr"><is><t>r${i}</t></is></c></row>`).join('');
+  const w2 = [];
+  const md = qa.xlsxToMarkdown(book(many), w2);
+  assert.equal(md.split('\n').length, 2 + 2 + 5000, '시트 제목·빈 줄·머리줄·구분줄 + 5,000행');
+  assert.match(w2.join(), /앞 5,000행만/);
+  assert.equal(qa.cutRows('<w><sheetData><row>1</row><row>2</row></sheetData></w>', 1, 1e6), '<w><sheetData><row>1</row></sheetData></worksheet>');
+  assert.equal(qa.cutRows('<w><row>1</row></w>', 5, 1e6), '<w><row>1</row></w>');
+  assert.throws(() => qa.cutRows('x'.repeat(100), 1, 10), /시트 하나가 8MB/);
+  // 닫는 </row> 가 적어 자르지 못하는 큰 시트도 상한을 지킨다
+  assert.throws(() => qa.cutRows(`<row>1</row>${'<row/>'.repeat(10)}`, 5, 20), /시트 하나가 8MB/);
+  // 같은 시트 파일을 가리키는 시트 여러 개는 한 번만 읽는다
+  const dupBook = zipSync({
+    'xl/workbook.xml': strToU8(`<workbook><sheets>${Array.from({ length: 60 }, (_, i) => `<sheet name="S${i}" r:id="rId1"/>`).join('')}</sheets></workbook>`),
+    'xl/_rels/workbook.xml.rels': strToU8('<Relationships><Relationship Id="rId1" Target="worksheets/sheet1.xml"/></Relationships>'),
+    'xl/worksheets/sheet1.xml': strToU8(`<worksheet><sheetData>${row}</sheetData></worksheet>`),
+  });
+  const w3 = [];
+  assert.equal(qa.xlsxToMarkdown(dupBook, w3).match(/## 시트:/g).length, 1);
+  assert.match(w3.join(), /앞 50개만/);
+
+  const bigShared = book(row, 'r:id', { 'xl/sharedStrings.xml': strToU8(`<sst><si><t>${'가'.repeat(8 * 1024 * 1024 + 1)}</t></si></sst>`) });
+  assert.throws(() => qa.xlsxToMarkdown(bigShared), /sharedStrings\.xml 8MB 초과/);
+});
+
+test('저장: 동시에 문서를 넣어도 번호가 겹치지 않고, TC 형식 오류는 고칠 곳을 알려 준다', async () => {
+  const plan = await qa.createQaPlan({ name: '동시' });
+  const [a, b] = await Promise.all([qa.addQaSource(plan.id, put('a.md', 'A')), qa.addQaSource(plan.id, put('b.md', 'B'))]);
+  assert.deepEqual([a.source.id, b.source.id].sort(), ['S1', 'S2']);
+  const saved = await qa.loadQaPlan(plan.id);
+  assert.equal(saved.sources.length, 2);
+  assert.equal(await qa.readQaSourceText(plan.id, a.source.id), 'A');
+  assert.equal(await qa.readQaSourceText(plan.id, b.source.id), 'B');
+
+  await qa.saveAgentQaPlan(plan.id, { requirements: basePlan().requirements.map(({ source, ...r }) => r), cases: basePlan().cases.map(({ source, ...c }) => c) });
+  await assert.rejects(qa.updateQaCase(plan.id, 'TC-001', { steps: [] }), /TC 형식 오류:\n {2}steps: 단계가 하나 이상/);
+  // 사람 저장은 문서 목록·만든 시각을 지킨다
+  const p = await qa.loadQaPlan(plan.id);
+  const out = await qa.saveQaPlan({ ...p, sources: [], createdAt: 0 });
+  assert.equal(out.sources.length, 2);
+  assert.equal(out.createdAt, p.createdAt);
 });

@@ -16,7 +16,16 @@ export const MAX_SOURCE_BYTES = 30 * 1024 * 1024;
 export const MAX_SOURCE_TEXT = 400_000;
 /** 표 하나에서 옮길 행 상한 */
 export const MAX_TABLE_ROWS = 5_000;
-const MAX_XLSX_UNPACKED = 200 * 1024 * 1024;
+/** 표 하나에서 옮길 열 상한. 셀 주소(예: ZZZZZ1)로 거대한 배열을 만들지 못하게 한다 */
+export const MAX_TABLE_COLS = 256;
+/** 엑셀 압축을 푼 XML 전체 상한. 실제 TC 엑셀은 몇 MB 이고, XML 을 객체로 바꾸면 수십 배 메모리를 쓴다 */
+const MAX_XLSX_UNPACKED = 40 * 1024 * 1024;
+/** 공유 문자열 XML 상한 (시트는 행 상한에서 잘라 읽는다) */
+const MAX_XLSX_PART = 8 * 1024 * 1024;
+/** 엑셀 시트 상한 */
+const MAX_XLSX_SHEETS = 50;
+/** PDF 쪽 상한 */
+export const MAX_PDF_PAGES = 500;
 
 const FILE_KINDS: Record<string, QaSourceKind> = {
   '.md': 'md',
@@ -58,6 +67,7 @@ export function classifyQaSource(input: string): { link: QaSourceLink } | { file
     } catch {
       throw new Error(`링크 형식이 아닙니다: ${s}`);
     }
+    if (url.protocol !== 'https:') throw new Error(`https 링크만 받습니다: ${url.host}`);
     const figma = parseFigmaUrl(url);
     if (figma) return { link: { kind: 'figma', ref: s, figma } };
     if (isConfluenceUrl(url)) return { link: { kind: 'confluence', ref: s } };
@@ -100,10 +110,10 @@ export async function readQaSourceFile(path: string): Promise<QaSourceFile> {
   switch (c.kind) {
     case 'md':
     case 'txt':
-      text = decodeText(bytes);
+      text = decodeText(bytes, warnings);
       break;
     case 'csv':
-      text = csvToMarkdown(decodeText(bytes), warnings);
+      text = tableToMarkdown(parseCsv(decodeText(bytes, warnings), extname(path).toLowerCase() === '.tsv' ? '\t' : undefined, warnings), warnings);
       break;
     case 'xlsx':
       text = xlsxToMarkdown(bytes, warnings);
@@ -127,22 +137,25 @@ export function sha256(b: Uint8Array): string {
   return createHash('sha256').update(b).digest('hex');
 }
 
-/** UTF-8 (BOM 포함) 우선, 깨지면 한국어 엑셀이 내보내는 CP949 로 */
-export function decodeText(b: Uint8Array): string {
+/** UTF-16 BOM 이 있으면 UTF-16, 아니면 UTF-8 우선, 깨지면 한국어 엑셀이 내보내는 CP949 로 (경고) */
+export function decodeText(b: Uint8Array, warnings: string[] = []): string {
+  if (b[0] === 0xff && b[1] === 0xfe) return new TextDecoder('utf-16le').decode(b);
+  if (b[0] === 0xfe && b[1] === 0xff) return new TextDecoder('utf-16be').decode(b);
   try {
-    return new TextDecoder('utf-8', { fatal: true, ignoreBOM: false }).decode(b);
+    return new TextDecoder('utf-8', { fatal: true }).decode(b);
   } catch {
+    warnings.push('UTF-8 이 아니라 CP949(EUC-KR)로 읽었습니다. 글자가 깨졌으면 UTF-8 로 다시 저장해 주세요');
     return new TextDecoder('euc-kr').decode(b);
   }
 }
 
 // ---------- 표 ----------
 
-/** RFC 4180 CSV (따옴표 안 쉼표·줄바꿈·"" 이스케이프). 구분자는 첫 줄로 쉼표·탭·세미콜론 중 고른다 */
-export function parseCsv(text: string): string[][] {
-  const s = text.replace(/^﻿/, '');
+/** RFC 4180 CSV (따옴표 안 쉼표·줄바꿈·"" 이스케이프). 구분자를 안 주면 첫 줄로 쉼표·탭·세미콜론 중 고른다 */
+export function parseCsv(text: string, delimiter?: string, warnings: string[] = []): string[][] {
+  const s = text.replace(/^\uFEFF/, '');
   const firstLine = s.slice(0, s.search(/\r?\n|$/));
-  const delim = [',', '\t', ';'].map((d) => [d, countOutsideQuotes(firstLine, d)] as const).sort((a, b) => b[1] - a[1])[0][0];
+  const delim = delimiter ?? [',', '\t', ';'].map((d) => [d, countOutsideQuotes(firstLine, d)] as const).sort((a, b) => b[1] - a[1])[0][0];
   const rows: string[][] = [];
   let row: string[] = [];
   let cell = '';
@@ -168,6 +181,7 @@ export function parseCsv(text: string): string[][] {
       cell = '';
     } else cell += ch;
   }
+  if (quoted) warnings.push('닫히지 않은 따옴표가 있어 그 뒤 내용이 한 칸에 들어갔습니다. 원본 CSV 를 확인해 주세요');
   if (cell !== '' || row.length) {
     row.push(cell);
     rows.push(row);
@@ -185,10 +199,6 @@ function countOutsideQuotes(line: string, d: string): number {
   return n;
 }
 
-function csvToMarkdown(text: string, warnings: string[]): string {
-  return tableToMarkdown(parseCsv(text), warnings);
-}
-
 /** 첫 행을 머리줄로 하는 markdown 표. 칸 안 | 와 줄바꿈은 표가 깨지지 않게 바꾼다 */
 export function tableToMarkdown(rows: string[][], warnings: string[] = [], label = ''): string {
   if (!rows.length) return '';
@@ -197,8 +207,16 @@ export function tableToMarkdown(rows: string[][], warnings: string[] = [], label
     body = rows.slice(0, MAX_TABLE_ROWS + 1);
     warnings.push(`${label ? `${label}: ` : ''}행이 많아 앞 ${MAX_TABLE_ROWS.toLocaleString()}행만 옮겼습니다`);
   }
-  const width = Math.max(...body.map((r) => r.length));
-  const cell = (v: string | undefined) => (v ?? '').trim().replace(/\|/g, '\\|').replace(/\r?\n/g, '<br>');
+  // 값이 있는 마지막 열까지만 (테두리만 그린 빈 칸이 뒤에 붙지 않게)
+  let width = body.reduce((m, r) => {
+    for (let i = r.length - 1; i >= m; i--) if ((r[i] ?? '').trim() !== '') return i + 1;
+    return m;
+  }, 0);
+  if (width > MAX_TABLE_COLS) {
+    width = MAX_TABLE_COLS;
+    warnings.push(`${label ? `${label}: ` : ''}열이 많아 앞 ${MAX_TABLE_COLS}열만 옮겼습니다`);
+  }
+  const cell = (v: string | undefined) => (v ?? '').trim().replace(/\|/g, '\\|').replace(/\r\n|\r|\n/g, '<br>');
   const line = (r: string[]) => `| ${Array.from({ length: width }, (_, i) => cell(r[i])).join(' | ')} |`;
   const [head, ...rest] = body;
   return [line(head), `|${' --- |'.repeat(width)}`, ...rest.map(line)].join('\n');
@@ -230,10 +248,15 @@ export function xlsxToMarkdown(bytes: Uint8Array, warnings: string[] = []): stri
       },
     });
   } catch {
-    if (unpacked > MAX_XLSX_UNPACKED) throw new Error('엑셀 파일이 너무 큽니다 (압축을 푼 크기 200MB 초과)');
+    if (unpacked > MAX_XLSX_UNPACKED) throw new Error('엑셀 파일이 너무 큽니다 (압축을 푼 크기 40MB 초과)');
     throw new Error('엑셀 파일을 열 수 없습니다 (암호가 걸렸거나 손상된 파일일 수 있어요)');
   }
-  const read = (name: string) => (files[name] ? xml.parse(new TextDecoder().decode(files[name])) : undefined);
+  const text = (name: string) => (files[name] ? new TextDecoder().decode(files[name]) : undefined);
+  const read = (name: string) => {
+    const t = text(name);
+    if (t !== undefined && t.length > MAX_XLSX_PART) throw new Error(`엑셀 파일이 너무 큽니다 (${name.split('/').pop()} 8MB 초과)`);
+    return t === undefined ? undefined : xml.parse(t);
+  };
 
   const shared: string[] = (read('xl/sharedStrings.xml')?.sst?.si ?? []).map(richText);
   const rels = new Map<string, string>(
@@ -243,33 +266,75 @@ export function xlsxToMarkdown(bytes: Uint8Array, warnings: string[] = []): stri
   if (!sheets.length) throw new Error('엑셀 파일에 시트가 없습니다');
 
   const out: string[] = [];
-  for (const sh of sheets) {
-    const target = rels.get(sh['@r:id']);
-    if (!target) continue;
+  const seen = new Set<string>();
+  if (sheets.length > MAX_XLSX_SHEETS) warnings.push(`시트가 많아 앞 ${MAX_XLSX_SHEETS}개만 읽었습니다`);
+  for (const sh of sheets.slice(0, MAX_XLSX_SHEETS)) {
+    // 관계 속성은 보통 r:id 지만 접두어가 다른 도구도 있다
+    const relKey = Object.keys(sh).find((k) => k.endsWith(':id'));
+    const target = relKey ? rels.get(sh[relKey]) : undefined;
+    if (!target) {
+      warnings.push(`${sh['@name']}: 시트 위치를 찾지 못해 건너뛰었습니다`);
+      continue;
+    }
     const path = target.startsWith('/') ? target.slice(1) : `xl/${target.replace(/^\.\//, '')}`;
-    const rowsXml: Record<string, unknown>[] = read(path)?.worksheet?.sheetData?.row ?? [];
-    const rows: string[][] = [];
+    // 같은 시트 파일을 여러 시트가 가리켜도 한 번만 읽는다
+    if (seen.has(path)) continue;
+    seen.add(path);
+    const sheetXml = text(path);
+    if (sheetXml === undefined) continue;
+    // 객체로 바꾸기 전에 문자열에서 행 상한까지만 남긴다 (큰 시트 XML 을 통째로 파싱하지 않게)
+    const rowsXml: Record<string, unknown>[] = xml.parse(cutRows(sheetXml, MAX_TABLE_ROWS + 2, MAX_XLSX_PART))?.worksheet?.sheetData?.row ?? [];
+    const nonEmpty: string[][] = [];
+    let colsCut = false;
     for (const r of rowsXml) {
+      // 머리줄 + 상한 + 1행까지만 모은다 (넘친 것은 tableToMarkdown 이 잘랐다고 알린다)
+      if (nonEmpty.length > MAX_TABLE_ROWS + 1) break;
       const row: string[] = [];
       let next = 0;
       for (const c of (r.c as Record<string, unknown>[] | undefined) ?? []) {
         const ref = c['@r'] as string | undefined;
         const col = ref ? colIndex(ref) : next;
-        row[col] = cellValue(c, shared);
         next = col + 1;
+        if (col >= MAX_TABLE_COLS) {
+          colsCut = true;
+          continue;
+        }
+        const v = cellValue(c, shared);
+        if (v !== '') row[col] = v;
       }
-      rows.push(Array.from(row, (v) => v ?? ''));
+      const filled = Array.from(row, (v) => v ?? '');
+      if (filled.some((v) => v.trim() !== '')) nonEmpty.push(filled);
     }
-    const nonEmpty = rows.filter((r) => r.some((v) => v.trim() !== ''));
+    if (colsCut) warnings.push(`${sh['@name']}: 열이 많아 앞 ${MAX_TABLE_COLS}열만 옮겼습니다`);
     if (!nonEmpty.length) continue;
     out.push(`## 시트: ${sh['@name']}\n\n${tableToMarkdown(nonEmpty, warnings, sh['@name'])}`);
   }
   return out.join('\n\n');
 }
 
+/** 시트 XML 을 n번째 </row> (또는 maxChars 안의 마지막 </row>) 뒤에서 자르고 닫는 태그를 붙인다 */
+export function cutRows(sheet: string, n: number, maxChars: number): string {
+  let end = -1;
+  let from = 0;
+  for (let i = 0; i < n; i++) {
+    const at = sheet.indexOf('</row>', from);
+    if (at < 0 || at + 6 > maxChars) break;
+    end = at + 6;
+    from = end;
+  }
+  // 자르지 않고 그대로 돌려주는 경로도 상한을 지킨다 (</row> 가 적거나 <row/> 만 많은 시트)
+  if (end < 0 || sheet.indexOf('</row>', end) < 0) {
+    if (sheet.length > maxChars) throw new Error('엑셀 파일이 너무 큽니다 (시트 하나가 8MB 초과)');
+    return sheet;
+  }
+  return `${sheet.slice(0, end)}</sheetData></worksheet>`;
+}
+
 /** A1 → 0, AB12 → 27 */
 function colIndex(ref: string): number {
   const letters = /^[A-Z]+/.exec(ref)?.[0] ?? 'A';
+  // 엑셀 열은 XFD(16384)까지라 4글자 넘으면 상한 밖으로 본다
+  if (letters.length > 3) return Number.MAX_SAFE_INTEGER;
   let n = 0;
   for (const ch of letters) n = n * 26 + (ch.charCodeAt(0) - 64);
   return n - 1;
@@ -287,8 +352,9 @@ function richText(si: unknown): string {
 
 function textOf(t: unknown): string {
   if (t == null) return '';
-  if (typeof t === 'object') return String((t as Record<string, unknown>)['#text'] ?? '');
-  return String(t);
+  const raw = typeof t === 'object' ? String((t as Record<string, unknown>)['#text'] ?? '') : String(t);
+  // OOXML 이스케이프 (_x000D_ = CR 등)
+  return raw.replace(/_x([0-9A-Fa-f]{4})_/g, (_, h: string) => String.fromCharCode(parseInt(h, 16)));
 }
 
 function cellValue(c: Record<string, unknown>, shared: string[]): string {
@@ -304,14 +370,21 @@ function cellValue(c: Record<string, unknown>, shared: string[]): string {
 
 /** 쪽마다 `## p.N`. 글자층이 없는 스캔본이면 경고 */
 async function pdfToMarkdown(bytes: Uint8Array, warnings: string[]): Promise<string> {
-  const { extractText, getDocumentProxy } = await import('unpdf');
   let pages: string[];
   try {
+    const { extractText, getDocumentProxy } = await import('unpdf');
     // pdf.js 가 받은 버퍼를 넘겨받아 비우므로 복사본을 준다
+    // isEvalSupported 는 넘기지 않는다: 들어 있는 pdf.js(6.x)는 이 옵션을 없앴고 eval·new Function 경로가 없다 (#74 보안 리뷰 확인)
     const doc = await getDocumentProxy(new Uint8Array(bytes));
-    pages = (await extractText(doc, { mergePages: false })).text as string[];
+    try {
+      if (doc.numPages > MAX_PDF_PAGES) throw new Error(`쪽이 너무 많습니다 (${doc.numPages}쪽, 상한 ${MAX_PDF_PAGES}쪽). 문서를 나눠 넣어 주세요`);
+      pages = (await extractText(doc, { mergePages: false })).text as string[];
+    } finally {
+      await doc.loadingTask.destroy();
+    }
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
+    if (msg.startsWith('쪽이 너무 많습니다')) throw new Error(`PDF ${msg}`);
     throw new Error(/password/i.test(msg) ? 'PDF 에 암호가 걸려 있어 읽을 수 없습니다' : `PDF 를 읽을 수 없습니다: ${msg}`);
   }
   const blank = pages.filter((p) => !p.trim()).length;

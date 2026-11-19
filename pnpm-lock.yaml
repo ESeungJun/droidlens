@@ -57,7 +57,7 @@ importers:
   packages/core:
     dependencies:
       fast-xml-parser:
-        specifier: ^5.2.5
+        specifier: ^5.11.2
         version: 5.11.2
       fflate:
         specifier: ^0.8.2

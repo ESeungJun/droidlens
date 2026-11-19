@@ -24,7 +24,7 @@
     "test": "tsc -p tsconfig.json && node --test test/*.test.mjs"
   },
   "dependencies": {
-    "fast-xml-parser": "^5.2.5",
+    "fast-xml-parser": "^5.11.2",
     "fflate": "^0.8.2",
     "jpeg-js": "^0.4.4",
     "pngjs": "^7.0.0",

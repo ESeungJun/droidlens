@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { parseFigmaUrl } from './sources.js';
 
 /**
  * QA 계획(문서 → 요구사항 → TC) 형식. 데스크톱·MCP·CLI가 같은 검사를 쓰도록 형식은 이 파일에만 둔다.
@@ -74,17 +75,25 @@ export const qaCaseSchema = z
     /** 입력값 (계정·검색어 등) */
     data: z.string().max(2000).optional(),
     /** 위험 행동 설명 (결제·삭제·전송·탈퇴 등). 없으면 비움 */
-    danger: z.string().max(500).optional(),
+    danger: z
+      .string()
+      .trim()
+      .max(500)
+      .optional()
+      .transform((v) => v || undefined),
     /** 위험 행동을 실제로 해도 되는지. 사람만 켠다 (에이전트가 저장한 값은 무시) */
     allowDanger: z.boolean().default(false),
     automatable: z.enum(AUTOMATABLE).default('yes'),
     /** 이번 회차에 실행할지 */
     selected: z.boolean().optional(),
     /** 통과해 저장된 회귀 스크립트 이름 */
-    script: z.string().max(200).optional(),
+    script: z.string().max(200).regex(PLAN_ID, '스크립트 이름은 글자·숫자·._- 만 씁니다').optional(),
     /** 디자인 TC: 비교할 Figma 프레임 */
     design: z
-      .object({ figma: z.string().url().max(2000), node: z.string().max(100).optional() })
+      .object({
+        figma: z.string().max(2000).refine(isFigmaHttpsUrl, 'Figma 디자인 링크(https://www.figma.com/design/…)가 아닙니다'),
+        node: z.string().max(100).optional(),
+      })
       .strict()
       .optional(),
     source: sourceRefSchema.optional(),
@@ -173,18 +182,34 @@ export function acceptAgentPlan(raw: unknown, prev?: QaPlan): QaPlan {
     ...plan,
     cases: plan.cases.map((c) => {
       const old = before.get(c.id);
-      // 위험 행동 설명이 바뀌면 사람이 다시 허용해야 한다
-      const allowDanger = old?.allowDanger === true && !!c.danger && c.danger === old.danger;
-      // 새로 위험 행동이 붙은 TC 는 선택을 풀고, 그 밖에는 사람이 고른 값을 따른다
-      const newlyDangerous = !!c.danger && !old?.danger;
+      // 사람이 허용한 뒤 실행 내용(위험 설명·단계·입력값 등)이 하나라도 바뀌면 다시 허용받아야 한다
+      const same = !!old && dangerFingerprint(c) === dangerFingerprint(old);
+      const allowDanger = old?.allowDanger === true && !!c.danger && same;
+      // 위험 TC 가 새로 생기거나 내용이 바뀌면 선택을 풀고, 그 밖에는 사람이 고른 값을 따른다
+      const needsReview = !!c.danger && !same;
       return {
         ...c,
         allowDanger,
-        selected: newlyDangerous ? false : (old?.selected ?? !c.danger),
-        script: c.script ?? old?.script,
+        selected: needsReview ? false : (old?.selected ?? !c.danger),
+        // 스크립트 연결은 실행기가 통과한 TC 에만 붙인다. 에이전트가 낸 값은 받지 않는다
+        script: old?.script,
       };
     }),
   };
+}
+
+/** 위험 허용이 가리키는 실행 내용. 이 값이 같아야 이전 허용을 이어받는다 */
+export function dangerFingerprint(c: Pick<QaCase, 'danger' | 'steps' | 'preconditions' | 'expected' | 'data'>): string {
+  return JSON.stringify([c.danger ?? '', c.preconditions, c.steps, c.expected, c.data ?? '']);
+}
+
+function isFigmaHttpsUrl(v: string): boolean {
+  try {
+    const u = new URL(v);
+    return u.protocol === 'https:' && !!parseFigmaUrl(u);
+  } catch {
+    return false;
+  }
 }
 
 export interface CoverageRow {

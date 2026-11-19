@@ -1,6 +1,7 @@
 import { writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { ensureDir, safeName, timestamp, writeJson } from './workspace.js';
+import { CASE_ID, PLAN_ID } from './qa/plan.js';
 import {
   buildScenarioView,
   formatDuration,
@@ -21,6 +22,7 @@ export class Scenario {
   constructor(readonly data: ScenarioData) {}
 
   static async start(name: string, meta: { goal?: string; packageName?: string; device?: string; tc?: ScenarioData['tc'] } = {}): Promise<Scenario> {
+    if (meta.tc && (!PLAN_ID.test(meta.tc.plan) || !CASE_ID.test(meta.tc.case))) throw new Error(`TC 연결 형식이 아닙니다: ${meta.tc.plan} ${meta.tc.case}`);
     const id = `${timestamp()}_${safeName(name)}`;
     const dir = await ensureDir('scenarios', id);
     const s = new Scenario({ id, name, ...meta, startedAt: Date.now(), steps: [], dir });
