@@ -143,20 +143,22 @@ async function rig(serial, pkg, opts = {}) {
     await new Promise((r) => server.listen(0, '127.0.0.1', r));
     f.dev.forward = async () => server.address().port;
   }
+  // 여기서 가로채 답한 명령도 가짜 기기처럼 명령·시각을 남긴다
+  const note = (c) => (f.log.push(c), f.stamps.push([c, Date.now()]));
   const baseShell = f.dev.shell;
   f.dev.shell = async (cmd, o) => {
-    if (cmd === 'date +%s') return f.log.push(cmd), `${DEVICE_SEC}\n`;
-    if (cmd.startsWith('cat /proc/net/unix')) return f.log.push('cat /proc/net/unix'), opts.sdk ? `0: 00000002 0 1 @droidlens_sdk_${pkg}\n` : '';
-    if (cmd.startsWith('stat -c %u /proc/')) return f.log.push('stat (sdk 확인)'), `10123\n--\npackage:${pkg} uid:10123\n`;
-    if (cmd.startsWith('pm clear')) return f.log.push(cmd), 'Success';
-    if (cmd.startsWith('pidof ')) return f.log.push(cmd), '4321';
+    if (cmd === 'date +%s') return note(cmd), `${DEVICE_SEC}\n`;
+    if (cmd.startsWith('cat /proc/net/unix')) return note('cat /proc/net/unix'), opts.sdk ? `0: 00000002 0 1 @droidlens_sdk_${pkg}\n` : '';
+    if (cmd.startsWith('stat -c %u /proc/')) return note('stat (sdk 확인)'), `10123\n--\npackage:${pkg} uid:10123\n`;
+    if (cmd.startsWith('pm clear')) return note(cmd), 'Success';
+    if (cmd.startsWith('pidof ')) return note(cmd), '4321';
     if (cmd.startsWith('am start -W -f')) {
-      f.log.push('am start -W (시작 시간)');
+      note('am start -W (시작 시간)');
       await baseShell('am start -n x');
       return `Status: ok\nLaunchState: COLD\nActivity: ${pkg}/.HomeActivity\nTotalTime: ${opts.startupMs ?? 800}\nWaitTime: 820\n`;
     }
     if (cmd.startsWith('set -- ')) {
-      f.log.push('perfSample');
+      note('perfSample');
       if (opts.notRunning) return '';
       return [
         'pids 4321',
@@ -177,7 +179,7 @@ async function rig(serial, pkg, opts = {}) {
   const baseText = f.dev.text;
   f.dev.text = async (args, o) => {
     if (args[0] === 'logcat') {
-      f.log.push('logcat -b crash');
+      note('logcat -b crash');
       return opts.crash ? `${DEVICE_SEC + 5}.123  4321  4321 E AndroidRuntime: FATAL EXCEPTION: main\n${DEVICE_SEC + 5}.124  4321  4321 E AndroidRuntime: Process: ${pkg}, PID: 4321\njava.lang.IllegalStateException: 터짐\n\tat ${pkg}.Home.onClick(Home.kt:10)\n` : '';
     }
     return baseText(args, o);
@@ -185,7 +187,7 @@ async function rig(serial, pkg, opts = {}) {
   const baseExec = f.dev.execOut;
   f.dev.execOut = async (cmd, o) => {
     if (cmd.startsWith('screencap')) {
-      f.log.push(cmd);
+      note(cmd);
       return pngFor(opts.sameShots ? 'same' : f.screen);
     }
     return baseExec(cmd, o);
@@ -372,6 +374,7 @@ setup:
 steps:
   - assert: { network: { url: /api/orders, method: POST, status: 201, bodyContains: orderId } }
   - assert: { network: { url: /api/orders, method: GET } }
+  - assert: { network: { url: /api/orders, method: POST } }
   - assert: { network: { url: /api/orders, status: 404 }, timeout: 300 }
   - assert: { network: { url: /api/old }, timeout: 300 }
   - assert: { network: { url: /api/orders, bodyContains: 없는본문 }, timeout: 300 }
@@ -472,6 +475,30 @@ steps:
   - matchScreenshot: 홈
 `,
   );
+});
+
+test('runScript: 시간으로만 보이는 대기 — 입력창 누른 뒤 0.3초, 통과 검사 스크린샷 전 화면 안정 대기(0.7초)', async () => {
+  const pkg = 'com.ex.timing';
+  const r = await rig('fake-timing', pkg);
+  const script = parseScript(`name: 대기\napp: ${pkg}\nsteps:\n  - type: { text: abc, into: { id: title_input } }\n  - assert: { visible: { id: detail } }\n`);
+  await runScript(r.f.dev, script);
+  const st = r.f.stamps;
+  const at = (pred, from = 0) => st.findIndex((x, i) => i >= from && pred(x[0]));
+  const typed = at((c) => c.startsWith('input text'));
+  assert.ok(typed > 0 && st[typed - 1][0].startsWith('input tap'), '입력 직전은 입력창 누르기');
+  assert.ok(st[typed][1] - st[typed - 1][1] >= 290, `입력창 누른 뒤 ${st[typed][1] - st[typed - 1][1]}ms 만에 입력`);
+  const shot = at((c) => c.startsWith('screencap'), typed);
+  assert.ok(shot > 0, '검사 단계 스크린샷');
+  assert.ok(st[shot][1] - st[shot - 1][1] >= 690, `검사 통과 뒤 ${st[shot][1] - st[shot - 1][1]}ms 만에 스크린샷`);
+});
+
+test('evaluateAssertion: 실패는 timeout 동안 되풀이한 뒤에 낸다', async () => {
+  const pkg = 'com.ex.retry';
+  const r = await rig('fake-retry', pkg);
+  r.f.open('home');
+  const t0 = Date.now();
+  await assert.rejects(evaluateAssertion(r.f.dev, pkg, { visible: { text: '없음' }, timeout: 900 }, { since: NOW }));
+  assert.ok(Date.now() - t0 >= 880, `${Date.now() - t0}ms 만에 실패`);
 });
 
 test('evaluateAssertion: 여러 조건의 근거를 이어 붙이고, 실패하면 기대/실제 문구로 던진다', async () => {

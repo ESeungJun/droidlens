@@ -872,10 +872,10 @@
   },
   "sdk": {
     "verdict": "fail",
-    "passed": 6,
+    "passed": 7,
     "failed": 7,
     "skipped": 0,
-    "summary": "6 통과 · 7 실패 · 0 건너뜀 (N초)",
+    "summary": "7 통과 · 7 실패 · 0 건너뜀 (N초)",
     "steps": [
       {
         "index": 1,
@@ -913,6 +913,19 @@
       },
       {
         "index": 4,
+        "title": "요청 POST /api/orders",
+        "status": "pass",
+        "detail": "요청 #2 POST 201 https://api.ex.com/api/orders",
+        "screen": "com.ex.ssdk com.ex.ssdk.HomeActivity",
+        "shot": true,
+        "check": {
+          "by": "assert",
+          "expect": "요청 POST /api/orders",
+          "actual": "요청 #2 POST 201 https://api.ex.com/api/orders"
+        }
+      },
+      {
+        "index": 5,
         "title": "요청 /api/orders → 404",
         "status": "fail",
         "detail": "기대:  /api/orders 404 / 실제: POST 201 https://api.ex.com/api/orders; GET 200 https://api.ex.com/api/orders",
@@ -925,7 +938,7 @@
         }
       },
       {
-        "index": 5,
+        "index": 6,
         "title": "요청 /api/old",
         "status": "fail",
         "detail": "기대:  /api/old  / 실제: 해당 URL 요청 없음",
@@ -938,7 +951,7 @@
         }
       },
       {
-        "index": 6,
+        "index": 7,
         "title": "요청 /api/orders",
         "status": "fail",
         "detail": "기대:  /api/orders  / 실제: POST 201 https://api.ex.com/api/orders; GET 200 https://api.ex.com/api/orders",
@@ -951,7 +964,7 @@
         }
       },
       {
-        "index": 7,
+        "index": 8,
         "title": "설정 settings.nickname = \"냥이\"",
         "status": "pass",
         "detail": "settings.nickname = 냥이",
@@ -964,7 +977,7 @@
         }
       },
       {
-        "index": 8,
+        "index": 9,
         "title": "설정 settings.auth_token = ●●●● (7자)",
         "status": "fail",
         "detail": "기대: settings.auth_token = ●●●● (5자) / 실제: ●●●● (11자)",
@@ -977,7 +990,7 @@
         }
       },
       {
-        "index": 9,
+        "index": 10,
         "title": "설정 none.x = 1",
         "status": "fail",
         "detail": "기대: none.x = 1 / 실제: undefined",
@@ -990,7 +1003,7 @@
         }
       },
       {
-        "index": 10,
+        "index": 11,
         "title": "DB SELECT COUNT(*) FROM notes = 3",
         "status": "pass",
         "detail": "SELECT COUNT(*) FROM notes → 3",
@@ -1003,7 +1016,7 @@
         }
       },
       {
-        "index": 11,
+        "index": 12,
         "title": "DB SELECT 1 = 1",
         "status": "fail",
         "detail": "기대: SELECT 1 → 1 / 실제: undefined",
@@ -1016,7 +1029,7 @@
         }
       },
       {
-        "index": 12,
+        "index": 13,
         "title": "이벤트 button_clicked 기록",
         "status": "pass",
         "detail": "이벤트 button_clicked 1회",
@@ -1029,7 +1042,7 @@
         }
       },
       {
-        "index": 13,
+        "index": 14,
         "title": "이벤트 old_event 기록",
         "status": "fail",
         "detail": "기대: 이벤트 old_event / 실제: 기록 없음",
@@ -1042,7 +1055,7 @@
         }
       },
       {
-        "index": 14,
+        "index": 15,
         "title": "#detail 보임 · 설정 settings.nickname = \"냥이\" · 이벤트 button_clicked 기록",
         "status": "pass",
         "detail": "보임: Detail · settings.nickname = 냥이 · 이벤트 button_clicked 1회",
@@ -1106,32 +1119,34 @@
       "POST /mocks/remove?id=m2"
     ],
     "events": [
-      "0/13 running assert network {\"url\":\"/api/orders\",\"method\":\"POST\",\"status\":201,\"bodyContains\":\"orderId\"}",
-      "0/13 pass assert network {\"url\":\"/api/orders\",\"method\":\"POST\",\"status\":201,\"bodyContains\":\"orderId\"} — 요청 #2 POST 201 https://api.ex.com/api/orders",
-      "1/13 running assert network {\"url\":\"/api/orders\",\"method\":\"GET\"}",
-      "1/13 pass assert network {\"url\":\"/api/orders\",\"method\":\"GET\"} — 요청 #3 GET 200 https://api.ex.com/api/orders",
-      "2/13 running assert network {\"url\":\"/api/orders\",\"status\":404}",
-      "2/13 fail assert network {\"url\":\"/api/orders\",\"status\":404} — 기대:  /api/orders 404 / 실제: POST 201 https://api.ex.com/api/orders; GET 200 https://api.ex.com/api/orders",
-      "3/13 running assert network {\"url\":\"/api/old\"}",
-      "3/13 fail assert network {\"url\":\"/api/old\"} — 기대:  /api/old  / 실제: 해당 URL 요청 없음",
-      "4/13 running assert network {\"url\":\"/api/orders\",\"bodyContains\":\"없는본문\"}",
-      "4/13 fail assert network {\"url\":\"/api/orders\",\"bodyContains\":\"없는본문\"} — 기대:  /api/orders  / 실제: POST 201 https://api.ex.com/api/orders; GET 200 https://api.ex.com/api/orders",
-      "5/13 running assert pref {\"file\":\"settings\",\"key\":\"nickname\",\"equals\":\"냥이\"}",
-      "5/13 pass assert pref {\"file\":\"settings\",\"key\":\"nickname\",\"equals\":\"냥이\"} — settings.nickname = 냥이",
-      "6/13 running assert pref {\"file\":\"settings\",\"key\":\"auth_token\",\"equals\":\"wrong\"}",
-      "6/13 fail assert pref {\"file\":\"settings\",\"key\":\"auth_token\",\"equals\":\"wrong\"} — 기대: settings.auth_token = ●●●● (5자) / 실제: ●●●● (11자)",
-      "7/13 running assert pref {\"file\":\"none\",\"key\":\"x\",\"equals\":1}",
-      "7/13 fail assert pref {\"file\":\"none\",\"key\":\"x\",\"equals\":1} — 기대: none.x = 1 / 실제: undefined",
-      "8/13 running assert db {\"db\":\"app.db\",\"sql\":\"SELECT COUNT(*) FROM notes\",\"equals\":3}",
-      "8/13 pass assert db {\"db\":\"app.db\",\"sql\":\"SELECT COUNT(*) FROM notes\",\"equals\":3} — SELECT COUNT(*) FROM notes → 3",
-      "9/13 running assert db {\"db\":\"app.db\",\"sql\":\"SELECT 1\",\"equals\":1}",
-      "9/13 fail assert db {\"db\":\"app.db\",\"sql\":\"SELECT 1\",\"equals\":1} — 기대: SELECT 1 → 1 / 실제: undefined",
-      "10/13 running assert event button_clicked",
-      "10/13 pass assert event button_clicked — 이벤트 button_clicked 1회",
-      "11/13 running assert event old_event",
-      "11/13 fail assert event old_event — 기대: 이벤트 old_event / 실제: 기록 없음",
-      "12/13 running assert visible {\"id\":\"detail\"}, pref {\"file\":\"settings\",\"key\":\"nickname\",\"equals\":\"냥이\"}, event button_clicked",
-      "12/13 pass assert visible {\"id\":\"detail\"}, pref {\"file\":\"settings\",\"key\":\"nickname\",\"equals\":\"냥이\"}, event button_clicked — 보임: Detail · settings.nickname = 냥이 · 이벤트 button_clicked 1회"
+      "0/14 running assert network {\"url\":\"/api/orders\",\"method\":\"POST\",\"status\":201,\"bodyContains\":\"orderId\"}",
+      "0/14 pass assert network {\"url\":\"/api/orders\",\"method\":\"POST\",\"status\":201,\"bodyContains\":\"orderId\"} — 요청 #2 POST 201 https://api.ex.com/api/orders",
+      "1/14 running assert network {\"url\":\"/api/orders\",\"method\":\"GET\"}",
+      "1/14 pass assert network {\"url\":\"/api/orders\",\"method\":\"GET\"} — 요청 #3 GET 200 https://api.ex.com/api/orders",
+      "2/14 running assert network {\"url\":\"/api/orders\",\"method\":\"POST\"}",
+      "2/14 pass assert network {\"url\":\"/api/orders\",\"method\":\"POST\"} — 요청 #2 POST 201 https://api.ex.com/api/orders",
+      "3/14 running assert network {\"url\":\"/api/orders\",\"status\":404}",
+      "3/14 fail assert network {\"url\":\"/api/orders\",\"status\":404} — 기대:  /api/orders 404 / 실제: POST 201 https://api.ex.com/api/orders; GET 200 https://api.ex.com/api/orders",
+      "4/14 running assert network {\"url\":\"/api/old\"}",
+      "4/14 fail assert network {\"url\":\"/api/old\"} — 기대:  /api/old  / 실제: 해당 URL 요청 없음",
+      "5/14 running assert network {\"url\":\"/api/orders\",\"bodyContains\":\"없는본문\"}",
+      "5/14 fail assert network {\"url\":\"/api/orders\",\"bodyContains\":\"없는본문\"} — 기대:  /api/orders  / 실제: POST 201 https://api.ex.com/api/orders; GET 200 https://api.ex.com/api/orders",
+      "6/14 running assert pref {\"file\":\"settings\",\"key\":\"nickname\",\"equals\":\"냥이\"}",
+      "6/14 pass assert pref {\"file\":\"settings\",\"key\":\"nickname\",\"equals\":\"냥이\"} — settings.nickname = 냥이",
+      "7/14 running assert pref {\"file\":\"settings\",\"key\":\"auth_token\",\"equals\":\"wrong\"}",
+      "7/14 fail assert pref {\"file\":\"settings\",\"key\":\"auth_token\",\"equals\":\"wrong\"} — 기대: settings.auth_token = ●●●● (5자) / 실제: ●●●● (11자)",
+      "8/14 running assert pref {\"file\":\"none\",\"key\":\"x\",\"equals\":1}",
+      "8/14 fail assert pref {\"file\":\"none\",\"key\":\"x\",\"equals\":1} — 기대: none.x = 1 / 실제: undefined",
+      "9/14 running assert db {\"db\":\"app.db\",\"sql\":\"SELECT COUNT(*) FROM notes\",\"equals\":3}",
+      "9/14 pass assert db {\"db\":\"app.db\",\"sql\":\"SELECT COUNT(*) FROM notes\",\"equals\":3} — SELECT COUNT(*) FROM notes → 3",
+      "10/14 running assert db {\"db\":\"app.db\",\"sql\":\"SELECT 1\",\"equals\":1}",
+      "10/14 fail assert db {\"db\":\"app.db\",\"sql\":\"SELECT 1\",\"equals\":1} — 기대: SELECT 1 → 1 / 실제: undefined",
+      "11/14 running assert event button_clicked",
+      "11/14 pass assert event button_clicked — 이벤트 button_clicked 1회",
+      "12/14 running assert event old_event",
+      "12/14 fail assert event old_event — 기대: 이벤트 old_event / 실제: 기록 없음",
+      "13/14 running assert visible {\"id\":\"detail\"}, pref {\"file\":\"settings\",\"key\":\"nickname\",\"equals\":\"냥이\"}, event button_clicked",
+      "13/14 pass assert visible {\"id\":\"detail\"}, pref {\"file\":\"settings\",\"key\":\"nickname\",\"equals\":\"냥이\"}, event button_clicked — 보임: Detail · settings.nickname = 냥이 · 이벤트 button_clicked 1회"
     ]
   },
   "mockleft": {
