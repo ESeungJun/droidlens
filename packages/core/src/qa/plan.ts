@@ -20,6 +20,17 @@ export const PRIORITIES = ['P0', 'P1', 'P2'] as const;
 export const CASE_KINDS = ['normal', 'exception', 'boundary', 'design'] as const;
 /** yes 자동 · partial 일부(사람 확인 필요) · manual 사람만 */
 export const AUTOMATABLE = ['yes', 'partial', 'manual'] as const;
+/**
+ * 사람이 다시 봐야 하는 이유. 에이전트가 다시 뽑을 때 core 가 붙이고, 사람이 TC 를 확인(선택·허용을 정함)하면 지운다.
+ * danger-removed: 위험 표시가 빠짐 (선택은 이전 값 그대로라 꺼져 있을 수 있다)
+ * danger-changed: 사람이 본 뒤 위험 TC 의 실행 내용이 바뀜 (허용·선택을 풀었다)
+ */
+export const REVIEW_REASONS = ['danger-removed', 'danger-changed'] as const;
+export type QaReviewReason = (typeof REVIEW_REASONS)[number];
+export const REVIEW_LABEL: Record<QaReviewReason, string> = {
+  'danger-removed': '위험 표시가 빠졌어요. 실행할지 확인해 주세요',
+  'danger-changed': '위험 TC 내용이 바뀌었어요. 다시 허용해 주세요',
+};
 
 export const CASE_KIND_LABEL: Record<(typeof CASE_KINDS)[number], string> = {
   normal: '정상',
@@ -98,6 +109,8 @@ export const qaCaseSchema = z
       .optional(),
     source: sourceRefSchema.optional(),
     notes: z.string().max(2000).optional(),
+    /** 다시 확인 필요 표시 (REVIEW_REASONS) */
+    review: z.array(z.enum(REVIEW_REASONS)).optional(),
   })
   .strict();
 
@@ -186,11 +199,17 @@ export function acceptAgentPlan(raw: unknown, prev?: QaPlan): QaPlan {
       const same = !!old && dangerFingerprint(c) === dangerFingerprint(old);
       const allowDanger = old?.allowDanger === true && !!c.danger && same;
       // 위험 TC 가 새로 생기거나 내용이 바뀌면 선택을 풀고, 그 밖에는 사람이 고른 값을 따른다
-      const needsReview = !!c.danger && !same;
+      const unselect = !!c.danger && !same;
+      // 다시 확인 표시: 사람이 아직 확인하지 않은 표시는 내용이 그대로면 이어 간다
+      const review = new Set<QaReviewReason>(same ? (old?.review ?? []) : []);
+      if (old?.danger && !c.danger) review.add('danger-removed');
+      if (old?.danger && c.danger && !same) review.add('danger-changed');
       return {
         ...c,
         allowDanger,
-        selected: needsReview ? false : (old?.selected ?? !c.danger),
+        selected: unselect ? false : (old?.selected ?? !c.danger),
+        // 에이전트가 낸 표시는 받지 않는다
+        review: review.size ? [...review] : undefined,
         // 스크립트 연결은 실행기가 통과한 TC 에만 붙인다. 에이전트가 낸 값은 받지 않는다
         script: old?.script,
       };
@@ -210,6 +229,11 @@ function isFigmaHttpsUrl(v: string): boolean {
   } catch {
     return false;
   }
+}
+
+/** 다시 확인이 필요한 TC 와 이유 (데스크톱·MCP 가 계획을 보여 줄 때 맨 위에 띄운다) */
+export function qaReviewList(plan: QaPlan): { id: string; title: string; reasons: QaReviewReason[]; selected: boolean }[] {
+  return plan.cases.filter((c) => c.review?.length).map((c) => ({ id: c.id, title: c.title, reasons: c.review!, selected: !!c.selected }));
 }
 
 export interface CoverageRow {

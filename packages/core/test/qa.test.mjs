@@ -411,3 +411,41 @@ test('저장: 동시에 문서를 넣어도 번호가 겹치지 않고, TC 형�
   assert.equal(out.sources.length, 2);
   assert.equal(out.createdAt, p.createdAt);
 });
+
+test('다시 확인 표시: 위험 표시가 빠지거나 바뀌면 붙고, 사람이 정하면 지워진다', async () => {
+  const prev = qa.validatePlan(basePlan()); // TC-003 은 위험 "계정 삭제", 기본 선택 꺼짐
+  const removed = basePlan();
+  delete removed.cases[2].danger;
+  removed.cases[0].review = ['danger-changed']; // 에이전트가 낸 표시는 무시
+  const r1 = qa.acceptAgentPlan(removed, prev);
+  assert.deepEqual(r1.cases[2].review, ['danger-removed']);
+  assert.equal(r1.cases[2].selected, false, '꺼진 채 둔다');
+  assert.equal(r1.cases[0].review, undefined);
+  assert.deepEqual(qa.qaReviewList(r1), [{ id: 'TC-003', title: '회원 탈퇴', reasons: ['danger-removed'], selected: false }]);
+  // 사람이 확인하기 전에 다시 뽑아도 내용이 같으면 표시가 남는다
+  assert.deepEqual(qa.acceptAgentPlan(removed, r1).cases[2].review, ['danger-removed']);
+
+  const allowed = qa.validatePlan(basePlan());
+  allowed.cases[2].allowDanger = true;
+  allowed.cases[2].selected = true;
+  const changed = basePlan();
+  changed.cases[2].steps = ['설정 → 탈퇴', '확인'];
+  const r2 = qa.acceptAgentPlan(changed, allowed);
+  assert.deepEqual(r2.cases[2].review, ['danger-changed']);
+  assert.equal(r2.cases[2].allowDanger, false);
+  assert.equal(r2.cases[2].selected, false);
+  // 처음부터 위험한 새 TC 는 기본으로 꺼질 뿐 표시는 없다
+  assert.equal(qa.acceptAgentPlan(basePlan()).cases[2].review, undefined);
+
+  // 저장소: 사람이 선택을 정하면 표시가 지워지고, 문구만 고치면 남는다
+  const plan = await qa.createQaPlan({ name: '확인 표시' });
+  const strip = (p) => ({ requirements: p.requirements.map(({ source, ...x }) => x), cases: p.cases.map(({ source, ...x }) => x) });
+  await qa.saveAgentQaPlan(plan.id, strip(basePlan()));
+  const s2 = await qa.saveAgentQaPlan(plan.id, strip(removed));
+  assert.deepEqual(s2.cases[2].review, ['danger-removed']);
+  const t1 = await qa.updateQaCase(plan.id, 'TC-003', { notes: '확인 중' });
+  assert.deepEqual(t1.cases[2].review, ['danger-removed']);
+  const t2 = await qa.updateQaCase(plan.id, 'TC-003', { selected: true });
+  assert.equal(t2.cases[2].review, undefined);
+  assert.equal(t2.cases[2].selected, true);
+});

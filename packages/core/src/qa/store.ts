@@ -133,8 +133,11 @@ export function updateQaCase(id: string, caseId: string, patch: Partial<Omit<QaC
     const plan = await loadQaPlan(id);
     const i = plan.cases.findIndex((c) => c.id === caseId);
     if (i < 0) throw new Error(`TC 가 없습니다: ${caseId}`);
+    // 사람이 선택·허용을 정하면 확인한 것으로 보고 다시 확인 표시를 지운다
+    const decided = 'selected' in patch || 'allowDanger' in patch;
     const parsed = qaCaseSchema.safeParse({
       ...plan.cases[i],
+      ...(decided ? { review: undefined } : {}),
       ...patch,
       id: caseId,
     });
