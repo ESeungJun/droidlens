@@ -125,6 +125,11 @@ test('추적표와 다음 번호', () => {
   ]);
   assert.deepEqual(cov.uncovered, ['R-03']);
   assert.deepEqual(cov.unselected, ['R-02']);
+  // R-01 은 정상만(TC-001·TC-003), R-02 는 예외만, R-03 은 TC 가 없어 uncovered 쪽에만
+  assert.deepEqual(cov.missingKinds, [
+    { id: 'R-01', missing: ['exception'] },
+    { id: 'R-02', missing: ['normal'] },
+  ]);
   assert.equal(qa.nextId(['TC-001', 'TC-009'], 'TC-'), 'TC-010');
   assert.equal(qa.nextId(['TC-0099'], 'TC-'), 'TC-0100');
   assert.equal(qa.nextId([], 'R-'), 'R-01');
@@ -448,4 +453,52 @@ test('다시 보기 표시: 확인 필수 표시가 빠지거나 바뀌면 붙�
   const t2 = await qa.updateQaCase(plan.id, 'TC-003', { selected: true });
   assert.equal(t2.cases[2].review, undefined);
   assert.equal(t2.cases[2].selected, true);
+});
+
+test('에이전트 TC 수정: 허용·스크립트는 못 바꾸고, 확인 필수 TC 는 고르지 못하며, 내용이 바뀌면 허용이 풀린다 (#75)', async () => {
+  const plan = await qa.createQaPlan({ name: '에이전트 수정' });
+  const strip = (p) => ({ requirements: p.requirements.map(({ source, ...x }) => x), cases: p.cases.map(({ source, ...x }) => x) });
+  await qa.saveAgentQaPlan(plan.id, strip(basePlan()));
+  for (const bad of [{ allowDanger: true }, { script: 'x' }, { review: [] }, { id: 'TC-009' }]) {
+    await assert.rejects(qa.updateQaCaseByAgent(plan.id, 'TC-003', bad), /고칠 수 없는 칸/, JSON.stringify(bad));
+  }
+  await assert.rejects(qa.updateQaCaseByAgent(plan.id, 'TC-003', { selected: true }), /에이전트가 고를 수 없습니다/);
+  await assert.rejects(qa.updateQaCaseByAgent(plan.id, 'TC-001', { steps: [] }), /TC 형식 오류/);
+  await assert.rejects(qa.updateQaCaseByAgent(plan.id, 'TC-404', { notes: 'x' }), /TC 가 없습니다/);
+  const off = await qa.updateQaCaseByAgent(plan.id, 'TC-001', { selected: false, title: '정상 로그인 (이메일)' });
+  assert.equal(off.cases[0].selected, false);
+  assert.equal(off.cases[0].title, '정상 로그인 (이메일)');
+
+  // 사람이 허용한 뒤 에이전트가 단계를 바꾸면 허용·선택이 풀리고 다시 보기가 붙는다
+  const cur = (await qa.loadQaPlan(plan.id)).cases[2];
+  await assert.rejects(qa.setQaCaseAllowDanger(plan.id, 'TC-003', true), /보여 준 TC 내용이 필요/);
+  await assert.rejects(qa.setQaCaseAllowDanger(plan.id, 'TC-003', true, qa.dangerFingerprint({ ...cur, steps: ['다른 단계'] })), /확인하는 동안 바뀌어/);
+  const allowed = await qa.setQaCaseAllowDanger(plan.id, 'TC-003', true, qa.dangerFingerprint(cur));
+  assert.equal(allowed.cases[2].allowDanger, true);
+  assert.equal(allowed.cases[2].selected, true);
+  const same = await qa.updateQaCaseByAgent(plan.id, 'TC-003', { notes: '메모만' });
+  assert.equal(same.cases[2].allowDanger, true, '실행 내용이 그대로면 허용이 남는다');
+  const changed = await qa.updateQaCaseByAgent(plan.id, 'TC-003', { steps: ['설정 → 탈퇴', '확인 누르기'] });
+  assert.equal(changed.cases[2].allowDanger, false);
+  assert.equal(changed.cases[2].selected, false);
+  assert.deepEqual(changed.cases[2].review, ['danger-changed']);
+  // 확인 필수 표시를 새로 달면 선택이 꺼진다
+  const marked = await qa.updateQaCaseByAgent(plan.id, 'TC-002', { danger: '메시지 전송' });
+  assert.equal(marked.cases[1].selected, false);
+  await assert.rejects(qa.setQaCaseAllowDanger(plan.id, 'TC-001', true), /확인 필수 표시가 없어/);
+
+  // 불리언이 아닌 선택값, 확인 필수 표시를 지우면서 고르기, 다시 보기 표시가 남은 TC 고르기는 거절한다
+  await assert.rejects(qa.updateQaCaseByAgent(plan.id, 'TC-001', { selected: 'true' }), /true 나 false/);
+  await assert.rejects(qa.updateQaCaseByAgent(plan.id, 'TC-002', { danger: '', selected: true }), /에이전트가 고를 수 없습니다/);
+  const cleared = await qa.updateQaCaseByAgent(plan.id, 'TC-002', { danger: '' });
+  assert.deepEqual(cleared.cases[1].review, ['danger-removed']);
+  await assert.rejects(qa.updateQaCaseByAgent(plan.id, 'TC-002', { selected: true }), /다시 보기 표시가 있어/);
+  assert.equal((await qa.loadQaPlan(plan.id)).cases[0].selected, false, '계획 파일이 깨지지 않았다');
+
+  // 스크립트 잇기 (실행하는 동안 TC 가 바뀌었으면 잇지 않는다)
+  const tc1 = (await qa.loadQaPlan(plan.id)).cases[0];
+  await assert.rejects(qa.linkQaCaseScript(plan.id, 'TC-001', 'x', qa.dangerFingerprint({ ...tc1, data: '다른 값' })), /바뀌어 스크립트를 잇지 않았습니다/);
+  const linked = await qa.linkQaCaseScript(plan.id, 'TC-001', 'TC-001_정상-로그인');
+  assert.equal(linked.cases[0].script, 'TC-001_정상-로그인');
+  await assert.rejects(qa.linkQaCaseScript(plan.id, 'TC-001', '../x'), /스크립트 이름/);
 });

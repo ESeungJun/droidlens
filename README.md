@@ -119,20 +119,21 @@ DroidLens.event("purchase_clicked", JSONObject().put("itemId", 42))
 
 Just press two buttons in the app's **Settings** tab.
 
-1. **Register MCP** — registers the app's built-in MCP server (52 tools) with `claude mcp add --scope user`. No separate Node install needed.
+1. **Register MCP** — registers the app's built-in MCP server (60 tools) with `claude mcp add --scope user`. No separate Node install needed.
 2. **Install agents** — copies the bundled agents to `~/.claude/agents/`.
 
 | Agent | What it does |
 | --- | --- |
 | `droidlens-verifier` | Verifies natural-language scenarios step by step on a real device and leaves an HTML report with screenshots |
 | `droidlens-analyst` | Analyzes the tech stack, UI structure (View/Compose), and screen map. With [REA](https://github.com/morluto/rea) installed, it traces down to the code level |
+| `droidlens-qa-planner` | Turns spec and test-case documents (md, txt, PDF, CSV, Excel, Confluence and Figma links) into a requirement list and a test-case table. It never touches the device; `droidlens-verifier` runs the cases you pick. If your Confluence or Figma connector tools have different names, edit the agent file's `tools` line to your connector's read tools |
 
 Restart Claude Code, then ask:
 > Use droidlens-verifier to verify the search → product detail → add to wishlist scenario in the shopping app
 >
 > Use droidlens-analyst to analyze this app's tech stack and screen structure
 
-Set `DROIDLENS_TOOLS=core,graph` (any of `core`, `perf`, `graph`, `sdk`, `scenario`; default all) in the MCP server's environment to register only those tool groups and shrink the tool list — e.g. drop `sdk` when the app has no DroidLens SDK.
+Set `DROIDLENS_TOOLS=core,graph` (any of `core`, `perf`, `graph`, `sdk`, `scenario`, `qa`; default all) in the MCP server's environment to register only those tool groups and shrink the tool list — e.g. drop `sdk` when the app has no DroidLens SDK.
 
 To use only the MCP server without the app, download `droidlens-mcp.mjs` (Node 20+) from Releases and register it with `claude mcp add --scope user droidlens -- node /path/to/droidlens-mcp.mjs`. Put `droidlens-agent.apk` from the same release next to `droidlens-mcp.mjs` to get the on-device agent (Unicode text input and fast view-hierarchy dumps, 0.1–0.3 s). Without it everything still works, but dumps fall back to `uiautomator dump` (1.5–3 s) and only ASCII text can be typed.
 
@@ -203,7 +204,7 @@ The on-device servers (app SDK and on-device agent) now reject requests without 
 
 The SDK does not start unless the app is a debuggable build. To use it in an internal QA build with debuggable off, call `DroidLens.allowNonDebuggable()` and then `DroidLens.init(context)` yourself.
 
-When the agent in the chat panel tries to clear app data, write to a DB, or open a URI outside the target app, Approve / Deny buttons appear. It is denied after 60 seconds without an answer, and an approval applies to that one call only.
+When the agent in the chat panel tries to clear app data, write to a DB, open a URI outside the target app, or actually press a button that needs confirmation (delete, pay, send), Approve / Deny buttons appear. It is denied after 60 seconds without an answer, and an approval applies to that one call only.
 
 ## On-device agent
 

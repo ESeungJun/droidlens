@@ -1,7 +1,7 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import * as dl from '@droidlens/core';
-import { device, text, json, serialArg, appArg, PIXELS, selectorShape, pickSelector, readOnly, acts, hasSelector, resolveNode, logAction, refuseRisky, allowDangerArg } from '../common.js';
+import { device, text, json, serialArg, appArg, PIXELS, selectorShape, pickSelector, readOnly, acts, hasSelector, resolveNode, logAction, allowDangerArg, dangerAllowed, guardRisky } from '../common.js';
 
 export function register(server: McpServer): void {
   // ---------- 화면 그래프 ----------
@@ -53,7 +53,7 @@ export function register(server: McpServer): void {
         }
         if (x === undefined || y === undefined) throw new Error(`${action.type}에는 셀렉터나 x/y가 필요합니다`);
         // tap 도구와 같은 확인 필수 버튼 검사 (이 경로로 보호를 지나치지 않게)
-        if (!allowDanger) await refuseRisky(dev, x, y, n, before.hierarchy.root);
+        await guardRisky(allowDanger, dev, x, y, n, before.hierarchy.root, 'graph_record');
         ga = { type: action.type, x, y, label, selector: sel };
       } else if (action.type === 'key') {
         ga = { type: 'key', key: action.key ?? 'back' };
@@ -142,7 +142,7 @@ export function register(server: McpServer): void {
         relaunch,
         startAt: startScreen,
         only,
-        allowDanger,
+        allowDanger: await dangerAllowed(allowDanger, true, 'explore'),
         avoid: avoid ? new RegExp(avoid, 'i') : undefined,
         // 클라이언트가 도구 호출을 취소하면 탐색도 멈춘다
         signal: extra.signal,
