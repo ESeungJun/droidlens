@@ -28,7 +28,7 @@
 | 검사 | `evaluateAssertion` 안 `if` 10갈래 | 검사 종류 → 검사기 표 (순서 그대로) |
 | 데스크톱 main | `index.ts` 697줄 | `index.ts` 는 창·수명 주기·등록만, 채널은 `ipc/<기능>.ts` |
 | 종료 정리 | `stopAll` 이 미러·로그·녹화 변수를 직접 만짐 | 기능 파일이 `stop()` 을 내보내고 `stopAll` 은 부르기만 |
-| 테스트 | 실행 0개 | 가짜 기기 + 가짜 SDK 로 `runScript`·`evaluateAssertion`·`runSuite` 13개 (결과·리포트 단계·기기 명령·SDK 요청 순서를 기준 파일로 고정) |
+| 테스트 | 실행 0개 | 가짜 기기 + 가짜 SDK 로 `runScript`·`evaluateAssertion`·`runSuite` 15개 (결과·리포트 단계·기기 명령·SDK 요청 순서를 기준 파일로 고정) |
 
 ## 3. 전 설계도 / 후 설계도
 
@@ -158,5 +158,23 @@ flowchart LR
 
 - script 쪽 가장 긴 함수: 157 → 60 이하
 - desktop `index.ts`: 697 → 200 이하
-- 스크립트 실행 테스트: 0 → 13
+- 스크립트 실행 테스트: 0 → 15
 - 공개 export 302개, IPC 채널 78개 그대로
+
+## 8. 실측 결과
+
+| 항목 | 전 | 후 |
+|---|---|---|
+| `script.ts` | 872줄 | 46줄 (공개 입구) |
+| `script/` 파일 | 없음 | schema 225 · describe 110 · common 44 · assert 215 · steps 226 · run 277 |
+| script 쪽 가장 긴 함수 | `runScript` 157 · `runStep` 146 · `evaluateAssertion` 134 | `ScriptRun.runOne` 42 · `prepare` 28 · 검사기·`describeStep`·`runSuite` 22 |
+| desktop `main/index.ts` | 697줄 | 118줄 (창·수명 주기·등록·종료 정리) |
+| desktop 가장 긴 함수 | `createWindow` 41 · `logcatStart` 핸들러 35 (등록 78개가 파일 맨 위 수준에 이어짐) | 핸들러는 옮기기만 해 그대로(최대 35). 새로 생긴 `register` 가 가장 길다: `ipc/graph.ts` 106 · settings 71 (핸들러를 늘어놓은 목록) |
+| core 테스트 | 84개 | 99개 (스크립트 실행 15개 더함) |
+| IPC 채널 | 78개 | 78개. 이름 목록 같고 중복 없음. preload 와의 차이는 전과 같이 `hierarchy` 하나 |
+| 공개 export | 302개 | 302개. 이름·종류 같음. zod 추론 타입의 속성 출력 순서만 다르고 순서를 맞추면 같음 |
+
+- 옛 줄이 빠지지 않았는지: 옛 `script.ts`·`index.ts` 의 비어 있지 않은 줄을 새 파일들에서 찾았다. 없는 줄은 import·구역 머리 주석·`adb`→`adb()`·`win`→`getWindow()`·`if` 분기 머리·클로저 변수가 클래스 필드로 바뀐 줄뿐이다.
+- 특성 테스트가 실수를 잡는지: 나눈 코드에 실수 17개(검사 순서, 요청 메서드 거르기, 되풀이 시간, 건너뜀 수, 목 지우기 재시도, 스크린샷 전 대기, 길게 누르기, 입력 뒤 대기 등)를 하나씩 넣었다. 처음엔 13개를 잡았고, 남은 4개를 잡도록 테스트를 보강해 17개 모두 잡힌다. 기준 파일은 보강 뒤에도 리팩토링 전 `script.ts` 로 다시 만들었다.
+- 데스크톱: `tsc --noEmit`, `electron-vite build` 통과. 빌드한 앱을 `DROIDLENS_SNAPSHOT` 으로 띄워 연결된 기기로 첫 화면(기기 목록·앱 목록·기기 정보·현재 화면·미러)까지 채널이 응답하는 것을 확인했다.
+- 확인하지 못한 것: 에이전트가 있어야 도는 경로(흐름 수집, `replaceText`, 한글 입력)는 가짜 기기로 돌지 않아 줄 그대로 옮기기만 했다. 데스크톱의 나머지 채널(탐색·지도 내보내기/가져오기·스크립트 실행·대화·업데이트·설정)은 화면에서 눌러 보지 않았다.
