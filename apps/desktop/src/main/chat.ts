@@ -13,6 +13,9 @@ import * as dl from '@droidlens/core';
 
 const run = promisify(execFile);
 
+/** 대화창 에이전트에 주지 않는 Claude Code 내장 도구: 이 컴퓨터의 파일·셸·웹. DroidLens 도구만 쓰면 된다 */
+export const CHAT_BLOCKED_TOOLS = ['Read', 'Glob', 'Grep', 'Bash', 'Edit', 'Write', 'NotebookEdit', 'WebFetch', 'WebSearch'];
+
 export interface ClaudeEnv {
   bin: string;
   path: string;
@@ -221,6 +224,9 @@ export async function sendChat(
     // 비대화형이라 권한 확인 창을 띄울 수 없으므로 DroidLens 도구만 미리 허용한다
     '--allowedTools',
     'mcp__droidlens__*',
+    // 읽기 전용 내장 도구(Read·Glob·Grep)는 -p 에서도 허용 목록과 상관없이 실행되므로 따로 뺀다.
+    // 기기 화면·응답에 섞인 지시문으로 이 컴퓨터의 파일을 읽어 기기로 흘리지 못하게 한다
+    `--disallowedTools=${CHAT_BLOCKED_TOOLS.join(',')}`,
     '--append-system-prompt-file',
     path(promptFile),
   ];
