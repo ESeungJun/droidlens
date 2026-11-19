@@ -1,0 +1,1579 @@
+{
+  "actions": {
+    "verdict": "pass",
+    "passed": 20,
+    "failed": 0,
+    "skipped": 0,
+    "summary": "20 통과 · 0 실패 · 0 건너뜀 (N초)",
+    "steps": [
+      {
+        "index": 1,
+        "title": "준비: 앱 실행",
+        "status": "info",
+        "screen": "com.ex.sactions com.ex.sactions.HomeActivity",
+        "shot": false
+      },
+      {
+        "index": 2,
+        "title": "wait id=\"detail\"",
+        "status": "pass",
+        "detail": "발견: Detail",
+        "screen": "com.ex.sactions com.ex.sactions.HomeActivity",
+        "shot": false,
+        "actions": [
+          "wait id=\"detail\""
+        ]
+      },
+      {
+        "index": 3,
+        "title": "tap text=\"Detail\"",
+        "status": "pass",
+        "detail": "Button \"Detail\" @540,145",
+        "screen": "com.ex.sactions com.ex.sactions.DetailActivity",
+        "shot": false,
+        "actions": [
+          "tap text=\"Detail\""
+        ]
+      },
+      {
+        "index": 4,
+        "title": "key back",
+        "status": "pass",
+        "detail": "",
+        "screen": "com.ex.sactions com.ex.sactions.HomeActivity",
+        "shot": false,
+        "actions": [
+          "key back"
+        ]
+      },
+      {
+        "index": 5,
+        "title": "longPress id=\"menu\"",
+        "status": "pass",
+        "detail": "Button \"Menu\" @540,245",
+        "screen": "com.ex.sactions com.ex.sactions.MenuActivity",
+        "shot": false,
+        "actions": [
+          "longPress id=\"menu\""
+        ]
+      },
+      {
+        "index": 6,
+        "title": "tap id=\"close\"",
+        "status": "pass",
+        "detail": "Button \"Close\" @540,145",
+        "screen": "com.ex.sactions com.ex.sactions.HomeActivity",
+        "shot": false,
+        "actions": [
+          "tap id=\"close\""
+        ]
+      },
+      {
+        "index": 7,
+        "title": "tapAt {\"x\":10,\"y\":120}",
+        "status": "pass",
+        "detail": "",
+        "screen": "com.ex.sactions com.ex.sactions.DetailActivity",
+        "shot": false,
+        "actions": [
+          "tapAt {\"x\":10,\"y\":120}"
+        ]
+      },
+      {
+        "index": 8,
+        "title": "key back",
+        "status": "pass",
+        "detail": "",
+        "screen": "com.ex.sactions com.ex.sactions.HomeActivity",
+        "shot": false,
+        "actions": [
+          "key back"
+        ]
+      },
+      {
+        "index": 9,
+        "title": "type ●●●● (11자) → id=\"title_input\"",
+        "status": "pass",
+        "detail": "11자 입력",
+        "screen": "com.ex.sactions com.ex.sactions.HomeActivity",
+        "shot": false,
+        "actions": [
+          "type ●●●● (11자) → id=\"title_input\""
+        ]
+      },
+      {
+        "index": 10,
+        "title": "swipe up",
+        "status": "pass",
+        "detail": "",
+        "screen": "com.ex.sactions com.ex.sactions.ListActivity",
+        "shot": false,
+        "actions": [
+          "swipe up"
+        ]
+      },
+      {
+        "index": 11,
+        "title": "swipe up until text=\"Row 9\"",
+        "status": "pass",
+        "detail": "1번 스크롤 후 발견",
+        "screen": "com.ex.sactions com.ex.sactions.ListActivity",
+        "shot": false,
+        "actions": [
+          "swipe up until text=\"Row 9\""
+        ]
+      },
+      {
+        "index": 12,
+        "title": "key home",
+        "status": "pass",
+        "detail": "",
+        "screen": "com.ex.sactions com.ex.sactions.ListActivity",
+        "shot": false,
+        "actions": [
+          "key home"
+        ]
+      },
+      {
+        "index": 13,
+        "title": "sleep 5",
+        "status": "pass",
+        "detail": "",
+        "screen": "com.ex.sactions com.ex.sactions.ListActivity",
+        "shot": false,
+        "actions": [
+          "sleep 5"
+        ]
+      },
+      {
+        "index": 14,
+        "title": "launch",
+        "status": "pass",
+        "detail": "com.ex.sactions.HomeActivity",
+        "screen": "com.ex.sactions com.ex.sactions.HomeActivity",
+        "shot": false,
+        "actions": [
+          "launch"
+        ]
+      },
+      {
+        "index": 15,
+        "title": "launch {\"restart\":true}",
+        "status": "pass",
+        "detail": "com.ex.sactions.HomeActivity",
+        "screen": "com.ex.sactions com.ex.sactions.HomeActivity",
+        "shot": false,
+        "actions": [
+          "launch {\"restart\":true}"
+        ]
+      },
+      {
+        "index": 16,
+        "title": "deeplink myapp://item/1?token=●●●●",
+        "status": "pass",
+        "detail": "",
+        "screen": "com.ex.sactions com.ex.sactions.HomeActivity",
+        "shot": false,
+        "actions": [
+          "deeplink myapp://item/1?token=●●●●"
+        ]
+      },
+      {
+        "index": 17,
+        "title": "screenshot 홈",
+        "status": "pass",
+        "detail": "홈",
+        "screen": "com.ex.sactions com.ex.sactions.HomeActivity",
+        "shot": true,
+        "actions": [
+          "screenshot 홈"
+        ]
+      },
+      {
+        "index": 18,
+        "title": "screenshot",
+        "status": "pass",
+        "detail": "",
+        "screen": "com.ex.sactions com.ex.sactions.HomeActivity",
+        "shot": true,
+        "actions": [
+          "screenshot"
+        ]
+      },
+      {
+        "index": 19,
+        "title": "startup {\"runs\":1,\"maxMs\":1000}",
+        "status": "pass",
+        "detail": "콜드 시작 중앙값 800ms (800)",
+        "screen": "com.ex.sactions com.ex.sactions.HomeActivity",
+        "shot": false,
+        "actions": [
+          "startup {\"runs\":1,\"maxMs\":1000}"
+        ]
+      },
+      {
+        "index": 20,
+        "title": "#detail 보임 · \"없는 글자\" 안 보임 · #detail 글자 = \"Detail\" · 화면 HomeActivity · 앱 com.ex.sactions",
+        "status": "pass",
+        "detail": "보임: Detail · 안 보임: text=\"없는 글자\" · 텍스트 \"Detail\" · 화면 com.ex.sactions.HomeActivity",
+        "screen": "com.ex.sactions com.ex.sactions.HomeActivity",
+        "shot": true,
+        "check": {
+          "by": "assert",
+          "expect": "#detail 보임 · \"없는 글자\" 안 보임 · #detail 글자 = \"Detail\" · 화면 HomeActivity · 앱 com.ex.sactions",
+          "actual": "보임: Detail · 안 보임: text=\"없는 글자\" · 텍스트 \"Detail\" · 화면 com.ex.sactions.HomeActivity"
+        }
+      },
+      {
+        "index": 21,
+        "title": "크래시 없음",
+        "status": "pass",
+        "detail": "크래시 없음",
+        "screen": "com.ex.sactions com.ex.sactions.HomeActivity",
+        "shot": true,
+        "check": {
+          "by": "assert",
+          "expect": "크래시 없음",
+          "actual": "크래시 없음"
+        }
+      }
+    ],
+    "commands": [
+      "date +%s",
+      "am force-stop com.ex.sactions",
+      "cmd package resolve-activity --brief -a android.intent.action.MAIN -c android.intent.category.LAUNCHER com.ex.sactions",
+      "am start -W (시작 시간)",
+      "am start -n x",
+      "dumpsys window | grep -E \"mCurrentFocus|mFocusedApp\"",
+      "uiautomator dump --compressed /data/local/tmp/droidlens_ui_X.xml 2>&1; echo __DROIDLENS_XML__; cat /data/local/tmp/droidlens_ui_X.xml 2>/dev/null; rm -f /data/local/tmp/droidlens_ui_X.xml",
+      "screencap -p",
+      "dumpsys window | grep -E \"mCurrentFocus|mFocusedApp\"",
+      "uiautomator dump --compressed /data/local/tmp/droidlens_ui_X.xml 2>&1; echo __DROIDLENS_XML__; cat /data/local/tmp/droidlens_ui_X.xml 2>/dev/null; rm -f /data/local/tmp/droidlens_ui_X.xml",
+      "dumpsys gfxinfo com.ex.sactions reset",
+      "dumpsys window | grep -E \"mCurrentFocus|mFocusedApp\"",
+      "uiautomator dump --compressed /data/local/tmp/droidlens_ui_X.xml 2>&1; echo __DROIDLENS_XML__; cat /data/local/tmp/droidlens_ui_X.xml 2>/dev/null; rm -f /data/local/tmp/droidlens_ui_X.xml",
+      "input tap 540 145",
+      "dumpsys window | grep -E \"mCurrentFocus|mFocusedApp\"",
+      "input keyevent 4",
+      "dumpsys window | grep -E \"mCurrentFocus|mFocusedApp\"",
+      "uiautomator dump --compressed /data/local/tmp/droidlens_ui_X.xml 2>&1; echo __DROIDLENS_XML__; cat /data/local/tmp/droidlens_ui_X.xml 2>/dev/null; rm -f /data/local/tmp/droidlens_ui_X.xml",
+      "input swipe 540 245 540 245 800",
+      "dumpsys window | grep -E \"mCurrentFocus|mFocusedApp\"",
+      "uiautomator dump --compressed /data/local/tmp/droidlens_ui_X.xml 2>&1; echo __DROIDLENS_XML__; cat /data/local/tmp/droidlens_ui_X.xml 2>/dev/null; rm -f /data/local/tmp/droidlens_ui_X.xml",
+      "input tap 540 145",
+      "dumpsys window | grep -E \"mCurrentFocus|mFocusedApp\"",
+      "input tap 10 120",
+      "dumpsys window | grep -E \"mCurrentFocus|mFocusedApp\"",
+      "input keyevent 4",
+      "dumpsys window | grep -E \"mCurrentFocus|mFocusedApp\"",
+      "uiautomator dump --compressed /data/local/tmp/droidlens_ui_X.xml 2>&1; echo __DROIDLENS_XML__; cat /data/local/tmp/droidlens_ui_X.xml 2>/dev/null; rm -f /data/local/tmp/droidlens_ui_X.xml",
+      "input tap 540 345",
+      "input text 'hello%sworld'",
+      "dumpsys window | grep -E \"mCurrentFocus|mFocusedApp\"",
+      "input swipe 540 1920 540 480 300",
+      "dumpsys window | grep -E \"mCurrentFocus|mFocusedApp\"",
+      "uiautomator dump --compressed /data/local/tmp/droidlens_ui_X.xml 2>&1; echo __DROIDLENS_XML__; cat /data/local/tmp/droidlens_ui_X.xml 2>/dev/null; rm -f /data/local/tmp/droidlens_ui_X.xml",
+      "input swipe 540 1920 540 480 300",
+      "uiautomator dump --compressed /data/local/tmp/droidlens_ui_X.xml 2>&1; echo __DROIDLENS_XML__; cat /data/local/tmp/droidlens_ui_X.xml 2>/dev/null; rm -f /data/local/tmp/droidlens_ui_X.xml",
+      "dumpsys window | grep -E \"mCurrentFocus|mFocusedApp\"",
+      "input keyevent 3",
+      "dumpsys window | grep -E \"mCurrentFocus|mFocusedApp\"",
+      "cmd package resolve-activity --brief -a android.intent.action.MAIN -c android.intent.category.LAUNCHER com.ex.sactions",
+      "am start -W (시작 시간)",
+      "am start -n x",
+      "dumpsys window | grep -E \"mCurrentFocus|mFocusedApp\"",
+      "uiautomator dump --compressed /data/local/tmp/droidlens_ui_X.xml 2>&1; echo __DROIDLENS_XML__; cat /data/local/tmp/droidlens_ui_X.xml 2>/dev/null; rm -f /data/local/tmp/droidlens_ui_X.xml",
+      "screencap -p",
+      "dumpsys window | grep -E \"mCurrentFocus|mFocusedApp\"",
+      "uiautomator dump --compressed /data/local/tmp/droidlens_ui_X.xml 2>&1; echo __DROIDLENS_XML__; cat /data/local/tmp/droidlens_ui_X.xml 2>/dev/null; rm -f /data/local/tmp/droidlens_ui_X.xml",
+      "dumpsys window | grep -E \"mCurrentFocus|mFocusedApp\"",
+      "am force-stop com.ex.sactions",
+      "cmd package resolve-activity --brief -a android.intent.action.MAIN -c android.intent.category.LAUNCHER com.ex.sactions",
+      "am start -W (시작 시간)",
+      "am start -n x",
+      "dumpsys window | grep -E \"mCurrentFocus|mFocusedApp\"",
+      "uiautomator dump --compressed /data/local/tmp/droidlens_ui_X.xml 2>&1; echo __DROIDLENS_XML__; cat /data/local/tmp/droidlens_ui_X.xml 2>/dev/null; rm -f /data/local/tmp/droidlens_ui_X.xml",
+      "screencap -p",
+      "dumpsys window | grep -E \"mCurrentFocus|mFocusedApp\"",
+      "uiautomator dump --compressed /data/local/tmp/droidlens_ui_X.xml 2>&1; echo __DROIDLENS_XML__; cat /data/local/tmp/droidlens_ui_X.xml 2>/dev/null; rm -f /data/local/tmp/droidlens_ui_X.xml",
+      "dumpsys window | grep -E \"mCurrentFocus|mFocusedApp\"",
+      "am start -W -a android.intent.action.VIEW -d 'myapp://item/1?token=secret' com.ex.sactions",
+      "dumpsys window | grep -E \"mCurrentFocus|mFocusedApp\"",
+      "screencap -p",
+      "dumpsys window | grep -E \"mCurrentFocus|mFocusedApp\"",
+      "cmd package resolve-activity --brief -a android.intent.action.MAIN -c android.intent.category.LAUNCHER com.ex.sactions",
+      "am force-stop com.ex.sactions",
+      "am start -W (시작 시간)",
+      "am start -n x",
+      "dumpsys gfxinfo com.ex.sactions reset",
+      "dumpsys window | grep -E \"mCurrentFocus|mFocusedApp\"",
+      "uiautomator dump --compressed /data/local/tmp/droidlens_ui_X.xml 2>&1; echo __DROIDLENS_XML__; cat /data/local/tmp/droidlens_ui_X.xml 2>/dev/null; rm -f /data/local/tmp/droidlens_ui_X.xml",
+      "dumpsys window | grep -E \"mCurrentFocus|mFocusedApp\"",
+      "screencap -p",
+      "dumpsys window | grep -E \"mCurrentFocus|mFocusedApp\"",
+      "logcat -b crash",
+      "screencap -p",
+      "dumpsys window | grep -E \"mCurrentFocus|mFocusedApp\""
+    ],
+    "sdk": [],
+    "events": [
+      "0/20 running wait id=\"detail\"",
+      "0/20 pass wait id=\"detail\" — 발견: Detail",
+      "1/20 running tap text=\"Detail\"",
+      "1/20 pass tap text=\"Detail\" — Button \"Detail\" @540,145",
+      "2/20 running key back",
+      "2/20 pass key back",
+      "3/20 running longPress id=\"menu\"",
+      "3/20 pass longPress id=\"menu\" — Button \"Menu\" @540,245",
+      "4/20 running tap id=\"close\"",
+      "4/20 pass tap id=\"close\" — Button \"Close\" @540,145",
+      "5/20 running tapAt {\"x\":10,\"y\":120}",
+      "5/20 pass tapAt {\"x\":10,\"y\":120}",
+      "6/20 running key back",
+      "6/20 pass key back",
+      "7/20 running type \"hello world\" → id=\"title_input\"",
+      "7/20 pass type \"hello world\" → id=\"title_input\" — 11자 입력",
+      "8/20 running swipe up",
+      "8/20 pass swipe up",
+      "9/20 running swipe up until text=\"Row 9\"",
+      "9/20 pass swipe up until text=\"Row 9\" — 1번 스크롤 후 발견",
+      "10/20 running key home",
+      "10/20 pass key home",
+      "11/20 running sleep 5",
+      "11/20 pass sleep 5",
+      "12/20 running launch",
+      "12/20 pass launch — com.ex.sactions.HomeActivity",
+      "13/20 running launch {\"restart\":true}",
+      "13/20 pass launch {\"restart\":true} — com.ex.sactions.HomeActivity",
+      "14/20 running deeplink myapp://item/1?token=secret",
+      "14/20 pass deeplink myapp://item/1?token=secret",
+      "15/20 running screenshot 홈",
+      "15/20 pass screenshot 홈 — 홈",
+      "16/20 running screenshot",
+      "16/20 pass screenshot",
+      "17/20 running startup {\"runs\":1,\"maxMs\":1000}",
+      "17/20 pass startup {\"runs\":1,\"maxMs\":1000} — 콜드 시작 중앙값 800ms (800)",
+      "18/20 running assert visible {\"id\":\"detail\"}, notVisible {\"text\":\"없는 글자\"}, text {\"of\":{\"id\":\"detail\"},\"equals\":\"Detail\"}, activity HomeActivity, package com.ex.sactions",
+      "18/20 pass assert visible {\"id\":\"detail\"}, notVisible {\"text\":\"없는 글자\"}, text {\"of\":{\"id\":\"detail\"},\"equals\":\"Detail\"}, activity HomeActivity, package com.ex.sactions — 보임: Detail · 안 보임: text=\"없는 글자\" · 텍스트 \"Detail\" · 화면 com.ex.sactions.HomeActivity",
+      "19/20 running assert noCrash true",
+      "19/20 pass assert noCrash true — 크래시 없음"
+    ]
+  },
+  "stop": {
+    "verdict": "fail",
+    "passed": 1,
+    "failed": 1,
+    "skipped": 2,
+    "summary": "1 통과 · 1 실패 · 2 건너뜀 (N초)",
+    "steps": [
+      {
+        "index": 1,
+        "title": "준비: 앱 실행",
+        "status": "info",
+        "screen": "com.ex.sstop com.ex.sstop.HomeActivity",
+        "shot": false
+      },
+      {
+        "index": 2,
+        "title": "tap text=\"Detail\"",
+        "status": "pass",
+        "detail": "Button \"Detail\" @540,145",
+        "screen": "com.ex.sstop com.ex.sstop.DetailActivity",
+        "shot": false,
+        "actions": [
+          "tap text=\"Detail\""
+        ]
+      },
+      {
+        "index": 3,
+        "title": "tap text=\"없는 버튼\"",
+        "status": "fail",
+        "detail": "요소를 찾지 못했습니다 (300ms): text=\"없는 버튼\"",
+        "screen": "com.ex.sstop com.ex.sstop.DetailActivity",
+        "shot": true,
+        "actions": [
+          "tap text=\"없는 버튼\""
+        ]
+      }
+    ],
+    "commands": [
+      "date +%s",
+      "am force-stop com.ex.sstop",
+      "cmd package resolve-activity --brief -a android.intent.action.MAIN -c android.intent.category.LAUNCHER com.ex.sstop",
+      "am start -W (시작 시간)",
+      "am start -n x",
+      "dumpsys window | grep -E \"mCurrentFocus|mFocusedApp\"",
+      "uiautomator dump --compressed /data/local/tmp/droidlens_ui_X.xml 2>&1; echo __DROIDLENS_XML__; cat /data/local/tmp/droidlens_ui_X.xml 2>/dev/null; rm -f /data/local/tmp/droidlens_ui_X.xml",
+      "screencap -p",
+      "dumpsys window | grep -E \"mCurrentFocus|mFocusedApp\"",
+      "uiautomator dump --compressed /data/local/tmp/droidlens_ui_X.xml 2>&1; echo __DROIDLENS_XML__; cat /data/local/tmp/droidlens_ui_X.xml 2>/dev/null; rm -f /data/local/tmp/droidlens_ui_X.xml",
+      "dumpsys gfxinfo com.ex.sstop reset",
+      "dumpsys window | grep -E \"mCurrentFocus|mFocusedApp\"",
+      "uiautomator dump --compressed /data/local/tmp/droidlens_ui_X.xml 2>&1; echo __DROIDLENS_XML__; cat /data/local/tmp/droidlens_ui_X.xml 2>/dev/null; rm -f /data/local/tmp/droidlens_ui_X.xml",
+      "input tap 540 145",
+      "dumpsys window | grep -E \"mCurrentFocus|mFocusedApp\"",
+      "uiautomator dump --compressed /data/local/tmp/droidlens_ui_X.xml 2>&1; echo __DROIDLENS_XML__; cat /data/local/tmp/droidlens_ui_X.xml 2>/dev/null; rm -f /data/local/tmp/droidlens_ui_X.xml",
+      "screencap -p",
+      "dumpsys window | grep -E \"mCurrentFocus|mFocusedApp\""
+    ],
+    "sdk": [],
+    "events": [
+      "0/4 running tap text=\"Detail\"",
+      "0/4 pass tap text=\"Detail\" — Button \"Detail\" @540,145",
+      "1/4 running tap text=\"없는 버튼\"",
+      "1/4 fail tap text=\"없는 버튼\" — 요소를 찾지 못했습니다 (300ms): text=\"없는 버튼\""
+    ]
+  },
+  "branches": {
+    "verdict": "fail",
+    "passed": 6,
+    "failed": 15,
+    "skipped": 2,
+    "summary": "6 통과 · 15 실패 · 2 건너뜀 (N초)",
+    "steps": [
+      {
+        "index": 1,
+        "title": "준비: 앱 실행",
+        "status": "info",
+        "screen": "com.android.launcher3 com.android.launcher3.Launcher",
+        "foreign": "com.android.launcher3",
+        "shot": true
+      },
+      {
+        "index": 2,
+        "title": "tap text=\"없는 버튼\"",
+        "status": "skip",
+        "detail": "선택(optional) 요소가 없어 건너뜀",
+        "screen": "com.android.launcher3 com.android.launcher3.Launcher",
+        "foreign": "com.android.launcher3",
+        "shot": true,
+        "actions": [
+          "tap text=\"없는 버튼\""
+        ]
+      },
+      {
+        "index": 3,
+        "title": "longPress text=\"없는 버튼\"",
+        "status": "fail",
+        "detail": "요소를 찾지 못했습니다 (200ms): text=\"없는 버튼\"",
+        "screen": "com.android.launcher3 com.android.launcher3.Launcher",
+        "foreign": "com.android.launcher3",
+        "shot": true,
+        "actions": [
+          "longPress text=\"없는 버튼\""
+        ]
+      },
+      {
+        "index": 4,
+        "title": "wait text=\"없음\"",
+        "status": "skip",
+        "detail": "선택(optional) 요소가 없어 건너뜀",
+        "screen": "com.android.launcher3 com.android.launcher3.Launcher",
+        "foreign": "com.android.launcher3",
+        "shot": true,
+        "actions": [
+          "wait text=\"없음\""
+        ]
+      },
+      {
+        "index": 5,
+        "title": "wait text=\"없음\"",
+        "status": "fail",
+        "detail": "300ms 안에 나타나지 않았습니다: text=\"없음\"",
+        "screen": "com.android.launcher3 com.android.launcher3.Launcher",
+        "foreign": "com.android.launcher3",
+        "shot": true,
+        "actions": [
+          "wait text=\"없음\""
+        ]
+      },
+      {
+        "index": 6,
+        "title": "wait text=\"없음\"",
+        "status": "pass",
+        "detail": "사라짐",
+        "screen": "com.android.launcher3 com.android.launcher3.Launcher",
+        "foreign": "com.android.launcher3",
+        "shot": true,
+        "actions": [
+          "wait text=\"없음\""
+        ]
+      },
+      {
+        "index": 7,
+        "title": "wait id=\"spinner\"",
+        "status": "pass",
+        "detail": "사라짐",
+        "screen": "com.android.launcher3 com.android.launcher3.Launcher",
+        "foreign": "com.android.launcher3",
+        "shot": true,
+        "actions": [
+          "wait id=\"spinner\""
+        ]
+      },
+      {
+        "index": 8,
+        "title": "type ●●●● (3자) → id=\"없는입력\"",
+        "status": "fail",
+        "detail": "입력창을 찾지 못했습니다: id=\"없는입력\"",
+        "screen": "com.android.launcher3 com.android.launcher3.Launcher",
+        "foreign": "com.android.launcher3",
+        "shot": true,
+        "actions": [
+          "type ●●●● (3자) → id=\"없는입력\""
+        ]
+      },
+      {
+        "index": 9,
+        "title": "type ●●●● (2자)",
+        "status": "fail",
+        "detail": "온디바이스 에이전트 없이는 ASCII만 입력할 수 있습니다 (adb input text 제약).",
+        "screen": "com.android.launcher3 com.android.launcher3.Launcher",
+        "foreign": "com.android.launcher3",
+        "shot": true,
+        "actions": [
+          "type ●●●● (2자)"
+        ]
+      },
+      {
+        "index": 10,
+        "title": "swipe up until text=\"끝\"",
+        "status": "fail",
+        "detail": "2번 스크롤해도 찾지 못했습니다: text=\"끝\"",
+        "screen": "com.android.launcher3 com.android.launcher3.Launcher",
+        "foreign": "com.android.launcher3",
+        "shot": true,
+        "actions": [
+          "swipe up until text=\"끝\""
+        ]
+      },
+      {
+        "index": 11,
+        "title": "key back",
+        "status": "pass",
+        "detail": "",
+        "screen": "com.android.launcher3 com.android.launcher3.Launcher",
+        "foreign": "com.android.launcher3",
+        "shot": true,
+        "actions": [
+          "key back"
+        ]
+      },
+      {
+        "index": 12,
+        "title": "\"없음\" 보임",
+        "status": "fail",
+        "detail": "기대: text=\"없음\" 보임 / 실제: 없음",
+        "screen": "com.android.launcher3 com.android.launcher3.Launcher",
+        "foreign": "com.android.launcher3",
+        "shot": true,
+        "check": {
+          "by": "assert",
+          "expect": "\"없음\" 보임",
+          "actual": "없음"
+        }
+      },
+      {
+        "index": 13,
+        "title": "#detail 안 보임",
+        "status": "pass",
+        "detail": "안 보임: id=\"detail\"",
+        "screen": "com.android.launcher3 com.android.launcher3.Launcher",
+        "foreign": "com.android.launcher3",
+        "shot": true,
+        "check": {
+          "by": "assert",
+          "expect": "#detail 안 보임",
+          "actual": "안 보임: id=\"detail\""
+        }
+      },
+      {
+        "index": 14,
+        "title": "#detail 글자 = \"다름\"",
+        "status": "fail",
+        "detail": "기대: \"다름\" / 실제: \"(요소 없음)\"",
+        "screen": "com.android.launcher3 com.android.launcher3.Launcher",
+        "foreign": "com.android.launcher3",
+        "shot": true,
+        "check": {
+          "by": "assert",
+          "expect": "#detail 글자 = \"다름\"",
+          "actual": "\"(요소 없음)\""
+        }
+      },
+      {
+        "index": 15,
+        "title": "#detail 글자 에 \"Det\" 포함",
+        "status": "fail",
+        "detail": "기대: \"Det\" 포함 / 실제: \"(요소 없음)\"",
+        "screen": "com.android.launcher3 com.android.launcher3.Launcher",
+        "foreign": "com.android.launcher3",
+        "shot": true,
+        "check": {
+          "by": "assert",
+          "expect": "#detail 글자 에 \"Det\" 포함",
+          "actual": "\"(요소 없음)\""
+        }
+      },
+      {
+        "index": 16,
+        "title": "#없음 글자 에 \"x\" 포함",
+        "status": "fail",
+        "detail": "기대: \"x\" 포함 / 실제: \"(요소 없음)\"",
+        "screen": "com.android.launcher3 com.android.launcher3.Launcher",
+        "foreign": "com.android.launcher3",
+        "shot": true,
+        "check": {
+          "by": "assert",
+          "expect": "#없음 글자 에 \"x\" 포함",
+          "actual": "\"(요소 없음)\""
+        }
+      },
+      {
+        "index": 17,
+        "title": "화면 OtherActivity",
+        "status": "fail",
+        "detail": "기대:  OtherActivity / 실제: com.android.launcher3 com.android.launcher3.Launcher",
+        "screen": "com.android.launcher3 com.android.launcher3.Launcher",
+        "foreign": "com.android.launcher3",
+        "shot": true,
+        "check": {
+          "by": "assert",
+          "expect": "화면 OtherActivity",
+          "actual": "com.android.launcher3 com.android.launcher3.Launcher"
+        }
+      },
+      {
+        "index": 18,
+        "title": "앱 com.other",
+        "status": "fail",
+        "detail": "기대: com.other  / 실제: com.android.launcher3 com.android.launcher3.Launcher",
+        "screen": "com.android.launcher3 com.android.launcher3.Launcher",
+        "foreign": "com.android.launcher3",
+        "shot": true,
+        "check": {
+          "by": "assert",
+          "expect": "앱 com.other",
+          "actual": "com.android.launcher3 com.android.launcher3.Launcher"
+        }
+      },
+      {
+        "index": 19,
+        "title": "startup {\"runs\":1,\"maxMs\":500}",
+        "status": "fail",
+        "detail": "기대: 500ms 이하 / 실제: 콜드 시작 중앙값 800ms (800)",
+        "screen": "com.ex.sbranches com.ex.sbranches.HomeActivity",
+        "shot": true,
+        "actions": [
+          "startup {\"runs\":1,\"maxMs\":500}"
+        ]
+      },
+      {
+        "index": 20,
+        "title": "startup {\"cold\":false,\"runs\":1}",
+        "status": "pass",
+        "detail": "다시 열기 시작 중앙값 800ms (800)",
+        "screen": "com.ex.sbranches com.ex.sbranches.HomeActivity",
+        "shot": true,
+        "actions": [
+          "startup {\"cold\":false,\"runs\":1}"
+        ]
+      },
+      {
+        "index": 21,
+        "title": "메모리 100MB 이하",
+        "status": "fail",
+        "detail": "기대: 메모리 100MB 이하 / 실제: 200MB",
+        "screen": "com.ex.sbranches com.ex.sbranches.HomeActivity",
+        "shot": true,
+        "check": {
+          "by": "assert",
+          "expect": "메모리 100MB 이하",
+          "actual": "200MB"
+        }
+      },
+      {
+        "index": 22,
+        "title": "메모리 300MB 이하, 버벅임 10% 이하",
+        "status": "fail",
+        "detail": "기대: 버벅인 프레임 10% 이하 / 실제: 15% (30/200)",
+        "screen": "com.ex.sbranches com.ex.sbranches.HomeActivity",
+        "shot": true,
+        "check": {
+          "by": "assert",
+          "expect": "메모리 300MB 이하, 버벅임 10% 이하",
+          "actual": "15% (30/200)"
+        }
+      },
+      {
+        "index": 23,
+        "title": "메모리 300MB 이하, 버벅임 20% 이하",
+        "status": "pass",
+        "detail": "메모리 200MB · 버벅인 프레임 15% (30/200)",
+        "screen": "com.ex.sbranches com.ex.sbranches.HomeActivity",
+        "shot": true,
+        "check": {
+          "by": "assert",
+          "expect": "메모리 300MB 이하, 버벅임 20% 이하",
+          "actual": "메모리 200MB · 버벅인 프레임 15% (30/200)"
+        }
+      },
+      {
+        "index": 24,
+        "title": "요청 /api",
+        "status": "fail",
+        "detail": "기대:  /api  / 실제: ",
+        "screen": "com.ex.sbranches com.ex.sbranches.HomeActivity",
+        "shot": true,
+        "check": {
+          "by": "assert",
+          "expect": "요청 /api",
+          "actual": " "
+        }
+      }
+    ],
+    "commands": [
+      "date +%s",
+      "dumpsys gfxinfo com.ex.sbranches reset",
+      "screencap -p",
+      "dumpsys window | grep -E \"mCurrentFocus|mFocusedApp\"",
+      "uiautomator dump --compressed /data/local/tmp/droidlens_ui_X.xml 2>&1; echo __DROIDLENS_XML__; cat /data/local/tmp/droidlens_ui_X.xml 2>/dev/null; rm -f /data/local/tmp/droidlens_ui_X.xml",
+      "input swipe 540 1920 540 480 300",
+      "uiautomator dump --compressed /data/local/tmp/droidlens_ui_X.xml 2>&1; echo __DROIDLENS_XML__; cat /data/local/tmp/droidlens_ui_X.xml 2>/dev/null; rm -f /data/local/tmp/droidlens_ui_X.xml",
+      "screencap -p",
+      "dumpsys window | grep -E \"mCurrentFocus|mFocusedApp\"",
+      "input keyevent 4",
+      "screencap -p",
+      "dumpsys window | grep -E \"mCurrentFocus|mFocusedApp\"",
+      "uiautomator dump --compressed /data/local/tmp/droidlens_ui_X.xml 2>&1; echo __DROIDLENS_XML__; cat /data/local/tmp/droidlens_ui_X.xml 2>/dev/null; rm -f /data/local/tmp/droidlens_ui_X.xml",
+      "screencap -p",
+      "dumpsys window | grep -E \"mCurrentFocus|mFocusedApp\"",
+      "cmd package resolve-activity --brief -a android.intent.action.MAIN -c android.intent.category.LAUNCHER com.ex.sbranches",
+      "am force-stop com.ex.sbranches",
+      "am start -W (시작 시간)",
+      "am start -n x",
+      "screencap -p",
+      "dumpsys window | grep -E \"mCurrentFocus|mFocusedApp\"",
+      "cmd package resolve-activity --brief -a android.intent.action.MAIN -c android.intent.category.LAUNCHER com.ex.sbranches",
+      "pidof com.ex.sbranches",
+      "input keyevent 3",
+      "am start -W (시작 시간)",
+      "am start -n x",
+      "dumpsys gfxinfo com.ex.sbranches reset",
+      "screencap -p",
+      "dumpsys window | grep -E \"mCurrentFocus|mFocusedApp\"",
+      "perfSample",
+      "screencap -p",
+      "dumpsys window | grep -E \"mCurrentFocus|mFocusedApp\"",
+      "cat /proc/net/unix",
+      "screencap -p",
+      "dumpsys window | grep -E \"mCurrentFocus|mFocusedApp\""
+    ],
+    "sdk": [],
+    "events": [
+      "0/23 running tap text=\"없는 버튼\"",
+      "0/23 skip tap text=\"없는 버튼\"",
+      "1/23 running longPress text=\"없는 버튼\"",
+      "1/23 fail longPress text=\"없는 버튼\" — 요소를 찾지 못했습니다 (200ms): text=\"없는 버튼\"",
+      "2/23 running wait text=\"없음\"",
+      "2/23 skip wait text=\"없음\"",
+      "3/23 running wait text=\"없음\"",
+      "3/23 fail wait text=\"없음\" — 300ms 안에 나타나지 않았습니다: text=\"없음\"",
+      "4/23 running wait text=\"없음\"",
+      "4/23 pass wait text=\"없음\" — 사라짐",
+      "5/23 running wait id=\"spinner\"",
+      "5/23 pass wait id=\"spinner\" — 사라짐",
+      "6/23 running type \"abc\" → id=\"없는입력\"",
+      "6/23 fail type \"abc\" → id=\"없는입력\" — 입력창을 찾지 못했습니다: id=\"없는입력\"",
+      "7/23 running type \"한글\"",
+      "7/23 fail type \"한글\" — 온디바이스 에이전트 없이는 ASCII만 입력할 수 있습니다 (adb input text 제약).",
+      "8/23 running swipe up until text=\"끝\"",
+      "8/23 fail swipe up until text=\"끝\" — 2번 스크롤해도 찾지 못했습니다: text=\"끝\"",
+      "9/23 running key back",
+      "9/23 pass key back",
+      "10/23 running assert visible {\"text\":\"없음\"}",
+      "10/23 fail assert visible {\"text\":\"없음\"} — 기대: text=\"없음\" 보임 / 실제: 없음",
+      "11/23 running assert notVisible {\"id\":\"detail\"}",
+      "11/23 pass assert notVisible {\"id\":\"detail\"} — 안 보임: id=\"detail\"",
+      "12/23 running assert text {\"of\":{\"id\":\"detail\"},\"equals\":\"다름\"}",
+      "12/23 fail assert text {\"of\":{\"id\":\"detail\"},\"equals\":\"다름\"} — 기대: \"다름\" / 실제: \"(요소 없음)\"",
+      "13/23 running assert text {\"of\":{\"id\":\"detail\"},\"contains\":\"Det\"}",
+      "13/23 fail assert text {\"of\":{\"id\":\"detail\"},\"contains\":\"Det\"} — 기대: \"Det\" 포함 / 실제: \"(요소 없음)\"",
+      "14/23 running assert text {\"of\":{\"id\":\"없음\"},\"contains\":\"x\"}",
+      "14/23 fail assert text {\"of\":{\"id\":\"없음\"},\"contains\":\"x\"} — 기대: \"x\" 포함 / 실제: \"(요소 없음)\"",
+      "15/23 running assert activity OtherActivity",
+      "15/23 fail assert activity OtherActivity — 기대:  OtherActivity / 실제: com.android.launcher3 com.android.launcher3.Launcher",
+      "16/23 running assert package com.other",
+      "16/23 fail assert package com.other — 기대: com.other  / 실제: com.android.launcher3 com.android.launcher3.Launcher",
+      "17/23 running startup {\"runs\":1,\"maxMs\":500}",
+      "17/23 fail startup {\"runs\":1,\"maxMs\":500} — 기대: 500ms 이하 / 실제: 콜드 시작 중앙값 800ms (800)",
+      "18/23 running startup {\"cold\":false,\"runs\":1}",
+      "18/23 pass startup {\"cold\":false,\"runs\":1} — 다시 열기 시작 중앙값 800ms (800)",
+      "19/23 running assert perf {\"maxMemoryMb\":100}",
+      "19/23 fail assert perf {\"maxMemoryMb\":100} — 기대: 메모리 100MB 이하 / 실제: 200MB",
+      "20/23 running assert perf {\"maxMemoryMb\":300,\"maxJankPercent\":10}",
+      "20/23 fail assert perf {\"maxMemoryMb\":300,\"maxJankPercent\":10} — 기대: 버벅인 프레임 10% 이하 / 실제: 15% (30/200)",
+      "21/23 running assert perf {\"maxMemoryMb\":300,\"maxJankPercent\":20}",
+      "21/23 pass assert perf {\"maxMemoryMb\":300,\"maxJankPercent\":20} — 메모리 200MB · 버벅인 프레임 15% (30/200)",
+      "22/23 running assert network {\"url\":\"/api\"}",
+      "22/23 fail assert network {\"url\":\"/api\"} — 기대:  /api  / 실제: "
+    ]
+  },
+  "perfdown": {
+    "verdict": "fail",
+    "passed": 0,
+    "failed": 1,
+    "skipped": 0,
+    "summary": "0 통과 · 1 실패 · 0 건너뜀 (N초)",
+    "steps": [
+      {
+        "index": 1,
+        "title": "준비: 앱 실행",
+        "status": "info",
+        "screen": "com.ex.sperfdown com.ex.sperfdown.HomeActivity",
+        "shot": false
+      },
+      {
+        "index": 2,
+        "title": "버벅임 50% 이하",
+        "status": "fail",
+        "detail": "com.ex.sperfdown 이(가) 실행 중이 아니라 성능을 잴 수 없습니다",
+        "screen": "com.ex.sperfdown com.ex.sperfdown.HomeActivity",
+        "shot": true,
+        "check": {
+          "by": "assert",
+          "expect": "버벅임 50% 이하",
+          "actual": "com.ex.sperfdown 이(가) 실행 중이 아니라 성능을 잴 수 없습니다"
+        }
+      }
+    ],
+    "commands": [
+      "date +%s",
+      "am force-stop com.ex.sperfdown",
+      "cmd package resolve-activity --brief -a android.intent.action.MAIN -c android.intent.category.LAUNCHER com.ex.sperfdown",
+      "am start -W (시작 시간)",
+      "am start -n x",
+      "dumpsys window | grep -E \"mCurrentFocus|mFocusedApp\"",
+      "uiautomator dump --compressed /data/local/tmp/droidlens_ui_X.xml 2>&1; echo __DROIDLENS_XML__; cat /data/local/tmp/droidlens_ui_X.xml 2>/dev/null; rm -f /data/local/tmp/droidlens_ui_X.xml",
+      "screencap -p",
+      "dumpsys window | grep -E \"mCurrentFocus|mFocusedApp\"",
+      "uiautomator dump --compressed /data/local/tmp/droidlens_ui_X.xml 2>&1; echo __DROIDLENS_XML__; cat /data/local/tmp/droidlens_ui_X.xml 2>/dev/null; rm -f /data/local/tmp/droidlens_ui_X.xml",
+      "dumpsys gfxinfo com.ex.sperfdown reset",
+      "dumpsys window | grep -E \"mCurrentFocus|mFocusedApp\"",
+      "perfSample",
+      "screencap -p",
+      "dumpsys window | grep -E \"mCurrentFocus|mFocusedApp\""
+    ],
+    "sdk": [],
+    "events": [
+      "0/1 running assert perf {\"maxJankPercent\":50}",
+      "0/1 fail assert perf {\"maxJankPercent\":50} — com.ex.sperfdown 이(가) 실행 중이 아니라 성능을 잴 수 없습니다"
+    ]
+  },
+  "sdk": {
+    "verdict": "fail",
+    "passed": 6,
+    "failed": 7,
+    "skipped": 0,
+    "summary": "6 통과 · 7 실패 · 0 건너뜀 (N초)",
+    "steps": [
+      {
+        "index": 1,
+        "title": "준비: 앱 실행",
+        "status": "info",
+        "detail": "앱 데이터 지움\n앱 재시작\n설정 settings.nickname = 냥이\n네트워크 목 POST /api/orders\n네트워크 목 * /api/slow",
+        "screen": "com.ex.ssdk com.ex.ssdk.HomeActivity",
+        "shot": false
+      },
+      {
+        "index": 2,
+        "title": "요청 POST /api/orders → 201",
+        "status": "pass",
+        "detail": "요청 #2 POST 201 https://api.ex.com/api/orders",
+        "screen": "com.ex.ssdk com.ex.ssdk.HomeActivity",
+        "shot": true,
+        "check": {
+          "by": "assert",
+          "expect": "요청 POST /api/orders → 201",
+          "actual": "요청 #2 POST 201 https://api.ex.com/api/orders"
+        }
+      },
+      {
+        "index": 3,
+        "title": "요청 GET /api/orders",
+        "status": "pass",
+        "detail": "요청 #3 GET 200 https://api.ex.com/api/orders",
+        "screen": "com.ex.ssdk com.ex.ssdk.HomeActivity",
+        "shot": true,
+        "check": {
+          "by": "assert",
+          "expect": "요청 GET /api/orders",
+          "actual": "요청 #3 GET 200 https://api.ex.com/api/orders"
+        }
+      },
+      {
+        "index": 4,
+        "title": "요청 /api/orders → 404",
+        "status": "fail",
+        "detail": "기대:  /api/orders 404 / 실제: POST 201 https://api.ex.com/api/orders; GET 200 https://api.ex.com/api/orders",
+        "screen": "com.ex.ssdk com.ex.ssdk.HomeActivity",
+        "shot": true,
+        "check": {
+          "by": "assert",
+          "expect": "요청 /api/orders → 404",
+          "actual": "POST 201 https://api.ex.com/api/orders; GET 200 https://api.ex.com/api/orders"
+        }
+      },
+      {
+        "index": 5,
+        "title": "요청 /api/old",
+        "status": "fail",
+        "detail": "기대:  /api/old  / 실제: 해당 URL 요청 없음",
+        "screen": "com.ex.ssdk com.ex.ssdk.HomeActivity",
+        "shot": true,
+        "check": {
+          "by": "assert",
+          "expect": "요청 /api/old",
+          "actual": "해당 URL 요청 없음"
+        }
+      },
+      {
+        "index": 6,
+        "title": "요청 /api/orders",
+        "status": "fail",
+        "detail": "기대:  /api/orders  / 실제: POST 201 https://api.ex.com/api/orders; GET 200 https://api.ex.com/api/orders",
+        "screen": "com.ex.ssdk com.ex.ssdk.HomeActivity",
+        "shot": true,
+        "check": {
+          "by": "assert",
+          "expect": "요청 /api/orders",
+          "actual": "POST 201 https://api.ex.com/api/orders; GET 200 https://api.ex.com/api/orders"
+        }
+      },
+      {
+        "index": 7,
+        "title": "설정 settings.nickname = \"냥이\"",
+        "status": "pass",
+        "detail": "settings.nickname = 냥이",
+        "screen": "com.ex.ssdk com.ex.ssdk.HomeActivity",
+        "shot": true,
+        "check": {
+          "by": "assert",
+          "expect": "설정 settings.nickname = \"냥이\"",
+          "actual": "settings.nickname = 냥이"
+        }
+      },
+      {
+        "index": 8,
+        "title": "설정 settings.auth_token = ●●●● (7자)",
+        "status": "fail",
+        "detail": "기대: settings.auth_token = ●●●● (5자) / 실제: ●●●● (11자)",
+        "screen": "com.ex.ssdk com.ex.ssdk.HomeActivity",
+        "shot": true,
+        "check": {
+          "by": "assert",
+          "expect": "설정 settings.auth_token = ●●●● (7자)",
+          "actual": "●●●● (11자)"
+        }
+      },
+      {
+        "index": 9,
+        "title": "설정 none.x = 1",
+        "status": "fail",
+        "detail": "기대: none.x = 1 / 실제: undefined",
+        "screen": "com.ex.ssdk com.ex.ssdk.HomeActivity",
+        "shot": true,
+        "check": {
+          "by": "assert",
+          "expect": "설정 none.x = 1",
+          "actual": "undefined"
+        }
+      },
+      {
+        "index": 10,
+        "title": "DB SELECT COUNT(*) FROM notes = 3",
+        "status": "pass",
+        "detail": "SELECT COUNT(*) FROM notes → 3",
+        "screen": "com.ex.ssdk com.ex.ssdk.HomeActivity",
+        "shot": true,
+        "check": {
+          "by": "assert",
+          "expect": "DB SELECT COUNT(*) FROM notes = 3",
+          "actual": "SELECT COUNT(*) FROM notes → 3"
+        }
+      },
+      {
+        "index": 11,
+        "title": "DB SELECT 1 = 1",
+        "status": "fail",
+        "detail": "기대: SELECT 1 → 1 / 실제: undefined",
+        "screen": "com.ex.ssdk com.ex.ssdk.HomeActivity",
+        "shot": true,
+        "check": {
+          "by": "assert",
+          "expect": "DB SELECT 1 = 1",
+          "actual": "undefined"
+        }
+      },
+      {
+        "index": 12,
+        "title": "이벤트 button_clicked 기록",
+        "status": "pass",
+        "detail": "이벤트 button_clicked 1회",
+        "screen": "com.ex.ssdk com.ex.ssdk.HomeActivity",
+        "shot": true,
+        "check": {
+          "by": "assert",
+          "expect": "이벤트 button_clicked 기록",
+          "actual": "이벤트 button_clicked 1회"
+        }
+      },
+      {
+        "index": 13,
+        "title": "이벤트 old_event 기록",
+        "status": "fail",
+        "detail": "기대: 이벤트 old_event / 실제: 기록 없음",
+        "screen": "com.ex.ssdk com.ex.ssdk.HomeActivity",
+        "shot": true,
+        "check": {
+          "by": "assert",
+          "expect": "이벤트 old_event 기록",
+          "actual": "기록 없음"
+        }
+      },
+      {
+        "index": 14,
+        "title": "#detail 보임 · 설정 settings.nickname = \"냥이\" · 이벤트 button_clicked 기록",
+        "status": "pass",
+        "detail": "보임: Detail · settings.nickname = 냥이 · 이벤트 button_clicked 1회",
+        "screen": "com.ex.ssdk com.ex.ssdk.HomeActivity",
+        "shot": true,
+        "check": {
+          "by": "assert",
+          "expect": "#detail 보임 · 설정 settings.nickname = \"냥이\" · 이벤트 button_clicked 기록",
+          "actual": "보임: Detail · settings.nickname = 냥이 · 이벤트 button_clicked 1회"
+        }
+      }
+    ],
+    "commands": [
+      "date +%s",
+      "pm clear com.ex.ssdk",
+      "cmd package resolve-activity --brief -a android.intent.action.MAIN -c android.intent.category.LAUNCHER com.ex.ssdk",
+      "am start -W (시작 시간)",
+      "am start -n x",
+      "dumpsys window | grep -E \"mCurrentFocus|mFocusedApp\"",
+      "uiautomator dump --compressed /data/local/tmp/droidlens_ui_X.xml 2>&1; echo __DROIDLENS_XML__; cat /data/local/tmp/droidlens_ui_X.xml 2>/dev/null; rm -f /data/local/tmp/droidlens_ui_X.xml",
+      "screencap -p",
+      "dumpsys window | grep -E \"mCurrentFocus|mFocusedApp\"",
+      "uiautomator dump --compressed /data/local/tmp/droidlens_ui_X.xml 2>&1; echo __DROIDLENS_XML__; cat /data/local/tmp/droidlens_ui_X.xml 2>/dev/null; rm -f /data/local/tmp/droidlens_ui_X.xml",
+      "cat /proc/net/unix",
+      "stat (sdk 확인)",
+      "am force-stop com.ex.ssdk",
+      "cmd package resolve-activity --brief -a android.intent.action.MAIN -c android.intent.category.LAUNCHER com.ex.ssdk",
+      "am start -W (시작 시간)",
+      "am start -n x",
+      "dumpsys window | grep -E \"mCurrentFocus|mFocusedApp\"",
+      "uiautomator dump --compressed /data/local/tmp/droidlens_ui_X.xml 2>&1; echo __DROIDLENS_XML__; cat /data/local/tmp/droidlens_ui_X.xml 2>/dev/null; rm -f /data/local/tmp/droidlens_ui_X.xml",
+      "screencap -p",
+      "dumpsys window | grep -E \"mCurrentFocus|mFocusedApp\"",
+      "uiautomator dump --compressed /data/local/tmp/droidlens_ui_X.xml 2>&1; echo __DROIDLENS_XML__; cat /data/local/tmp/droidlens_ui_X.xml 2>/dev/null; rm -f /data/local/tmp/droidlens_ui_X.xml",
+      "dumpsys gfxinfo com.ex.ssdk reset",
+      "dumpsys window | grep -E \"mCurrentFocus|mFocusedApp\"",
+      "screencap -p",
+      "dumpsys window | grep -E \"mCurrentFocus|mFocusedApp\"",
+      "uiautomator dump --compressed /data/local/tmp/droidlens_ui_X.xml 2>&1; echo __DROIDLENS_XML__; cat /data/local/tmp/droidlens_ui_X.xml 2>/dev/null; rm -f /data/local/tmp/droidlens_ui_X.xml",
+      "screencap -p",
+      "dumpsys window | grep -E \"mCurrentFocus|mFocusedApp\""
+    ],
+    "sdk": [
+      "POST /prefs/set?file=settings&key=nickname&type=string 냥이",
+      "POST /mocks/set {\"url\":\"/api/orders\",\"method\":\"POST\",\"status\":500,\"body\":\"{\\\"error\\\":1}\"}",
+      "POST /mocks/set {\"url\":\"/api/slow\",\"delayMs\":3000}",
+      "GET /network?filter=%2Fapi%2Forders",
+      "GET /network/detail?id=2",
+      "GET /network?filter=%2Fapi%2Forders",
+      "GET /network?filter=%2Fapi%2Fold",
+      "GET /network?filter=%2Fapi%2Forders",
+      "GET /network/detail?id=3",
+      "GET /network/detail?id=2",
+      "GET /prefs",
+      "POST /db/query?db=app.db SELECT COUNT(*) FROM notes",
+      "POST /db/query?db=app.db SELECT 1",
+      "GET /events?since=0",
+      "GET /prefs",
+      "GET /events?since=0",
+      "POST /mocks/remove?id=m1",
+      "POST /mocks/remove?id=m2"
+    ],
+    "events": [
+      "0/13 running assert network {\"url\":\"/api/orders\",\"method\":\"POST\",\"status\":201,\"bodyContains\":\"orderId\"}",
+      "0/13 pass assert network {\"url\":\"/api/orders\",\"method\":\"POST\",\"status\":201,\"bodyContains\":\"orderId\"} — 요청 #2 POST 201 https://api.ex.com/api/orders",
+      "1/13 running assert network {\"url\":\"/api/orders\",\"method\":\"GET\"}",
+      "1/13 pass assert network {\"url\":\"/api/orders\",\"method\":\"GET\"} — 요청 #3 GET 200 https://api.ex.com/api/orders",
+      "2/13 running assert network {\"url\":\"/api/orders\",\"status\":404}",
+      "2/13 fail assert network {\"url\":\"/api/orders\",\"status\":404} — 기대:  /api/orders 404 / 실제: POST 201 https://api.ex.com/api/orders; GET 200 https://api.ex.com/api/orders",
+      "3/13 running assert network {\"url\":\"/api/old\"}",
+      "3/13 fail assert network {\"url\":\"/api/old\"} — 기대:  /api/old  / 실제: 해당 URL 요청 없음",
+      "4/13 running assert network {\"url\":\"/api/orders\",\"bodyContains\":\"없는본문\"}",
+      "4/13 fail assert network {\"url\":\"/api/orders\",\"bodyContains\":\"없는본문\"} — 기대:  /api/orders  / 실제: POST 201 https://api.ex.com/api/orders; GET 200 https://api.ex.com/api/orders",
+      "5/13 running assert pref {\"file\":\"settings\",\"key\":\"nickname\",\"equals\":\"냥이\"}",
+      "5/13 pass assert pref {\"file\":\"settings\",\"key\":\"nickname\",\"equals\":\"냥이\"} — settings.nickname = 냥이",
+      "6/13 running assert pref {\"file\":\"settings\",\"key\":\"auth_token\",\"equals\":\"wrong\"}",
+      "6/13 fail assert pref {\"file\":\"settings\",\"key\":\"auth_token\",\"equals\":\"wrong\"} — 기대: settings.auth_token = ●●●● (5자) / 실제: ●●●● (11자)",
+      "7/13 running assert pref {\"file\":\"none\",\"key\":\"x\",\"equals\":1}",
+      "7/13 fail assert pref {\"file\":\"none\",\"key\":\"x\",\"equals\":1} — 기대: none.x = 1 / 실제: undefined",
+      "8/13 running assert db {\"db\":\"app.db\",\"sql\":\"SELECT COUNT(*) FROM notes\",\"equals\":3}",
+      "8/13 pass assert db {\"db\":\"app.db\",\"sql\":\"SELECT COUNT(*) FROM notes\",\"equals\":3} — SELECT COUNT(*) FROM notes → 3",
+      "9/13 running assert db {\"db\":\"app.db\",\"sql\":\"SELECT 1\",\"equals\":1}",
+      "9/13 fail assert db {\"db\":\"app.db\",\"sql\":\"SELECT 1\",\"equals\":1} — 기대: SELECT 1 → 1 / 실제: undefined",
+      "10/13 running assert event button_clicked",
+      "10/13 pass assert event button_clicked — 이벤트 button_clicked 1회",
+      "11/13 running assert event old_event",
+      "11/13 fail assert event old_event — 기대: 이벤트 old_event / 실제: 기록 없음",
+      "12/13 running assert visible {\"id\":\"detail\"}, pref {\"file\":\"settings\",\"key\":\"nickname\",\"equals\":\"냥이\"}, event button_clicked",
+      "12/13 pass assert visible {\"id\":\"detail\"}, pref {\"file\":\"settings\",\"key\":\"nickname\",\"equals\":\"냥이\"}, event button_clicked — 보임: Detail · settings.nickname = 냥이 · 이벤트 button_clicked 1회"
+    ]
+  },
+  "mockleft": {
+    "verdict": "pass",
+    "passed": 1,
+    "failed": 0,
+    "skipped": 0,
+    "summary": "1 통과 · 0 실패 · 0 건너뜀 (N초) · 목 규칙 1개를 지우지 못했습니다",
+    "steps": [
+      {
+        "index": 1,
+        "title": "준비: 앱 실행",
+        "status": "info",
+        "detail": "앱 재시작\n네트워크 목 * /api/x",
+        "screen": "com.ex.smockleft com.ex.smockleft.HomeActivity",
+        "shot": false
+      },
+      {
+        "index": 2,
+        "title": "#detail 보임",
+        "status": "pass",
+        "detail": "보임: Detail",
+        "screen": "com.ex.smockleft com.ex.smockleft.HomeActivity",
+        "shot": true,
+        "check": {
+          "by": "assert",
+          "expect": "#detail 보임",
+          "actual": "보임: Detail"
+        }
+      },
+      {
+        "index": 3,
+        "title": "정리: 목 규칙 지우기",
+        "status": "info",
+        "detail": "목 규칙 1개(m1)를 지우지 못했습니다. 앱 안에 남아 있으니 network_mock_remove 나 데스크톱 네트워크 탭에서 지우세요",
+        "screen": "com.ex.smockleft com.ex.smockleft.HomeActivity",
+        "shot": false
+      }
+    ],
+    "commands": [
+      "date +%s",
+      "cmd package resolve-activity --brief -a android.intent.action.MAIN -c android.intent.category.LAUNCHER com.ex.smockleft",
+      "am start -W (시작 시간)",
+      "am start -n x",
+      "dumpsys window | grep -E \"mCurrentFocus|mFocusedApp\"",
+      "uiautomator dump --compressed /data/local/tmp/droidlens_ui_X.xml 2>&1; echo __DROIDLENS_XML__; cat /data/local/tmp/droidlens_ui_X.xml 2>/dev/null; rm -f /data/local/tmp/droidlens_ui_X.xml",
+      "screencap -p",
+      "dumpsys window | grep -E \"mCurrentFocus|mFocusedApp\"",
+      "uiautomator dump --compressed /data/local/tmp/droidlens_ui_X.xml 2>&1; echo __DROIDLENS_XML__; cat /data/local/tmp/droidlens_ui_X.xml 2>/dev/null; rm -f /data/local/tmp/droidlens_ui_X.xml",
+      "cat /proc/net/unix",
+      "stat (sdk 확인)",
+      "am force-stop com.ex.smockleft",
+      "cmd package resolve-activity --brief -a android.intent.action.MAIN -c android.intent.category.LAUNCHER com.ex.smockleft",
+      "am start -W (시작 시간)",
+      "am start -n x",
+      "dumpsys window | grep -E \"mCurrentFocus|mFocusedApp\"",
+      "uiautomator dump --compressed /data/local/tmp/droidlens_ui_X.xml 2>&1; echo __DROIDLENS_XML__; cat /data/local/tmp/droidlens_ui_X.xml 2>/dev/null; rm -f /data/local/tmp/droidlens_ui_X.xml",
+      "screencap -p",
+      "dumpsys window | grep -E \"mCurrentFocus|mFocusedApp\"",
+      "uiautomator dump --compressed /data/local/tmp/droidlens_ui_X.xml 2>&1; echo __DROIDLENS_XML__; cat /data/local/tmp/droidlens_ui_X.xml 2>/dev/null; rm -f /data/local/tmp/droidlens_ui_X.xml",
+      "dumpsys gfxinfo com.ex.smockleft reset",
+      "dumpsys window | grep -E \"mCurrentFocus|mFocusedApp\"",
+      "uiautomator dump --compressed /data/local/tmp/droidlens_ui_X.xml 2>&1; echo __DROIDLENS_XML__; cat /data/local/tmp/droidlens_ui_X.xml 2>/dev/null; rm -f /data/local/tmp/droidlens_ui_X.xml",
+      "screencap -p",
+      "dumpsys window | grep -E \"mCurrentFocus|mFocusedApp\"",
+      "cmd package resolve-activity --brief -a android.intent.action.MAIN -c android.intent.category.LAUNCHER com.ex.smockleft",
+      "am start -W (시작 시간)",
+      "am start -n x",
+      "dumpsys window | grep -E \"mCurrentFocus|mFocusedApp\"",
+      "uiautomator dump --compressed /data/local/tmp/droidlens_ui_X.xml 2>&1; echo __DROIDLENS_XML__; cat /data/local/tmp/droidlens_ui_X.xml 2>/dev/null; rm -f /data/local/tmp/droidlens_ui_X.xml",
+      "screencap -p",
+      "dumpsys window | grep -E \"mCurrentFocus|mFocusedApp\"",
+      "uiautomator dump --compressed /data/local/tmp/droidlens_ui_X.xml 2>&1; echo __DROIDLENS_XML__; cat /data/local/tmp/droidlens_ui_X.xml 2>/dev/null; rm -f /data/local/tmp/droidlens_ui_X.xml",
+      "dumpsys window | grep -E \"mCurrentFocus|mFocusedApp\""
+    ],
+    "sdk": [
+      "POST /mocks/set {\"url\":\"/api/x\",\"fail\":true}",
+      "POST /mocks/remove?id=m1"
+    ],
+    "events": [
+      "0/1 running assert visible {\"id\":\"detail\"}",
+      "0/1 pass assert visible {\"id\":\"detail\"} — 보임: Detail"
+    ]
+  },
+  "blocked": {
+    "verdict": "blocked",
+    "passed": 0,
+    "failed": 1,
+    "skipped": 0,
+    "summary": "준비 단계 실패: com.ex.sblocked에서 DroidLens SDK 서버를 찾지 못했습니다. 앱이 실행 중인지, debug 빌드에 SDK(debugImplementation)가 들어갔는지 확인하세요.",
+    "steps": [
+      {
+        "index": 1,
+        "title": "준비 실패",
+        "status": "fail",
+        "detail": "com.ex.sblocked에서 DroidLens SDK 서버를 찾지 못했습니다. 앱이 실행 중인지, debug 빌드에 SDK(debugImplementation)가 들어갔는지 확인하세요.",
+        "screen": "com.ex.sblocked com.ex.sblocked.HomeActivity",
+        "shot": true
+      }
+    ],
+    "commands": [
+      "date +%s",
+      "cmd package resolve-activity --brief -a android.intent.action.MAIN -c android.intent.category.LAUNCHER com.ex.sblocked",
+      "am start -W (시작 시간)",
+      "am start -n x",
+      "dumpsys window | grep -E \"mCurrentFocus|mFocusedApp\"",
+      "uiautomator dump --compressed /data/local/tmp/droidlens_ui_X.xml 2>&1; echo __DROIDLENS_XML__; cat /data/local/tmp/droidlens_ui_X.xml 2>/dev/null; rm -f /data/local/tmp/droidlens_ui_X.xml",
+      "screencap -p",
+      "dumpsys window | grep -E \"mCurrentFocus|mFocusedApp\"",
+      "uiautomator dump --compressed /data/local/tmp/droidlens_ui_X.xml 2>&1; echo __DROIDLENS_XML__; cat /data/local/tmp/droidlens_ui_X.xml 2>/dev/null; rm -f /data/local/tmp/droidlens_ui_X.xml",
+      "cat /proc/net/unix",
+      "screencap -p",
+      "dumpsys window | grep -E \"mCurrentFocus|mFocusedApp\""
+    ],
+    "sdk": [],
+    "events": []
+  },
+  "abort": {
+    "verdict": "pass",
+    "passed": 1,
+    "failed": 0,
+    "skipped": 2,
+    "summary": "1 통과 · 0 실패 · 2 건너뜀 (N초)",
+    "steps": [
+      {
+        "index": 1,
+        "title": "준비: 앱 실행",
+        "status": "info",
+        "screen": "com.ex.sabort com.ex.sabort.HomeActivity",
+        "shot": false
+      },
+      {
+        "index": 2,
+        "title": "tap text=\"Detail\"",
+        "status": "pass",
+        "detail": "Button \"Detail\" @540,145",
+        "screen": "com.ex.sabort com.ex.sabort.DetailActivity",
+        "shot": false,
+        "actions": [
+          "tap text=\"Detail\""
+        ]
+      },
+      {
+        "index": 3,
+        "title": "중단됨",
+        "status": "skip",
+        "detail": "2단계 남음",
+        "screen": "com.ex.sabort com.ex.sabort.DetailActivity",
+        "shot": false
+      }
+    ],
+    "commands": [
+      "date +%s",
+      "am force-stop com.ex.sabort",
+      "cmd package resolve-activity --brief -a android.intent.action.MAIN -c android.intent.category.LAUNCHER com.ex.sabort",
+      "am start -W (시작 시간)",
+      "am start -n x",
+      "dumpsys window | grep -E \"mCurrentFocus|mFocusedApp\"",
+      "uiautomator dump --compressed /data/local/tmp/droidlens_ui_X.xml 2>&1; echo __DROIDLENS_XML__; cat /data/local/tmp/droidlens_ui_X.xml 2>/dev/null; rm -f /data/local/tmp/droidlens_ui_X.xml",
+      "screencap -p",
+      "dumpsys window | grep -E \"mCurrentFocus|mFocusedApp\"",
+      "uiautomator dump --compressed /data/local/tmp/droidlens_ui_X.xml 2>&1; echo __DROIDLENS_XML__; cat /data/local/tmp/droidlens_ui_X.xml 2>/dev/null; rm -f /data/local/tmp/droidlens_ui_X.xml",
+      "dumpsys gfxinfo com.ex.sabort reset",
+      "dumpsys window | grep -E \"mCurrentFocus|mFocusedApp\"",
+      "uiautomator dump --compressed /data/local/tmp/droidlens_ui_X.xml 2>&1; echo __DROIDLENS_XML__; cat /data/local/tmp/droidlens_ui_X.xml 2>/dev/null; rm -f /data/local/tmp/droidlens_ui_X.xml",
+      "input tap 540 145",
+      "dumpsys window | grep -E \"mCurrentFocus|mFocusedApp\""
+    ],
+    "sdk": [],
+    "events": [
+      "0/3 running tap text=\"Detail\"",
+      "0/3 pass tap text=\"Detail\" — Button \"Detail\" @540,145"
+    ]
+  },
+  "danger": {
+    "verdict": "fail",
+    "passed": 1,
+    "failed": 2,
+    "skipped": 0,
+    "summary": "1 통과 · 2 실패 · 0 건너뜀 (N초)",
+    "steps": [
+      {
+        "index": 1,
+        "title": "준비: 앱 실행",
+        "status": "info",
+        "screen": "com.ex.sdanger com.ex.sdanger.HomeActivity",
+        "shot": false
+      },
+      {
+        "index": 2,
+        "title": "tap text=\"삭제\"",
+        "status": "fail",
+        "detail": "위험해 보이는 버튼(\"삭제\")이라 누르지 않았습니다. 사용자가 이 행동을 직접 요청했다면 allowDanger: true 로 다시 실행하세요",
+        "screen": "com.ex.sdanger com.ex.sdanger.HomeActivity",
+        "shot": true,
+        "actions": [
+          "tap text=\"삭제\""
+        ]
+      },
+      {
+        "index": 3,
+        "title": "tapAt {\"x\":10,\"y\":420}",
+        "status": "fail",
+        "detail": "위험해 보이는 버튼(\"삭제\")이라 누르지 않았습니다. 사용자가 이 행동을 직접 요청했다면 allowDanger: true 로 다시 실행하세요",
+        "screen": "com.ex.sdanger com.ex.sdanger.HomeActivity",
+        "shot": true,
+        "actions": [
+          "tapAt {\"x\":10,\"y\":420}"
+        ]
+      },
+      {
+        "index": 4,
+        "title": "tap text=\"Detail\"",
+        "status": "pass",
+        "detail": "Button \"Detail\" @540,145",
+        "screen": "com.ex.sdanger com.ex.sdanger.DetailActivity",
+        "shot": false,
+        "actions": [
+          "tap text=\"Detail\""
+        ]
+      }
+    ],
+    "commands": [
+      "date +%s",
+      "am force-stop com.ex.sdanger",
+      "cmd package resolve-activity --brief -a android.intent.action.MAIN -c android.intent.category.LAUNCHER com.ex.sdanger",
+      "am start -W (시작 시간)",
+      "am start -n x",
+      "dumpsys window | grep -E \"mCurrentFocus|mFocusedApp\"",
+      "uiautomator dump --compressed /data/local/tmp/droidlens_ui_X.xml 2>&1; echo __DROIDLENS_XML__; cat /data/local/tmp/droidlens_ui_X.xml 2>/dev/null; rm -f /data/local/tmp/droidlens_ui_X.xml",
+      "screencap -p",
+      "dumpsys window | grep -E \"mCurrentFocus|mFocusedApp\"",
+      "uiautomator dump --compressed /data/local/tmp/droidlens_ui_X.xml 2>&1; echo __DROIDLENS_XML__; cat /data/local/tmp/droidlens_ui_X.xml 2>/dev/null; rm -f /data/local/tmp/droidlens_ui_X.xml",
+      "dumpsys gfxinfo com.ex.sdanger reset",
+      "dumpsys window | grep -E \"mCurrentFocus|mFocusedApp\"",
+      "uiautomator dump --compressed /data/local/tmp/droidlens_ui_X.xml 2>&1; echo __DROIDLENS_XML__; cat /data/local/tmp/droidlens_ui_X.xml 2>/dev/null; rm -f /data/local/tmp/droidlens_ui_X.xml",
+      "screencap -p",
+      "dumpsys window | grep -E \"mCurrentFocus|mFocusedApp\"",
+      "uiautomator dump --compressed /data/local/tmp/droidlens_ui_X.xml 2>&1; echo __DROIDLENS_XML__; cat /data/local/tmp/droidlens_ui_X.xml 2>/dev/null; rm -f /data/local/tmp/droidlens_ui_X.xml",
+      "input tap 540 145",
+      "dumpsys window | grep -E \"mCurrentFocus|mFocusedApp\""
+    ],
+    "sdk": [],
+    "events": [
+      "0/3 running tap text=\"삭제\"",
+      "0/3 fail tap text=\"삭제\" — 위험해 보이는 버튼(\"삭제\")이라 누르지 않았습니다. 사용자가 이 행동을 직접 요청했다면 allowDanger: true 로 다시 실행하세요",
+      "1/3 running tapAt {\"x\":10,\"y\":420}",
+      "1/3 fail tapAt {\"x\":10,\"y\":420} — 위험해 보이는 버튼(\"삭제\")이라 누르지 않았습니다. 사용자가 이 행동을 직접 요청했다면 allowDanger: true 로 다시 실행하세요",
+      "2/3 running tap text=\"Detail\"",
+      "2/3 pass tap text=\"Detail\" — Button \"Detail\" @540,145"
+    ]
+  },
+  "crash": {
+    "verdict": "fail",
+    "passed": 0,
+    "failed": 1,
+    "skipped": 0,
+    "summary": "0 통과 · 1 실패 · 0 건너뜀 (N초)",
+    "steps": [
+      {
+        "index": 1,
+        "title": "준비: 앱 실행",
+        "status": "info",
+        "screen": "com.ex.scrash com.ex.scrash.HomeActivity",
+        "shot": false
+      },
+      {
+        "index": 2,
+        "title": "크래시 없음",
+        "status": "fail",
+        "detail": "크래시 발생:\n1700000005.123  4321  4321 E AndroidRuntime: FATAL EXCEPTION: main\n1700000005.124  4321  4321 E AndroidRuntime: Process: com.ex.scrash, PID: 4321\njava.lang.IllegalStateException: 터짐\n\tat com.ex.scrash.Home.onClick(Home.kt:10)\n",
+        "screen": "com.ex.scrash com.ex.scrash.HomeActivity",
+        "shot": true,
+        "check": {
+          "by": "assert",
+          "expect": "크래시 없음",
+          "actual": "크래시 발생:"
+        }
+      }
+    ],
+    "commands": [
+      "date +%s",
+      "am force-stop com.ex.scrash",
+      "cmd package resolve-activity --brief -a android.intent.action.MAIN -c android.intent.category.LAUNCHER com.ex.scrash",
+      "am start -W (시작 시간)",
+      "am start -n x",
+      "dumpsys window | grep -E \"mCurrentFocus|mFocusedApp\"",
+      "uiautomator dump --compressed /data/local/tmp/droidlens_ui_X.xml 2>&1; echo __DROIDLENS_XML__; cat /data/local/tmp/droidlens_ui_X.xml 2>/dev/null; rm -f /data/local/tmp/droidlens_ui_X.xml",
+      "screencap -p",
+      "dumpsys window | grep -E \"mCurrentFocus|mFocusedApp\"",
+      "uiautomator dump --compressed /data/local/tmp/droidlens_ui_X.xml 2>&1; echo __DROIDLENS_XML__; cat /data/local/tmp/droidlens_ui_X.xml 2>/dev/null; rm -f /data/local/tmp/droidlens_ui_X.xml",
+      "dumpsys gfxinfo com.ex.scrash reset",
+      "dumpsys window | grep -E \"mCurrentFocus|mFocusedApp\"",
+      "logcat -b crash",
+      "screencap -p",
+      "dumpsys window | grep -E \"mCurrentFocus|mFocusedApp\""
+    ],
+    "sdk": [],
+    "events": [
+      "0/1 running assert noCrash true",
+      "0/1 fail assert noCrash true — 크래시 발생:"
+    ]
+  },
+  "visual": {
+    "verdict": "fail",
+    "passed": 3,
+    "failed": 1,
+    "skipped": 0,
+    "summary": "3 통과 · 1 실패 · 0 건너뜀 (N초)",
+    "steps": [
+      {
+        "index": 1,
+        "title": "준비: 앱 실행",
+        "status": "info",
+        "screen": "com.ex.svisual com.ex.svisual.HomeActivity",
+        "shot": false
+      },
+      {
+        "index": 2,
+        "title": "matchScreenshot 홈",
+        "status": "pass",
+        "detail": "기준 이미지가 없어 지금 화면을 기준으로 저장했습니다 (<HOME>/baselines/com.ex.svisual/홈@20x200.png)",
+        "screen": "com.ex.svisual com.ex.svisual.HomeActivity",
+        "shot": true,
+        "check": {
+          "by": "assert",
+          "actual": "기준 이미지가 없어 지금 화면을 기준으로 저장했습니다 (<HOME>/baselines/com.ex.svisual/홈@20x200.png)"
+        }
+      },
+      {
+        "index": 3,
+        "title": "matchScreenshot {\"name\":\"홈\",\"maxDiffPercent\":1,\"ignore\":[{\"id\":\"spinner\"}],\"tolerance\":2}",
+        "status": "pass",
+        "detail": "다른 픽셀 0% (0/2740, 허용 1%)",
+        "screen": "com.ex.svisual com.ex.svisual.HomeActivity",
+        "shot": true,
+        "check": {
+          "by": "assert",
+          "actual": "다른 픽셀 0% (0/2740, 허용 1%)"
+        }
+      },
+      {
+        "index": 4,
+        "title": "tap text=\"Detail\"",
+        "status": "pass",
+        "detail": "Button \"Detail\" @540,145",
+        "screen": "com.ex.svisual com.ex.svisual.DetailActivity",
+        "shot": false,
+        "actions": [
+          "tap text=\"Detail\""
+        ]
+      },
+      {
+        "index": 5,
+        "title": "matchScreenshot 홈",
+        "status": "fail",
+        "detail": "기준 이미지와 다릅니다: 다른 픽셀 100% (2740/2740, 허용 0.5%) · 영역 [0,63,20,200]",
+        "screen": "com.ex.svisual com.ex.svisual.DetailActivity",
+        "shot": true,
+        "check": {
+          "by": "assert",
+          "actual": "기준 이미지와 다릅니다: 다른 픽셀 100% (2740/2740, 허용 0.5%) · 영역 [0,63,20,200]"
+        },
+        "baseline": {
+          "app": "com.ex.svisual",
+          "name": "홈"
+        }
+      }
+    ],
+    "commands": [
+      "date +%s",
+      "am force-stop com.ex.svisual",
+      "cmd package resolve-activity --brief -a android.intent.action.MAIN -c android.intent.category.LAUNCHER com.ex.svisual",
+      "am start -W (시작 시간)",
+      "am start -n x",
+      "dumpsys window | grep -E \"mCurrentFocus|mFocusedApp\"",
+      "uiautomator dump --compressed /data/local/tmp/droidlens_ui_X.xml 2>&1; echo __DROIDLENS_XML__; cat /data/local/tmp/droidlens_ui_X.xml 2>/dev/null; rm -f /data/local/tmp/droidlens_ui_X.xml",
+      "screencap -p",
+      "dumpsys window | grep -E \"mCurrentFocus|mFocusedApp\"",
+      "uiautomator dump --compressed /data/local/tmp/droidlens_ui_X.xml 2>&1; echo __DROIDLENS_XML__; cat /data/local/tmp/droidlens_ui_X.xml 2>/dev/null; rm -f /data/local/tmp/droidlens_ui_X.xml",
+      "dumpsys gfxinfo com.ex.svisual reset",
+      "dumpsys window | grep -E \"mCurrentFocus|mFocusedApp\"",
+      "screencap -p",
+      "dumpsys window | grep -m1 -E \"type=(statusBars|ITYPE_STATUS_BAR) frame=.*visible=true\"",
+      "wm density",
+      "uiautomator dump --compressed /data/local/tmp/droidlens_ui_X.xml 2>&1; echo __DROIDLENS_XML__; cat /data/local/tmp/droidlens_ui_X.xml 2>/dev/null; rm -f /data/local/tmp/droidlens_ui_X.xml",
+      "dumpsys window | grep -E \"mCurrentFocus|mFocusedApp\"",
+      "uiautomator dump --compressed /data/local/tmp/droidlens_ui_X.xml 2>&1; echo __DROIDLENS_XML__; cat /data/local/tmp/droidlens_ui_X.xml 2>/dev/null; rm -f /data/local/tmp/droidlens_ui_X.xml",
+      "input tap 540 145",
+      "dumpsys window | grep -E \"mCurrentFocus|mFocusedApp\"",
+      "screencap -p",
+      "dumpsys window | grep -m1 -E \"type=(statusBars|ITYPE_STATUS_BAR) frame=.*visible=true\"",
+      "wm density",
+      "dumpsys window | grep -E \"mCurrentFocus|mFocusedApp\""
+    ],
+    "sdk": [],
+    "events": [
+      "0/4 running matchScreenshot 홈",
+      "0/4 pass matchScreenshot 홈 — 기준 이미지가 없어 지금 화면을 기준으로 저장했습니다 (<HOME>/baselines/com.ex.svisual/홈@20x200.png)",
+      "1/4 running matchScreenshot {\"name\":\"홈\",\"maxDiffPercent\":1,\"ignore\":[{\"id\":\"spinner\"}],\"tolerance\":2}",
+      "1/4 pass matchScreenshot {\"name\":\"홈\",\"maxDiffPercent\":1,\"ignore\":[{\"id\":\"spinner\"}],\"tolerance\":2} — 다른 픽셀 0% (0/2740, 허용 1%)",
+      "2/4 running tap text=\"Detail\"",
+      "2/4 pass tap text=\"Detail\" — Button \"Detail\" @540,145",
+      "3/4 running matchScreenshot 홈",
+      "3/4 fail matchScreenshot 홈 — 기준 이미지와 다릅니다: 다른 픽셀 100% (2740/2740, 허용 0.5%) · 영역 [0,63,20,200]"
+    ]
+  },
+  "evaluate": {
+    "ok": "보임: Detail · 화면 com.ex.evaluate.HomeActivity · 크래시 없음",
+    "err": "StepFailure: 기대: id=\"detail\" 안 보임 / 실제: 보임",
+    "empty": "",
+    "commands": [
+      "uiautomator dump --compressed /data/local/tmp/droidlens_ui_X.xml 2>&1; echo __DROIDLENS_XML__; cat /data/local/tmp/droidlens_ui_X.xml 2>/dev/null; rm -f /data/local/tmp/droidlens_ui_X.xml",
+      "dumpsys window | grep -E \"mCurrentFocus|mFocusedApp\"",
+      "logcat -b crash",
+      "uiautomator dump --compressed /data/local/tmp/droidlens_ui_X.xml 2>&1; echo __DROIDLENS_XML__; cat /data/local/tmp/droidlens_ui_X.xml 2>/dev/null; rm -f /data/local/tmp/droidlens_ui_X.xml"
+    ]
+  },
+  "suite": {
+    "seen": [
+      "0/3 a.yml",
+      "1/3 b.yaml",
+      "2/3 c.yaml"
+    ],
+    "passed": 1,
+    "failed": 2,
+    "results": [
+      {
+        "file": "a.yml",
+        "name": "첫째",
+        "verdict": "pass"
+      },
+      {
+        "file": "b.yaml",
+        "name": "둘째",
+        "verdict": "fail"
+      },
+      {
+        "file": "c.yaml",
+        "name": "c.yaml",
+        "error": "스크립트 형식 오류:\n  steps: Array must contain at least 1 element(s)"
+      }
+    ]
+  }
+}
