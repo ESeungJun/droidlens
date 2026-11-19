@@ -1,7 +1,7 @@
 // QA 계획 MCP 도구(qa_*)와 TC 실행 모드(scenario_start tc)를 실제 프로토콜로 시험한다 (#75)
 import { test, after, before } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -11,7 +11,8 @@ const here = fileURLToPath(new URL('.', import.meta.url));
 let s;
 let files;
 before(async () => {
-  s = await start();
+  // 파일 넣기 확인은 승인하고, 그 밖의 확인(허용 등)은 거절하는 사용자
+  s = await start({}, { elicit: (p) => ({ action: 'accept', content: { confirm: p.message.includes('파일을 읽어') } }) });
   files = realpathSync(mkdtempSync(join(tmpdir(), 'dl-qa-in-')));
 });
 after(async () => {
@@ -110,7 +111,7 @@ test('qa_case_update: 허용·스크립트는 못 바꾸고 확인 필수 TC 는
 
   const allow = await s.call('qa_case_allow', { plan: id, case: 'TC-002' });
   assert.equal(allow.isError, true);
-  assert.match(allow.text, /droidlens-mcp qa allow .* TC-002/);
+  assert.match(allow.text, /사용자가 승인하지 않아 실행하지 않았습니다/);
   const full = JSON.parse((await s.call('qa_plan_get', { plan: id, full: true })).text);
   assert.equal(full.cases[1].allowDanger, false);
   assert.equal((await s.call('qa_case_allow', { plan: id, case: 'TC-001' })).isError, true, '확인 필수가 아닌 TC');
@@ -140,7 +141,10 @@ test('대화창(DROIDLENS_CONFIRM=1): 파일 넣기·허용은 확인 창으로 
     assert.equal(a1.tool, 'qa_source_add');
     broker.answer(a1.id, false);
     assert.equal((await p1).isError, true);
-    const long = await c.call('qa_source_add', { plan: id, input: join(files, ...Array(20).fill('d'.repeat(30)), 'secret.txt') });
+    const longDir = join(files, ...Array(20).fill('d'.repeat(30)));
+    mkdirSync(longDir, { recursive: true });
+    writeFileSync(join(longDir, 'secret.txt'), '비밀');
+    const long = await c.call('qa_source_add', { plan: id, input: join(longDir, 'secret.txt') });
     assert.equal(long.isError, true);
     assert.match(long.text, /경로가 너무 길어/);
     assert.equal(asks.length, 1);
@@ -291,4 +295,29 @@ test('qa_source_read: 비슷한 모양의 여닫는 표시도 바꾼다', async 
   const r = await s.call('qa_source_read', { plan: id, source: 'S1' });
   assert.equal(r.text.match(/source/g).length, 5, r.text); // 감싼 두 개 + 바꾼 세 개
   assert.ok(!/<\/ source|＜\/source|< source/.test(r.text), r.text);
+});
+
+test('확인을 물을 수 없으면: 파일은 넣지 않고, 허용은 QA 탭·터미널로 안내한다. 심볼릭 링크는 실제 파일로 확장자를 본다', async () => {
+  const { symlinkSync } = await import('node:fs');
+  const c = await start();
+  try {
+    const id = await newPlan(c);
+    const f = await c.call('qa_source_add', { plan: id, input: put('plain.md', '# 기획') });
+    assert.equal(f.isError, true);
+    assert.match(f.text, /사용자 확인이 필요한 조작이라 실행하지 않았습니다/);
+    assert.equal((await c.call('qa_source_add', { plan: id, input: 'https://www.figma.com/design/K/x' })).isError, false, '링크는 묻지 않는다');
+    assert.equal((await c.call('qa_plan_save', { plan: id, requirements: noSource, cases })).isError, false);
+    const allow = await c.call('qa_case_allow', { plan: id, case: 'TC-002' });
+    assert.match(allow.text, /droidlens-mcp qa allow .* TC-002/);
+  } finally {
+    await c.close();
+  }
+  // .md 로 보이는 링크가 다른 확장자 파일을 가리키면 받지 않는다
+  const real = put('key.pem', 'secret');
+  const link = join(files, 'looks.md');
+  symlinkSync(real, link);
+  const id2 = await newPlan();
+  const r = await s.call('qa_source_add', { plan: id2, input: link });
+  assert.equal(r.isError, true);
+  assert.ok(!/secret/.test(r.text));
 });

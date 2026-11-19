@@ -5,7 +5,7 @@ import { createInterface } from 'node:readline/promises';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import * as dl from '@droidlens/core';
-import { bindConfirmServer, device } from './common.js';
+import { bindConfirmServer, device, plainText } from './common.js';
 import * as app from './tools/app.js';
 import * as deviceTools from './tools/device.js';
 import * as graph from './tools/graph.js';
@@ -132,7 +132,15 @@ async function qaCli(args: string[]): Promise<number> {
   if (cmd === 'allow') {
     if (!c.danger) throw new Error(`${caseId} 에는 확인 필수 표시가 없어 허용할 것이 없습니다`);
     if (!process.stdin.isTTY || !process.stdout.isTTY) throw new Error('허용은 터미널에서 직접 실행해 y 를 입력해야 합니다');
-    console.log(`${plan.name} · ${c.id} ${c.title}\n확인 필수 동작: ${c.danger}\n단계:\n${c.steps.map((s, i) => `  ${i + 1}. ${s}`).join('\n')}`);
+    // 에이전트·문서가 쓴 글이라 터미널 제어 문자를 빼고, 허용이 가리키는 내용(지문의 모든 칸)을 다 보여 준다
+    const list = (title: string, xs: string[]) => (xs.length ? `${title}:\n${xs.map((x, i) => `  ${i + 1}. ${plainText(x)}`).join('\n')}\n` : '');
+    console.log(
+      `${plainText(plan.name)} · ${c.id} ${plainText(c.title)}\n확인 필수 동작: ${plainText(c.danger)}\n` +
+        list('사전 조건', c.preconditions) +
+        list('단계', c.steps) +
+        list('기대 결과', c.expected) +
+        (c.data ? `입력값: ${plainText(c.data)}\n` : ''),
+    );
     const rl = createInterface({ input: process.stdin, output: process.stdout });
     const answer = await rl.question('이 TC 를 실행할 때 위 동작을 실제로 누르도록 허용할까요? [y/N] ');
     rl.close();

@@ -1,8 +1,9 @@
+import { realpath } from 'node:fs/promises';
 import { basename, resolve } from 'node:path';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import * as dl from '@droidlens/core';
-import { text, json, acts, readOnly, askUser } from '../common.js';
+import { text, json, acts, readOnly, askUser, plainText } from '../common.js';
 
 /**
  * QA 계획 도구 (#75): 문서 넣기 → 요구사항·TC 뽑아 저장 → 사람이 검토·선택 → scenario_start(tc) 로 실행.
@@ -69,10 +70,7 @@ const CONFIRM_MAX = 480;
 
 /** 확인 창에 넣을 에이전트·문서 글: 줄바꿈·제어 문자를 한 칸으로, 길면 자른다 */
 function oneLine(v: string, max: number): string {
-  const t = v
-    .replace(/[\u0000-\u001f\u007f\u2028\u2029]+/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim();
+  const t = plainText(v).replace(/\s+/g, ' ').trim();
   return t.length > max ? `${t.slice(0, max - 1)}…` : t;
 }
 
@@ -133,22 +131,25 @@ export function register(server: McpServer): void {
       const c = dl.classifyQaSource(input);
       let target = input;
       if ('file' in c) {
-        // ../ 같은 표기를 풀어 실제로 읽을 경로를 보여 준다
-        target = resolve(c.file);
-        // 대화창은 내장 파일 읽기를 막아 두었으므로, 이 도구로 파일을 읽을 때는 사용자가 고른 파일인지 묻는다
-        // 에이전트가 정한 경로라 묻는다: 대화창은 언제나, Claude Code 는 확인을 물을 수 있을 때(elicitation)
-        if (process.env.DROIDLENS_CONFIRM === '1' || server.server.getClientCapabilities()?.elicitation) {
-          const what = `QA 계획에 파일 넣기: ${basename(target)} — ${target} (계획 "${oneLine(p.name, 60)}")`;
-          if (what.length > CONFIRM_MAX)
-            throw new Error(
-              '경로가 너무 길어 확인 창에 다 보이지 않습니다. 사용자에게 DroidLens 앱의 QA 탭에서 파일을 직접 넣도록 안내하세요',
-            );
-          await askUser(server, what, {
-            question: `DroidLens: 이 파일을 읽어 QA 계획에 넣을까요?\n${basename(target)}\n${target}`,
-            refuse: '사용자에게 DroidLens 앱의 QA 탭에서 파일을 직접 넣도록 안내하세요',
-            ctx: { tool: 'qa_source_add' },
-          });
-        }
+        // 심볼릭 링크·../ 를 풀어 실제로 읽을 파일로 확장자를 다시 보고, 그 경로를 보여 주고 묻는다
+        target = await realpath(resolve(c.file)).catch(() => {
+          throw new Error(`파일을 찾을 수 없습니다: ${plainText(basename(c.file))}`);
+        });
+        if (plainText(target) !== target)
+          throw new Error('경로에 보이지 않는 문자가 있어 넣지 않습니다. 사용자에게 DroidLens 앱의 QA 탭에서 넣도록 안내하세요');
+        dl.classifyQaSource(target);
+        // 에이전트가 정한 경로라 언제나 사용자에게 묻는다 (대화창 확인 창 또는 MCP elicitation). 물을 수 없으면 넣지 않는다
+        const what = `QA 계획에 파일 넣기: ${basename(target)} — ${target} (계획 "${oneLine(p.name, 60)}")`;
+        if (what.length > CONFIRM_MAX)
+          throw new Error(
+            '경로가 너무 길어 확인 창에 다 보이지 않습니다. 사용자에게 DroidLens 앱의 QA 탭에서 파일을 직접 넣도록 안내하세요',
+          );
+        await askUser(server, what, {
+          question: `DroidLens: 이 파일을 읽어 QA 계획에 넣을까요?\n${basename(target)}\n${target}`,
+          refuse:
+            '사용자에게 DroidLens 앱의 QA 탭에서 파일을 직접 넣거나, 확인 창을 띄울 수 있는 Claude Code 에서 다시 요청하도록 안내하세요',
+          ctx: { tool: 'qa_source_add' },
+        });
       }
       const r = await dl.addQaSource(plan, target);
       const head = r.duplicate ? `이미 들어 있는 문서입니다: ${sourceLine(r.source)}` : `넣었습니다: ${sourceLine(r.source)}`;

@@ -42,7 +42,12 @@ export async function start(env = {}, opts = {}) {
     },
     stderr: 'ignore',
   });
-  const client = new Client({ name: 'test', version: '0' });
+  // opts.elicit: 확인 요청(elicitation)에 답하는 함수. 주면 클라이언트가 확인을 물을 수 있다고 알린다
+  const client = new Client({ name: 'test', version: '0' }, opts.elicit ? { capabilities: { elicitation: {} } } : {});
+  if (opts.elicit) {
+    const { ElicitRequestSchema } = await import('@modelcontextprotocol/sdk/types.js');
+    client.setRequestHandler(ElicitRequestSchema, (req) => opts.elicit(req.params));
+  }
   await client.connect(transport);
   return {
     dir,

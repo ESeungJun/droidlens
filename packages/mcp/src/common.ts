@@ -220,6 +220,14 @@ export async function guardRisky(
   if (risky) await askConfirm(`확인 필수 버튼 "${risky.replace(/\s+/g, ' ').slice(0, 100)}" 실제로 누르기`, tool);
 }
 
+/**
+ * 사람에게 보여 줄 에이전트·문서 글에서 화면을 속일 수 있는 문자를 뺀다:
+ * 제어 문자(C0·C1, ESC 포함), 줄 구분자, 글자 방향을 뒤집는 문자(U+202A–202E, U+2066–2069, U+200E·200F·061C)
+ */
+export function plainText(v: string): string {
+  return v.replace(/[\u0000-\u001f\u007f-\u009f\u2028\u2029\u202a-\u202e\u2066-\u2069\u200e\u200f\u061c]+/g, ' ');
+}
+
 export const allowDangerArg = {
   allowDanger: z
     .boolean()
