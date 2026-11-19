@@ -129,7 +129,7 @@ test('ScreenGraph: 화면 등록·방문 수·요소 위치·선택 탭·연결�
   assert.equal(g.toMermaid(), ['flowchart LR', '  S0["HomeActivity"]', '  S1["↗ com.other · Main"]', '  S2["DetailActivity"]', '  S0 -->|"tap \'Detail\'"| S2'].join('\n'));
 });
 
-test('ScreenGraph.path / replayPath: 위험 라벨 연결은 다시 따라가지 않는다', async () => {
+test('ScreenGraph.path / replayPath: 확인 필수 라벨 연결은 다시 따라가지 않는다', async () => {
   const g = new ScreenGraph(PKG, join(home, 'mem2'));
   const h = (await g.addSnapshot(snap('home', HOME))).id;
   const d = (await g.addSnapshot(snap('detail', DETAIL))).id;
@@ -183,7 +183,7 @@ test('planRoute: 기록된 경로, 같은 요소로 건너가기, 선택된 탭�
       ['Post', d2],
     ],
   );
-  // 위험 라벨 요소로는 건너가지 않는다
+  // 확인 필수 라벨 요소로는 건너가지 않는다
   const g3 = new ScreenGraph(PKG, join(home, 'mem5'));
   await g3.addSnapshot(sHome);
   const f3 = (await g3.addSnapshot(sFeed)).id;

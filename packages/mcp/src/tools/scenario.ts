@@ -307,7 +307,7 @@ export function register(server: McpServer): void {
     {
       description:
         '스크립트를 기기에서 실행하고 단계별 판정과 HTML 리포트를 돌려준다. 회귀 테스트·재현에 사용. ' +
-        '삭제·결제·로그아웃·전송 같은 위험 버튼을 누르는 단계는 allowDanger 없이는 누르지 않고 실패로 남긴다',
+        '삭제·결제·로그아웃·전송 같은 확인 필수 버튼을 누르는 단계는 allowDanger 없이는 누르지 않고 실패로 남긴다',
       inputSchema: { ...serialArg, script: z.string().describe('이름 또는 경로'), ...allowDangerArg },
       annotations: acts,
     },
@@ -331,7 +331,7 @@ export function register(server: McpServer): void {
     'suite_run',
     {
       description: '폴더 안의 모든 스크립트(*.yaml)를 차례로 실행하는 회귀 테스트. path를 생략하면 ~/.droidlens/scripts. ' +
-        '그 폴더나 MCP 서버를 띄운 프로젝트 폴더 안만 실행할 수 있다. 위험 버튼 단계는 script_run 과 같이 allowDanger 없이는 누르지 않는다',
+        '그 폴더나 MCP 서버를 띄운 프로젝트 폴더 안만 실행할 수 있다. 확인 필수 버튼 단계는 script_run 과 같이 allowDanger 없이는 누르지 않는다',
       inputSchema: { ...serialArg, path: z.string().optional().describe('스크립트 폴더 또는 파일. 생략하면 ~/.droidlens/scripts'), ...allowDangerArg },
       annotations: acts,
     },

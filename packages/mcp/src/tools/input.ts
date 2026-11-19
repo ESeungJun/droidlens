@@ -9,7 +9,7 @@ export function register(server: McpServer): void {
   server.registerTool(
     'tap',
     {
-      description: '셀렉터로 찾은 요소의 중앙을 탭하거나, x/y 좌표를 탭. 셀렉터 사용을 권장. 삭제·결제·로그아웃·전송 같은 위험 버튼은 allowDanger 없이는 누르지 않는다',
+      description: '셀렉터로 찾은 요소의 중앙을 탭하거나, x/y 좌표를 탭. 셀렉터 사용을 권장. 삭제·결제·로그아웃·전송 같은 확인 필수 버튼은 allowDanger 없이는 누르지 않는다',
       inputSchema: {
         ...serialArg,
         ...selectorShape,
@@ -44,7 +44,7 @@ export function register(server: McpServer): void {
         target
           ? ((a.long ? { longPress: target } : { tap: target }) as dl.ScriptStep)
           : { tapAt: { x: Math.round(x), y: Math.round(y) } },
-        `${a.long ? '길게 누름' : '탭'} ${node ? nodeLabel(node) : `좌표 (${Math.round(x)}, ${Math.round(y)})`}${a.allowDanger ? ' · 위험 버튼 허용' : ''}`,
+        `${a.long ? '길게 누름' : '탭'} ${node ? nodeLabel(node) : `좌표 (${Math.round(x)}, ${Math.round(y)})`}${a.allowDanger ? ' · 확인 필수 버튼 허용' : ''}`,
       );
       return text(`${a.long ? 'long-pressed' : 'tapped'}: ${what}`);
     },

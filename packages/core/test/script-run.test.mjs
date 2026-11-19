@@ -435,10 +435,10 @@ steps:
   assert.equal(result.skipped, 2);
 });
 
-test('runScript: guardDanger 면 위험 버튼(셀렉터·좌표 모두)을 누르지 않는다', async () => {
+test('runScript: guardDanger 면 확인 필수 버튼(셀렉터·좌표 모두)을 누르지 않는다', async () => {
   await run(
     'danger',
-    `name: 위험 버튼
+    `name: 확인 필수 버튼
 app: $PKG
 continueOnFail: true
 steps:
