@@ -76,8 +76,8 @@ Then enable **Developer options → USB debugging** on your device and connect i
 | **App** | **App data** ¹ | View and edit SharedPreferences, SQLite/Room DB browser with SQL execution, custom events |
 |  | **App info** | Version, SDK, permissions, activities; launch / restart / kill; deep links |
 |  | **Libraries** | Detects 100+ libraries and frameworks from the APK's DEX and native libs, estimates obfuscation |
-| **Test** | **Scenarios** | Verification reports (per-step screenshots and verdicts), write and run **YAML scripts**, run the full regression suite, accept the current screen as the new baseline when a screenshot comparison fails |
-|  | **QA** | Add spec documents (md, txt, PDF, CSV, Excel, Confluence and Figma links) → the planner agent extracts requirements and test cases → review them in a traceability table (edit, pick cases, allow confirm-required actions yourself) → run: cases with a script run directly, the rest each get a fresh verifier run (10-minute limit per case, stop anytime; confirm-required actions ask you on screen) → results table by requirement and case with design differences, HTML, CSV and JUnit export (uses this computer's Claude Code login) |
+| **Test** | **QA plans** | Pick the app to test and add spec documents (md, txt, PDF, CSV, Excel, Confluence and Figma links) → the planner agent extracts requirements and test cases → review them in a traceability table (edit, pick cases, allow confirm-required actions yourself) → run: cases with a script run directly, the rest each get a fresh verifier run (10-minute limit per case, stop anytime; confirm-required actions ask you on screen) → results table by requirement and case with design differences, HTML, CSV and JUnit export (uses this computer's Claude Code login) |
+|  | **Records** | Verification reports (per-step screenshots and verdicts), write and run **YAML scripts**, run the full regression suite, accept the current screen as the new baseline when a screenshot comparison fails. Records from a QA run show which plan and test case they came from |
 | **Settings** | **Settings & Integrations** | adb path, one-click Claude Code MCP registration, install bundled agents |
 | | **💬 Agent chat** | Chat panel opened from the top bar. Ask the verifier or analyst agent while watching the mirror (uses this computer's Claude Code login — no API key needed) |
 
@@ -173,7 +173,7 @@ steps:
 | Other | `key`, `tapAt`, `sleep`, `launch`, `deeplink`, `screenshot` |
 
 How to run:
-- Desktop: **Scenarios → Scripts** tab to edit, run, and run the full regression suite
+- Desktop: **Test → Records → Scripts** tab to edit, run, and run the full regression suite
 - Claude Code: `script_run`, `suite_run`, `script_write`
 - CI/terminal: `node droidlens-mcp.mjs run <file|folder> [--serial <device>] [--junit out.xml] [--summary out.md]` (exit code 1 on failure). `--junit` writes per-step results as JUnit XML and `--summary` writes Markdown for a PR comment. See [examples/ci/android-emulator.yml](examples/ci/android-emulator.yml) for a workflow that runs scripts on an emulator
 - QA regression: `node droidlens-mcp.mjs qa run <QA plan id> [--serial <device>] [--junit out.xml] [--strict]` runs the selected cases that already passed and have a linked script, in priority order, and writes a results table (HTML, CSV, JUnit) to `~/.droidlens/qa/<plan>/runs/<run>/`. Exit code 1 if a case it ran failed or was blocked; with `--strict`, also if any selected case has no script yet

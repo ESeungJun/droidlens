@@ -3,6 +3,7 @@ import { api, type QaCase, type QaPlanSummary, type QaPlanView, type QaRunView }
 import { useApp } from '../App';
 import { useT } from '../i18n';
 import { answerQaConfirm, useQaState, type QaLogLine } from '../qaStore';
+import { requestScenario, takeQaPlan } from '../nav';
 
 /**
  * QA 탭 (#78): 문서 넣기 → TC 검토 → 실행·결과. 계획·회차 파일은 core 가 갖고, 이 화면은 보여 주고 사람이 정할 것(선택·허용·고치기)만 한다.
@@ -42,6 +43,8 @@ const initial = new URLSearchParams(location.hash.slice(1));
 const initialStep = (['docs', 'review', 'run'] as const).find((s) => s === initial.get('step'));
 
 function readPlanId(): string | null {
+  const asked = takeQaPlan();
+  if (asked) return asked;
   if (initial.get('plan')) return initial.get('plan');
   try {
     return localStorage.getItem(PLAN_KEY);
@@ -51,7 +54,7 @@ function readPlanId(): string | null {
 }
 
 export function QaTab() {
-  const { run, toast, pkg } = useApp();
+  const { run, toast, pkg, pkgs, serial, selectApp } = useApp();
   const t = useT();
   const qa = useQaState();
   const [plans, setPlans] = useState<QaPlanSummary[]>([]);
@@ -60,8 +63,6 @@ export function QaTab() {
   const [view, setView] = useState<QaPlanView | null>(null);
   const [step, setStep] = useState<Step>('docs');
   const [creating, setCreating] = useState(false);
-  const [newName, setNewName] = useState('');
-  const [newApp, setNewApp] = useState('');
 
   const setSel = (id: string | null) => {
     setSelState(id);
@@ -85,17 +86,20 @@ export function QaTab() {
     };
   }, [qa.tick]);
 
-  const reload = useCallback(async () => {
-    if (!sel) return setView(null);
-    try {
-      setView(await api.qaPlanGet(sel));
-    } catch (e) {
-      setView(null);
-      toast((e as Error).message, true);
-      setSel(null);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sel, toast]);
+  const reload = useCallback(
+    async (id: string | null = sel) => {
+      if (!id) return setView(null);
+      try {
+        setView(await api.qaPlanGet(id));
+      } catch (e) {
+        setView(null);
+        toast((e as Error).message, true);
+        setSel(null);
+      }
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    },
+    [sel, toast],
+  );
   useEffect(() => {
     void reload();
   }, [reload, qa.tick]);
@@ -109,18 +113,49 @@ export function QaTab() {
     setStep((first && initialStep) || (view.runs.length ? 'run' : view.plan.cases.length ? 'review' : 'docs'));
   }, [view]);
 
-  const create = async () => {
-    const p = await run(api.qaPlanCreate(newName.trim(), newApp.trim() || undefined));
+  /** 앱을 정해 계획을 만들고, pick 이면 바로 파일을 고른다. 이름을 비우면 처음 넣은 문서 제목으로 짓는다 */
+  const create = async (name: string, app: string, pick: boolean) => {
+    const p = await run(api.qaPlanCreate(name || t('{app} QA', { app: app.split('.').pop() ?? app }), app));
     if (!p) return;
     setCreating(false);
-    setNewName('');
-    setPlans((await run(api.qaPlans())) ?? []);
-    setSel(p.id);
     setStep('docs');
+    setSel(p.id);
+    if (pick) {
+      const added = (await run(api.qaSourcePick(p.id))) ?? [];
+      const first = added.find((a) => !a.error);
+      if (!name && first) await run(api.qaPlanRename(p.id, t('{doc} QA', { doc: first.title.replace(/\.[^.]+$/, '') }), app));
+      await reload(p.id);
+    }
+    setPlans((await run(api.qaPlans())) ?? []);
   };
 
   const busy = qa.job !== null;
   const plan = view?.plan;
+  const byApp = useMemo(() => {
+    const m = new Map<string, QaPlanSummary[]>();
+    for (const p of plans) m.set(p.app ?? '', [...(m.get(p.app ?? '') ?? []), p]);
+    return [...m.entries()];
+  }, [plans]);
+  const installed = !serial || pkgs.length === 0 || !plan?.app || pkgs.some((p) => p.packageName === plan.app);
+
+  const steps = plan
+    ? ([
+        { id: 'docs', label: t('문서 넣기'), meta: t('{n}개', { n: plan.sources.length }), done: plan.sources.length > 0 },
+        {
+          id: 'review',
+          label: t('TC 검토'),
+          meta: plan.cases.length ? t('{k}/{n} 고름', { k: plan.cases.filter((c) => c.selected).length, n: plan.cases.length }) : '',
+          done: plan.cases.some((c) => c.selected),
+        },
+        {
+          id: 'run',
+          label: t('실행·결과'),
+          meta: view!.runs.length ? t('회차 {n}', { n: view!.runs.length }) : '',
+          done: view!.runs.length > 0,
+        },
+      ] as const)
+    : [];
+  const showNew = creating || (plansLoaded && plans.length === 0);
 
   return (
     <div className="qa">
@@ -129,92 +164,77 @@ export function QaTab() {
           <b>{t('QA 계획')}</b>
           <span className="faint">({plans.length})</span>
           <div className="spacer" />
-          <button
-            className="btn sm primary"
-            onClick={() => {
-              setCreating(!creating);
-              setNewApp(pkg ?? '');
-            }}
-          >
+          <button className={`btn sm ${showNew ? '' : 'primary'}`} disabled={showNew} onClick={() => setCreating(true)}>
             {t('+ 새 계획')}
           </button>
         </div>
-        {creating && (
-          <form
-            className="qa-new"
-            onSubmit={(e) => {
-              e.preventDefault();
-              if (newName.trim()) void create();
-            }}
-          >
-            <input
-              className="input"
-              autoFocus
-              placeholder={t('계획 이름 (예: 로그인 개편 QA)')}
-              value={newName}
-              onChange={(e) => setNewName(e.target.value)}
-            />
-            <input
-              className="input mono"
-              placeholder={t('대상 앱 패키지 (선택)')}
-              value={newApp}
-              onChange={(e) => setNewApp(e.target.value)}
-            />
-            <div style={{ display: 'flex', gap: 6 }}>
-              <button className="btn sm primary" disabled={!newName.trim()}>
-                {t('만들기')}
-              </button>
-              <button type="button" className="btn sm" onClick={() => setCreating(false)}>
-                {t('취소')}
-              </button>
+        {byApp.map(([app, items]) => (
+          <div key={app}>
+            <div className="scen-group qa-group" title={app}>
+              <span className="mono qa-ellipsis">{app || t('앱 미정')}</span>
+              <span className="n">{items.length}</span>
             </div>
-          </form>
-        )}
-        {plansLoaded && plans.length === 0 && !creating && (
-          <div className="empty" style={{ height: 'auto', padding: 24 }}>
-            {t('QA 계획이 없습니다.')}
-            <br />
-            {t('새 계획을 만들고 기획서·TC 문서를 넣으세요.')}
-          </div>
-        )}
-        {plans.map((p) => (
-          <div key={p.id} className={`scen-item ${sel === p.id ? 'sel' : ''}`} onClick={() => setSel(p.id)}>
-            <div className="scen-body">
-              <b className="qa-ellipsis">{p.name}</b>
-              <div className="faint" style={{ fontSize: 11 }}>
-                {t('문서 {s} · TC {c} (고름 {k})', { s: p.sources, c: p.cases, k: p.selected })}
-                {qa.job?.plan === p.id && <span className="qa-live"> · {qa.job.kind === 'extract' ? t('뽑는 중') : t('실행 중')}</span>}
+            {items.map((p) => (
+              <div
+                key={p.id}
+                className={`scen-item ${sel === p.id && !showNew ? 'sel' : ''}`}
+                onClick={() => {
+                  setCreating(false);
+                  setSel(p.id);
+                }}
+              >
+                <div className="scen-body">
+                  <b className="qa-ellipsis">{p.name}</b>
+                  <div className="faint" style={{ fontSize: 11 }}>
+                    {t('문서 {s} · TC {c} (고름 {k})', { s: p.sources, c: p.cases, k: p.selected })}
+                    {qa.job?.plan === p.id && <span className="qa-live"> · {qa.job.kind === 'extract' ? t('뽑는 중') : t('실행 중')}</span>}
+                  </div>
+                </div>
               </div>
-              <div className="faint qa-ellipsis" style={{ fontSize: 11 }} title={p.app}>
-                {new Date(p.updatedAt).toLocaleString()}
-                {p.app && <span className="mono"> · {p.app}</span>}
-              </div>
-            </div>
+            ))}
           </div>
         ))}
       </aside>
-      {!plan ? (
-        <div className="empty">{sel ? t('불러오는 중…') : t('왼쪽에서 계획을 고르거나 새로 만드세요')}</div>
+      {showNew ? (
+        <NewPlan onCreate={create} onCancel={plans.length ? () => setCreating(false) : undefined} />
+      ) : !plan ? (
+        <div className="empty">{sel ? t('불러오는 중…') : t('왼쪽에서 계획을 고르세요')}</div>
       ) : (
         <section className="qa-main">
-          <div className="toolbar">
-            <b style={{ fontSize: 15 }}>{plan.name}</b>
-            {plan.app && <span className="pill mono">{plan.app}</span>}
-            <div className="spacer" />
-            <nav className="seg qa-steps">
-              {(
-                [
-                  ['docs', t('1 문서 {n}', { n: plan.sources.length })],
-                  ['review', t('2 검토 {n}', { n: plan.cases.length })],
-                  ['run', t('3 실행·결과')],
-                ] as const
-              ).map(([id, label]) => (
-                <button key={id} className={step === id ? 'on' : ''} onClick={() => setStep(id)}>
-                  {label}
+          <header className="qa-head">
+            <div className="qa-head-app">
+              <span className="faint">{t('대상 앱')}</span>
+              <b className="mono qa-ellipsis" title={plan.app}>
+                {plan.app ?? t('정하지 않음')}
+              </b>
+              {plan.app && !installed ? (
+                <span className="v-blocked">{t('이 기기에 설치되어 있지 않습니다')}</span>
+              ) : plan.app && pkg !== plan.app ? (
+                <button
+                  className="btn sm"
+                  onClick={() => selectApp(plan.app!)}
+                  title={t('위쪽 막대와 왼쪽 목록의 앱을 이 앱으로 맞춥니다')}
+                >
+                  {t('이 앱으로 바꾸기')}
                 </button>
-              ))}
-            </nav>
-          </div>
+              ) : null}
+              {!plan.app && pkg && (
+                <button className="btn sm" onClick={async () => (await run(api.qaPlanRename(plan.id, plan.name, pkg))) && reload()}>
+                  {t('{app} 으로 정하기', { app: pkg })}
+                </button>
+              )}
+            </div>
+            <div className="qa-head-name">{plan.name}</div>
+          </header>
+          <nav className="qa-stepper">
+            {steps.map((s, i) => (
+              <button key={s.id} className={`qa-stp ${step === s.id ? 'on' : ''} ${s.done ? 'done' : ''}`} onClick={() => setStep(s.id)}>
+                <span className="qa-stp-n">{s.done && step !== s.id ? '✓' : i + 1}</span>
+                <span className="qa-stp-l">{s.label}</span>
+                {s.meta && <span className="qa-stp-m">{s.meta}</span>}
+              </button>
+            ))}
+          </nav>
           {busy && qa.job!.plan !== plan.id && (
             <div className="qa-banner">{t('다른 계획에서 작업이 돌고 있습니다. 끝나거나 멈춘 뒤에 이 계획을 실행할 수 있습니다.')}</div>
           )}
@@ -225,6 +245,66 @@ export function QaTab() {
           </div>
         </section>
       )}
+    </div>
+  );
+}
+
+/** 새 계획: 어떤 앱을 QA 할지 정하고 바로 문서를 고른다 */
+function NewPlan({ onCreate, onCancel }: { onCreate: (name: string, app: string, pick: boolean) => Promise<void>; onCancel?: () => void }) {
+  const { pkg, pkgs, screen } = useApp();
+  const t = useT();
+  const [app, setApp] = useState(pkg ?? screen?.packageName ?? '');
+  const [name, setName] = useState('');
+  const [busy, setBusy] = useState(false);
+  const go = async (pick: boolean) => {
+    setBusy(true);
+    await onCreate(name.trim(), app.trim(), pick).finally(() => setBusy(false));
+  };
+  return (
+    <div className="qa-scroll">
+      <form
+        className="card qa-create"
+        onSubmit={(e) => {
+          e.preventDefault();
+          if (app.trim()) void go(true);
+        }}
+      >
+        <h4>{t('새 QA 계획')}</h4>
+        <label className="qa-field">
+          <span>{t('어떤 앱을 QA 하나요?')}</span>
+          <input
+            className="input mono"
+            list="qa-apps"
+            autoFocus
+            placeholder="com.example.app"
+            value={app}
+            onChange={(e) => setApp(e.target.value)}
+          />
+          <datalist id="qa-apps">
+            {pkgs.map((p) => (
+              <option key={p.packageName} value={p.packageName} />
+            ))}
+          </datalist>
+        </label>
+        <label className="qa-field">
+          <span>{t('계획 이름')}</span>
+          <input className="input" placeholder={t('비우면 첫 문서 제목으로')} value={name} onChange={(e) => setName(e.target.value)} />
+        </label>
+        <div className="qa-row">
+          <button className="btn primary" disabled={!app.trim() || busy}>
+            {t('기획 문서 고르기…')}
+          </button>
+          <button type="button" className="btn" disabled={!app.trim() || busy} onClick={() => go(false)}>
+            {t('링크로 넣기')}
+          </button>
+          <div className="spacer" />
+          {onCancel && (
+            <button type="button" className="btn" onClick={onCancel}>
+              {t('취소')}
+            </button>
+          )}
+        </div>
+      </form>
     </div>
   );
 }
@@ -257,8 +337,8 @@ function DocsStep({ view, reload, onNext }: { view: QaPlanView; reload: () => Pr
       <div className="card">
         <h5>{t('문서')}</h5>
         {plan.sources.length === 0 ? (
-          <p className="muted" style={{ marginTop: 0 }}>
-            {t('기획서·TC 표를 넣으세요. md·txt·PDF·CSV·엑셀 파일과 Confluence·Figma 링크를 받습니다.')}
+          <p className="faint" style={{ marginTop: 0 }}>
+            {t('md·txt·PDF·CSV·엑셀 · Confluence·Figma 링크')}
           </p>
         ) : (
           <table className="qa-table">
@@ -324,16 +404,9 @@ function DocsStep({ view, reload, onNext }: { view: QaPlanView; reload: () => Pr
 
       <div className="card">
         <h5>{t('TC 뽑기')}</h5>
-        <p className="muted" style={{ marginTop: 0 }}>
-          {t(
-            '이 컴퓨터의 Claude Code(내 구독)로 droidlens-qa-planner 에이전트를 띄워 요구사항과 TC 를 뽑습니다. 기기는 건드리지 않고, 확인 필수 TC 는 고르지 않은 채로 둡니다.',
-          )}
-        </p>
         {plan.sources.some((s) => s.kind === 'confluence' || s.kind === 'figma') && (
           <p className="faint" style={{ marginTop: 0 }}>
-            {t(
-              '링크 문서는 Claude Code 에 연결한 Confluence·Figma 커넥터의 읽기 도구로만 읽습니다. 커넥터가 없으면 PDF 로 내보내 넣으세요.',
-            )}
+            {t('링크는 Claude Code 의 Confluence·Figma 커넥터로 읽습니다. 없으면 PDF 로 넣으세요.')}
           </p>
         )}
         <textarea
@@ -351,7 +424,12 @@ function DocsStep({ view, reload, onNext }: { view: QaPlanView; reload: () => Pr
               {t('■ 멈추기')}
             </button>
           ) : (
-            <button className="btn primary" disabled={busy || !plan.sources.length} onClick={() => run(api.qaExtract(plan.id, note))}>
+            <button
+              className={`btn ${plan.cases.length ? '' : 'primary'}`}
+              disabled={busy || !plan.sources.length}
+              onClick={() => run(api.qaExtract(plan.id, note))}
+              title={t('이 컴퓨터의 Claude Code 로 요구사항과 TC 를 뽑습니다. 기기는 건드리지 않습니다')}
+            >
               {plan.cases.length ? t('다시 뽑기') : t('TC 뽑기')}
             </button>
           )}
@@ -364,8 +442,8 @@ function DocsStep({ view, reload, onNext }: { view: QaPlanView; reload: () => Pr
           {!mine && lastHere?.cancelled && <span className="v-blocked">{t('멈췄습니다. 저장된 데까지는 남아 있습니다')}</span>}
           <div className="spacer" />
           {plan.cases.length > 0 && (
-            <button className="btn" onClick={onNext}>
-              {t('검토로 →')}
+            <button className="btn primary" onClick={onNext}>
+              {t('다음: TC 검토 →')}
             </button>
           )}
         </div>
@@ -579,7 +657,7 @@ function ReviewStep({ view, setView, onNext }: { view: QaPlanView; setView: (v: 
       <div className="qa-row">
         <div className="spacer" />
         <button className="btn primary" disabled={!selected} onClick={onNext}>
-          {t('실행으로 →')}
+          {t('다음: 실행 →')}
         </button>
       </div>
     </div>
@@ -923,12 +1001,7 @@ function RunStep({ view }: { view: QaPlanView }) {
             </span>
           )}
         </div>
-        <p className="muted" style={{ margin: '8px 0' }}>
-          {t(
-            '스크립트가 있는 TC 는 바로 돌고, 나머지는 TC 마다 droidlens-verifier 에이전트를 새로 띄워 실행합니다(내 Claude Code 구독 사용). 통과한 TC 는 스크립트로 저장돼 다음 회차부터 스크립트로 돕니다.',
-          )}
-        </p>
-        <div className="qa-row">
+        <div className="qa-row" style={{ marginTop: 10 }}>
           <label className="chk">
             <input type="checkbox" checked={recheck} disabled={busy} onChange={(e) => setRecheck(e.target.checked)} />
             {t('스크립트가 실패한 TC 는 에이전트로 다시 확인')}
@@ -960,6 +1033,7 @@ function RunStep({ view }: { view: QaPlanView }) {
               className="btn primary"
               disabled={busy || !serial || !sel.length}
               onClick={() => (armed.length ? setAsking(true) : start())}
+              title={t('스크립트가 있는 TC 는 바로, 나머지는 TC 마다 에이전트로 돌립니다. 통과하면 스크립트로 저장됩니다')}
             >
               {t('▶ 실행')}
             </button>
@@ -1091,6 +1165,7 @@ function ConfirmBox({ c }: { c: { id: string; what: string; case?: string; timeo
 
 function RunResult({ view, result, onOpen }: { view: QaPlanView; result: QaRunView; onOpen: (path: string) => void }) {
   const t = useT();
+  const { openTab } = useApp();
   const { summary } = result;
   const c = summary.counts;
   const reqs = summary.requirements;
@@ -1183,8 +1258,15 @@ function RunResult({ view, result, onOpen }: { view: QaPlanView; result: QaRunVi
                 <td>
                   <div className="qa-marks">
                     {r.result?.report && (
-                      <button className="btn sm" onClick={() => onOpen(r.result!.report!)}>
-                        {t('리포트')}
+                      <button
+                        className="btn sm"
+                        title={t('검증 기록 탭에서 이 TC 의 단계별 기록을 엽니다')}
+                        onClick={() => {
+                          requestScenario(r.result!.report!.split(/[\\/]/).slice(-2)[0]);
+                          openTab('scen');
+                        }}
+                      >
+                        {t('기록 보기')}
                       </button>
                     )}
                     {d && (

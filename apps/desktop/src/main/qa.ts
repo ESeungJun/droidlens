@@ -226,6 +226,7 @@ export function runQaPlan(planId: string, opts: QaRunOptions, dev: dl.DeviceAdb,
       if (signal.aborted) break;
       emit({ kind: 'case', plan: planId, case: c.id, mode: 'agent', index: i, total: queue.length });
       const t0 = Date.now();
+      // 에이전트를 띄우지 못해도(설정 파일·claude 문제) 회차를 끊지 않고 그 TC 를 막힘으로 적고 다음으로 간다
       const r = await runAgent(
         j,
         {
@@ -251,14 +252,16 @@ export function runQaPlan(planId: string, opts: QaRunOptions, dev: dl.DeviceAdb,
         ctx,
         (event) => emit({ kind: 'agent', plan: planId, case: c.id, event }),
         timeoutMs,
-      );
+      ).catch((e: Error) => ({ timedOut: false, error: e.message, notStarted: true }));
       if (signal.aborted) break;
       // 에이전트가 scenario_finish 로 결과를 적지 않고 끝났으면 막힘으로 남긴다 (실행해서 나온 앞 결과가 있으면 그대로 둔다)
       const after = await dl.loadQaRun(planId, run.id);
       if (!after.results.some((x) => x.case === c.id && x.at >= t0)) {
         const why = r.timedOut
           ? `시간 제한(${Math.round(timeoutMs / 60_000)}분)을 넘겨 멈췄습니다`
-          : `에이전트가 결과를 적지 않고 끝났습니다${r.error ? `: ${r.error.slice(0, 300)}` : ''}`;
+          : 'notStarted' in r
+            ? `에이전트를 띄우지 못했습니다: ${r.error.slice(0, 300)}`
+            : `에이전트가 결과를 적지 않고 끝났습니다${r.error ? `: ${r.error.slice(0, 300)}` : ''}`;
         await dl.recordQaResult(planId, run.id, { case: c.id, status: 'blocked', mode: 'manual', detail: why }).catch(() => undefined);
       }
     }

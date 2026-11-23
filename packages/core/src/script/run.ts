@@ -77,6 +77,7 @@ class ScriptRun {
       goal: script.description ?? (opts.sourcePath ? `스크립트 ${basename(opts.sourcePath)}` : undefined),
       packageName: script.app,
       device: dev.serial,
+      ...(script.tc ? { tc: script.tc } : {}),
     });
     await ensureAgent(dev);
     const flow = opts.collectFlow === false ? undefined : await FlowCollector.open(dev, script.app).catch(() => undefined);

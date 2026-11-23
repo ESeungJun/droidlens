@@ -328,10 +328,31 @@ label.chk { display: inline-flex; gap: 6px; align-items: center; color: var(--fg
 .qa { display: grid; grid-template-columns: 260px minmax(0, 1fr); height: 100%; }
 .qa-plans { border-right: 1px solid var(--line); overflow: auto; }
 .qa-new { display: grid; gap: 6px; padding: 10px 12px; border-bottom: 1px solid var(--line); background: var(--panel); }
-.qa-main { display: grid; grid-template-rows: auto auto 1fr; min-height: 0; min-width: 0; }
+.qa-main { display: flex; flex-direction: column; min-height: 0; min-width: 0; }
+.qa-main .qa-body { flex: 1; }
+.qa-head { padding: 12px 16px 4px; display: grid; gap: 2px; }
+.qa-head-app { display: flex; align-items: center; gap: 8px; min-width: 0; font-size: 12px; }
+.qa-head-app b { font-size: 15px; min-width: 0; }
+.qa-head-name { color: var(--fg-dim); font-size: 12px; }
+.qa-stepper { display: flex; padding: 8px 16px 12px; border-bottom: 1px solid var(--line); }
+.qa-stp { flex: 1; display: flex; align-items: center; gap: 8px; background: none; border: 0; padding: 0; cursor: pointer; color: var(--fg-dim); font: inherit; min-width: 0; }
+.qa-stp:not(:last-child)::after { content: ''; flex: 1; height: 2px; background: var(--line-2); margin: 0 10px; min-width: 16px; }
+.qa-stp.done:not(:last-child)::after { background: var(--accent); }
+.qa-stp-n { flex: none; width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center; font-size: 12px; font-weight: 700; border: 2px solid var(--line-2); color: var(--fg-faint); }
+.qa-stp.done .qa-stp-n { border-color: var(--accent); color: var(--accent); }
+.qa-stp.on .qa-stp-n { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+.qa-stp-l { font-size: 13px; font-weight: 600; white-space: nowrap; }
+.qa-stp.on .qa-stp-l { color: var(--fg); }
+.qa-stp-m { font-size: 11px; color: var(--fg-faint); white-space: nowrap; }
+.qa-stp:hover .qa-stp-l { color: var(--fg); }
+.qa-create { max-width: 520px; display: grid; gap: 12px; }
+.qa-create h4 { margin: 0; font-size: 15px; }
+.qa-field { display: grid; gap: 4px; font-size: 12px; color: var(--fg-dim); }
+.qa-group { cursor: default; }
+.scen-qa { margin-top: 4px; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: inline-block; background: var(--accent-dim); color: var(--accent); border: 0; border-radius: 5px; padding: 1px 7px; font-size: 10.5px; font-weight: 600; cursor: pointer; }
+.scen-qa:hover { text-decoration: underline; }
 .qa-body { min-height: 0; }
 .qa-scroll { height: 100%; overflow: auto; padding: 14px; display: grid; gap: 12px; align-content: start; }
-.qa-steps button { padding: 4px 12px; font-size: 12px; }
 .qa-banner { padding: 8px 14px; font-size: 12px; color: var(--warn); background: color-mix(in srgb, var(--warn) 10%, transparent); border-bottom: 1px solid var(--line); }
 .qa-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 .qa-ellipsis { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
