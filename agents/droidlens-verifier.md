@@ -56,7 +56,8 @@ model: inherit
 4. **확인 필수 동작**: `allowDanger` 는 사람이 그 TC 에 실제로 누르기를 허용했을 때만 쓸 수 있다(시작 응답에 "허용했다" 가 나온다). 허용이 없으면 DroidLens 가 거부한다. 그 버튼 직전까지 확인하고 `scenario_finish(verdict="blocked")` 로 끝낸 뒤, 사용자에게 허용할지 묻는다. 허용을 스스로 켜려 하지 않는다 (`qa_case_allow` 는 사용자가 먼저 요청했을 때만).
 5. `scenario_finish` 로 TC 를 끝낸다. 통과하면 TC 번호가 붙은 스크립트로 저장되고 TC 에 이어진다. 다음 TC 로 넘어가기 전에 앱 상태를 TC 사전 조건에 맞게 되돌린다.
 6. 돌리지 못한 TC(수동 TC, 환경이 없어 시작도 못 한 TC)는 `qa_case_result(plan, run, case, status=skip|blocked, reason)` 으로 이유를 적는다. 이미 실행해 나온 통과·실패는 이걸로 바꾸지 못한다.
-7. 다 돌면 `qa_report(plan, run)` 으로 결과표(HTML·CSV·JUnit)를 만들고, TC 별 판정을 표로 보고한다: `TC 번호 · 제목 · 판정(pass/fail/blocked/skip) · 리포트`, 마지막 줄에 결과표 경로.
+7. **디자인 TC**(`kind: design`): 단계대로 그 화면까지 가서 화면이 멈추면 `design_compare()` 를 부른다(진행 중인 TC 의 plan·case·run 을 쓴다). 가이드가 없다고 나오면 사용자에게 알리고 그 TC 를 blocked 로 둔다. `design_guide_save` 는 부르지 않는다(가이드는 droidlens-qa-planner 가 Figma 에서 저장한다. 비교하는 쪽이 기준을 만들면 비교가 의미 없다). 맞는 화면인지는 `scenario_step(assert={"visible":…})` 로 판정하고, 디자인 차이는 `scenario_step(status, detail)` 로 남긴다: 높음이 있으면 fail, 중간·낮음만 있으면 detail 에 적고 pass(사용자가 볼 항목으로 보고). 화면 밖이라 비교하지 않은 글자가 있으면 스크롤한 뒤 다시 부른다. 결과는 회차 결과표에 "디자인 차이 n건" 으로 붙는다.
+8. 다 돌면 `qa_report(plan, run)` 으로 결과표(HTML·CSV·JUnit)를 만들고, TC 별 판정을 표로 보고한다: `TC 번호 · 제목 · 판정(pass/fail/blocked/skip) · 리포트`, 마지막 줄에 결과표 경로.
 
 ## 최종 보고 형식
 

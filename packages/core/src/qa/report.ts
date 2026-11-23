@@ -3,6 +3,7 @@ import { writeFileAtomic } from '../workspace.js';
 import { CASE_KIND_LABEL, type QaPlan } from './plan.js';
 import { xmlEscape as xml } from '../report-junit.js';
 import { QA_STATUS_LABEL, qaRunDir, qaRunSummary, type QaRun, type QaRunSummary } from './run.js';
+import { loadDesignSummaries, type DesignRunSummary } from '../design/store.js';
 
 /**
  * QA 회차 결과표 (#76): 사람이 보는 HTML, 엑셀에서 여는 CSV, CI 가 읽는 JUnit XML.
@@ -10,7 +11,10 @@ import { QA_STATUS_LABEL, qaRunDir, qaRunSummary, type QaRun, type QaRunSummary 
  * 글은 모두 문서·에이전트가 쓴 것이라 그대로 넣지 않고 이스케이프한다.
  */
 
-const esc = (s: string) => s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!);
+/** HTML 글·속성 값 이스케이프 (QA·디자인 결과표 공용) */
+export const htmlEscape = (s: string) =>
+  s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!);
+const esc = htmlEscape;
 
 /**
  * CSV 칸 하나. 따옴표로 감싸고, 엑셀이 수식으로 읽는 첫 글자(= + - @ 탭 CR)면 앞에 ' 를 붙인다
@@ -28,13 +32,26 @@ const MODE_LABEL = { script: '스크립트', agent: '에이전트', manual: '직
 const fmtTime = (ms: number) => new Date(ms).toLocaleString('ko-KR', { hour12: false });
 const fmtDur = (ms?: number) => (ms === undefined ? '' : `${(ms / 1000).toFixed(1)}초`);
 
-export function qaReportHtml(plan: QaPlan, run: QaRun, s: QaRunSummary = qaRunSummary(plan, run), reportBase?: string): string {
-  const link = (p?: string) => {
+/** 디자인 TC 의 차이 요약: '디자인 차이 3건 (높음 1)' */
+export function designNote(d?: DesignRunSummary): string {
+  if (!d) return '';
+  const n = d.counts.high + d.counts.medium + d.counts.low;
+  return n ? `디자인 차이 ${n}건${d.counts.high ? ` (높음 ${d.counts.high})` : ''}` : '디자인 차이 없음';
+}
+
+export function qaReportHtml(
+  plan: QaPlan,
+  run: QaRun,
+  s: QaRunSummary = qaRunSummary(plan, run),
+  reportBase?: string,
+  design: Map<string, DesignRunSummary> = new Map(),
+): string {
+  const link = (p?: string, label = '리포트') => {
     // 실행기가 만든 시나리오 리포트(절대 경로 .html)만 잇는다
     if (!p || !isAbsolute(p) || !p.endsWith('.html')) return '';
     // 같은 droidlens 폴더 안의 시나리오 리포트는 상대 경로로 잇는다 (파일을 옮겨도 열리게)
     const href = reportBase ? relative(reportBase, p) : p;
-    return `<a href="${esc(href.split('\\').join('/'))}">리포트</a>`;
+    return `<a href="${esc(href.split('\\').join('/'))}">${label}</a>`;
   };
   const counts = (['pass', 'fail', 'blocked', 'skip', 'not-run'] as const)
     .map((k) => `<span class="pill ${STATUS_CLASS[k]}">${QA_STATUS_LABEL[k]} ${s.counts[k]}</span>`)
@@ -47,8 +64,10 @@ export function qaReportHtml(plan: QaPlan, run: QaRun, s: QaRunSummary = qaRunSu
     .join('');
   const caseRows = s.rows
     .map(({ case: c, result: r, status }) => {
-      const detail = [r?.detail, status === 'not-run' && !c.selected ? '이번 회차에 고르지 않음' : ''].filter(Boolean).join(' · ');
-      return `<tr><td class="id">${esc(c.id)}</td><td>${esc(c.priority)}</td><td>${esc(CASE_KIND_LABEL[c.kind])}</td><td>${esc(c.title)}${c.danger ? ' <span class="pill warn">확인 필수</span>' : ''}</td><td class="id">${esc(c.requirements.join(', '))}</td><td><span class="pill ${STATUS_CLASS[status]}">${QA_STATUS_LABEL[status]}</span></td><td>${r ? MODE_LABEL[r.mode] : ''}${r?.script ? `<br><code>${esc(r.script)}</code>` : ''}</td><td>${fmtDur(r?.durationMs)}</td><td>${esc(detail)}</td><td>${link(r?.report)}</td></tr>`;
+      const detail = [r?.detail, designNote(design.get(c.id)), status === 'not-run' && !c.selected ? '이번 회차에 고르지 않음' : '']
+        .filter(Boolean)
+        .join(' · ');
+      return `<tr><td class="id">${esc(c.id)}</td><td>${esc(c.priority)}</td><td>${esc(CASE_KIND_LABEL[c.kind])}</td><td>${esc(c.title)}${c.danger ? ' <span class="pill warn">확인 필수</span>' : ''}</td><td class="id">${esc(c.requirements.join(', '))}</td><td><span class="pill ${STATUS_CLASS[status]}">${QA_STATUS_LABEL[status]}</span></td><td>${r ? MODE_LABEL[r.mode] : ''}${r?.script ? `<br><code>${esc(r.script)}</code>` : ''}</td><td>${fmtDur(r?.durationMs)}</td><td>${esc(detail)}</td><td>${link(r?.report)}${design.has(c.id) ? ` ${link(design.get(c.id)!.report, '디자인 비교')}` : ''}</td></tr>`;
     })
     .join('');
   return `<!doctype html><html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
@@ -77,7 +96,12 @@ a{color:inherit}
 }
 
 /** 엑셀에서 여는 CSV (BOM 포함). 입력값(data)은 계정·비밀번호가 있을 수 있어 넣지 않는다 */
-export function qaReportCsv(plan: QaPlan, run: QaRun, s: QaRunSummary = qaRunSummary(plan, run)): string {
+export function qaReportCsv(
+  plan: QaPlan,
+  run: QaRun,
+  s: QaRunSummary = qaRunSummary(plan, run),
+  design: Map<string, DesignRunSummary> = new Map(),
+): string {
   const head = ['TC', '우선순위', '종류', '제목', '요구사항', '결과', '방법', '스크립트', '시간(초)', '메모', '기록 시각'];
   const rows = s.rows.map(({ case: c, result: r, status }) =>
     [
@@ -90,7 +114,7 @@ export function qaReportCsv(plan: QaPlan, run: QaRun, s: QaRunSummary = qaRunSum
       r ? MODE_LABEL[r.mode] : '',
       r?.script,
       r?.durationMs === undefined ? '' : (r.durationMs / 1000).toFixed(1),
-      r?.detail,
+      [r?.detail, designNote(design.get(c.id))].filter(Boolean).join(' · '),
       r ? fmtTime(r.at) : '',
     ]
       .map(csvCell)
@@ -135,9 +159,14 @@ export interface QaReportFiles {
 export async function writeQaReport(plan: QaPlan, run: QaRun): Promise<QaReportFiles> {
   const dir = qaRunDir(plan.id, run.id);
   const summary = qaRunSummary(plan, run);
+  const design = await loadDesignSummaries(
+    plan.id,
+    run.id,
+    plan.cases.filter((c) => c.design).map((c) => c.id),
+  );
   const files = { html: join(dir, 'report.html'), csv: join(dir, 'results.csv'), junit: join(dir, 'junit.xml') };
-  await writeFileAtomic(files.html, qaReportHtml(plan, run, summary, dir));
-  await writeFileAtomic(files.csv, qaReportCsv(plan, run, summary));
+  await writeFileAtomic(files.html, qaReportHtml(plan, run, summary, dir, design));
+  await writeFileAtomic(files.csv, qaReportCsv(plan, run, summary, design));
   await writeFileAtomic(files.junit, qaReportJunit(plan, run, summary));
   return { ...files, summary };
 }

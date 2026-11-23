@@ -25,6 +25,9 @@ export interface ViewNode {
   checked: boolean;
   selected: boolean;
   password: boolean;
+  /** 에이전트에 렌더링 정보를 요청했을 때만: 글자 크기(화면 픽셀)와 단위(TypedValue: 0 px, 1 dip, 2 sp). View 만 나온다 */
+  /** 에이전트 렌더링 정보: 화면 px, TypedValue 단위(0 px, 1 dip, 2 sp), Android 14+ 의 sp 단위면 되돌린 sp */
+  textSize?: { px: number; unit: number; sp?: number };
   children: ViewNode[];
 }
 
@@ -50,6 +53,8 @@ type RawNode = Record<string, string> & { node?: RawNode[] };
 
 function toViewNode(raw: RawNode, id: string, depth: number): ViewNode {
   const b = (k: string) => raw[k] === 'true';
+  const sizePx = Number(raw['text-size-px']);
+  const sizeSp = Number(raw['text-size-sp']);
   return {
     id,
     depth,
@@ -69,6 +74,9 @@ function toViewNode(raw: RawNode, id: string, depth: number): ViewNode {
     checked: b('checked'),
     selected: b('selected'),
     password: b('password'),
+    ...(sizePx > 0 && Number.isFinite(sizePx)
+      ? { textSize: { px: sizePx, unit: Number(raw['text-size-unit']) || 0, ...(sizeSp > 0 && Number.isFinite(sizeSp) ? { sp: sizeSp } : {}) } }
+      : {}),
     children: (raw.node ?? []).map((c, i) => toViewNode(c, `${id}.${i}`, depth + 1)),
   };
 }
@@ -123,6 +131,16 @@ export async function quickDump(dev: DeviceAdb): Promise<Hierarchy | undefined> 
   } catch {
     return undefined;
   }
+}
+
+/**
+ * 디자인 비교용 덤프: 에이전트에 글자 렌더링 정보를 같이 요청한다.
+ * 에이전트를 쓸 수 없으면 보통 덤프로 받는다 (rendering=false, 글자 크기는 글자 높이로 추정)
+ */
+export async function dumpHierarchyWithRendering(dev: DeviceAdb): Promise<{ hierarchy: Hierarchy; rendering: boolean }> {
+  const r = await withAgent(dev, async (a) => parseHierarchyXml(await a.hierarchyXml(false, true))).catch(() => undefined);
+  if (r) return { hierarchy: r.value, rendering: true };
+  return { hierarchy: await dumpHierarchy(dev), rendering: false };
 }
 
 /** 에이전트가 죽었거나 멈춘 실패 (응답이 온 오류와 달리 다시 보내도 나아지지 않는다) */

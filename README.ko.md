@@ -189,6 +189,7 @@ steps:
 | `graphs/<패키지>/` | 앱 화면 지도 `graph.json`, `graph.mmd`(mermaid), 화면별 스크린샷. 화면 흐름 탭의 '내보내기'는 스크린샷을 담은 `*.droidlens-map.json` 한 파일로 저장 |
 | `scenarios/<id>/` | 시나리오 검증 `report.html`, `scenario.json`, 녹화된 `script.yaml`, 단계별 스크린샷 |
 | `scripts/` | 회귀 테스트 스크립트 (YAML) |
+| `qa/<계획>/` | QA 계획 `plan.json`, 넣은 문서 사본. `runs/<회차>/` 결과표(`report.html`, `results.csv`, `junit.xml`). `design/<TC>/guide.json` 디자인 TC 의 Figma 가이드, 비교 결과 `diff.json`·`report.html`·표시한 화면은 `runs/<회차>/design/<TC>/`(회차 밖이면 `design/<TC>/last/`) |
 | `apks/<패키지>/` | 분석용 APK |
 
 ## 버전 호환 (다음 릴리스부터)

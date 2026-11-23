@@ -189,6 +189,7 @@ Everything is saved under `~/.droidlens/` (override with `DROIDLENS_HOME`).
 | `graphs/<package>/` | App screen map `graph.json`, `graph.mmd` (mermaid), per-screen screenshots. 'Export' in the Screen flow tab saves a single `*.droidlens-map.json` with screenshots |
 | `scenarios/<id>/` | Scenario verification `report.html`, `scenario.json`, recorded `script.yaml`, per-step screenshots |
 | `scripts/` | Regression test scripts (YAML) |
+| `qa/<plan>/` | QA plan `plan.json` and source copies; `runs/<run>/` results table (`report.html`, `results.csv`, `junit.xml`); `design/<TC>/guide.json` Figma guide for a design case, with each comparison's `diff.json`, `report.html` and marked screenshot under `runs/<run>/design/<TC>/` (or `design/<TC>/last/` outside a run) |
 | `apks/<package>/` | APKs pulled for analysis |
 
 ## Version compatibility (from the next release)
