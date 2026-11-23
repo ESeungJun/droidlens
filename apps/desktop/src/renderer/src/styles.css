@@ -358,6 +358,14 @@ label.chk { display: inline-flex; gap: 6px; align-items: center; color: var(--fg
 .qa-ellipsis { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .qa-live { color: var(--info); }
 .qa-wrap { overflow-wrap: anywhere; }
+.qa-nowrap { white-space: nowrap; width: 1%; }
+.qa-src { table-layout: auto; }
+.qa-src td { vertical-align: middle; }
+.qa-src-name { max-width: 0; width: 100%; }
+.qa-add { display: grid; grid-template-columns: auto auto 1fr; gap: 8px 10px; align-items: center; margin-top: 12px; }
+.qa-add-k { font-size: 12px; font-weight: 600; color: var(--fg-faint); white-space: nowrap; }
+.qa-add-link { grid-column: 2 / -1; flex-wrap: nowrap; }
+.qa-add-link .input { flex: 1; min-width: 0; }
 .qa-table { width: 100%; border-collapse: collapse; font-size: 12px; }
 .qa-table th { text-align: left; font-weight: 600; color: var(--fg-faint); font-size: 11px; padding: 4px 6px; border-bottom: 1px solid var(--line-2); }
 .qa-table td { padding: 5px 6px; border-bottom: 1px solid var(--line); vertical-align: top; }

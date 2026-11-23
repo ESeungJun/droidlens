@@ -3,6 +3,7 @@ import { api, type QaCase, type QaPlanSummary, type QaPlanView, type QaRunView }
 import { useApp } from '../App';
 import { useT } from '../i18n';
 import { answerQaConfirm, useQaState, type QaLogLine } from '../qaStore';
+import { linkName, shortTime } from '../format';
 import { requestScenario, takeQaPlan } from '../nav';
 
 /**
@@ -30,6 +31,13 @@ const SOURCE_KIND_LABEL: Record<string, string> = {
   xlsx: '엑셀',
   confluence: 'Confluence',
   figma: 'Figma',
+};
+
+/** 문서 id(S1…)는 화면에서 "문서 1" 로 쓴다. */
+const sourceLabel = (t: ReturnType<typeof useT>, id: string) => (/^S\d+$/.test(id) ? t('문서 {n}', { n: id.slice(1) }) : id);
+const sourceTitle = (plan: QaPlanView['plan'], id: string) => {
+  const s = plan.sources.find((x) => x.id === id);
+  return s ? (s.title ?? (s.kind === 'confluence' || s.kind === 'figma' ? linkName(s.ref) : s.ref)) : undefined;
 };
 
 const lines = (s: string) =>
@@ -186,7 +194,7 @@ export function QaTab() {
                 <div className="scen-body">
                   <b className="qa-ellipsis">{p.name}</b>
                   <div className="faint" style={{ fontSize: 11 }}>
-                    {t('문서 {s} · TC {c} (고름 {k})', { s: p.sources, c: p.cases, k: p.selected })}
+                    {t('문서 {s}개 · TC {c}개 (고름 {k})', { s: p.sources, c: p.cases, k: p.selected })}
                     {qa.job?.plan === p.id && <span className="qa-live"> · {qa.job.kind === 'extract' ? t('뽑는 중') : t('실행 중')}</span>}
                   </div>
                 </div>
@@ -336,33 +344,29 @@ function DocsStep({ view, reload, onNext }: { view: QaPlanView; reload: () => Pr
     <div className="qa-scroll">
       <div className="card">
         <h5>{t('문서')}</h5>
-        {plan.sources.length === 0 ? (
-          <p className="faint" style={{ marginTop: 0 }}>
-            {t('md·txt·PDF·CSV·엑셀 · Confluence·Figma 링크')}
-          </p>
-        ) : (
-          <table className="qa-table">
+        {plan.sources.length > 0 && (
+          <table className="qa-table qa-src">
             <tbody>
-              {plan.sources.map((s) => (
-                <tr key={s.id}>
-                  <td className="mono" style={{ width: 40 }}>
-                    {s.id}
-                  </td>
-                  <td style={{ width: 90 }}>
-                    <span className="pill">{t(SOURCE_KIND_LABEL[s.kind] ?? s.kind)}</span>
-                  </td>
-                  <td className="qa-wrap">
-                    {s.kind === 'confluence' || s.kind === 'figma' ? <span className="mono">{s.ref}</span> : (s.title ?? s.ref)}
-                  </td>
-                  <td className="faint" style={{ width: 150 }}>
-                    {new Date(s.addedAt).toLocaleString()}
-                  </td>
-                </tr>
-              ))}
+              {plan.sources.map((s) => {
+                const isLink = s.kind === 'confluence' || s.kind === 'figma';
+                return (
+                  <tr key={s.id}>
+                    <td className="qa-nowrap">{sourceLabel(t, s.id)}</td>
+                    <td className="qa-nowrap">
+                      <span className="pill">{t(SOURCE_KIND_LABEL[s.kind] ?? s.kind)}</span>
+                    </td>
+                    <td className="qa-src-name" title={s.ref}>
+                      <span className="qa-ellipsis">{s.title ?? (isLink ? linkName(s.ref) : s.ref)}</span>
+                    </td>
+                    <td className="faint qa-nowrap">{shortTime(s.addedAt)}</td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         )}
-        <div className="qa-row" style={{ marginTop: 10 }}>
+        <div className="qa-add">
+          <span className="qa-add-k">{t('파일')}</span>
           <button
             className="btn"
             disabled={mine}
@@ -374,11 +378,12 @@ function DocsStep({ view, reload, onNext }: { view: QaPlanView; reload: () => Pr
               }
             }}
           >
-            {t('파일 넣기…')}
+            {t('파일 고르기…')}
           </button>
+          <span className="faint">md · txt · PDF · CSV · {t('엑셀')}</span>
+          <span className="qa-add-k">{t('링크')}</span>
           <form
-            className="qa-row"
-            style={{ flex: 1 }}
+            className="qa-row qa-add-link"
             onSubmit={async (e) => {
               e.preventDefault();
               const r = await run(api.qaSourceLink(plan.id, link));
@@ -391,12 +396,12 @@ function DocsStep({ view, reload, onNext }: { view: QaPlanView; reload: () => Pr
             <input
               className="input"
               style={{ flex: 1 }}
-              placeholder={t('Confluence·Figma 링크 (https://…)')}
+              placeholder={t('Confluence·Figma 주소 붙여넣기 (https://…)')}
               value={link}
               onChange={(e) => setLink(e.target.value)}
             />
             <button className="btn" disabled={!link.trim() || mine}>
-              {t('링크 넣기')}
+              {t('넣기')}
             </button>
           </form>
         </div>
@@ -565,10 +570,10 @@ function ReviewStep({ view, setView, onNext }: { view: QaPlanView; setView: (v: 
                 <td className="qa-wrap">
                   {r.requirement.text}
                   {r.requirement.source && (
-                    <span className="faint">
+                    <span className="faint" title={sourceTitle(plan, r.requirement.source.source)}>
                       {' '}
-                      ({r.requirement.source.source}
-                      {r.requirement.source.locator ? ` ${r.requirement.source.locator}` : ''})
+                      ({sourceLabel(t, r.requirement.source.source)}
+                      {r.requirement.source.locator ? ` · ${r.requirement.source.locator}` : ''})
                     </span>
                   )}
                 </td>
@@ -821,7 +826,7 @@ function CaseEditor({
           <>
             <label>{t('근거')}</label>
             <span className="faint">
-              {c.source.source}
+              {sourceLabel(t, c.source.source)}
               {c.source.locator ? ` · ${c.source.locator}` : ''}
               {c.source.quote ? ` — "${c.source.quote}"` : ''}
             </span>
@@ -1183,7 +1188,7 @@ function RunResult({ view, result, onOpen }: { view: QaPlanView; result: QaRunVi
           </span>
         ))}
         <span className="faint">
-          {t('시작 {time}', { time: new Date(result.run.startedAt).toLocaleString() })} ·{' '}
+          {t('시작 {time}', { time: shortTime(result.run.startedAt) })} ·{' '}
           {t('요구사항 {n}개 중 통과 {p}', { n: reqs.length, p: reqs.filter((r) => r.status === 'pass').length })}
         </span>
       </div>

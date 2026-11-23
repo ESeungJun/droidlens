@@ -3,6 +3,7 @@ import { api, type ScenarioData } from '../api';
 import { useApp } from '../App';
 import { useT } from '../i18n';
 import { ScriptsPanel } from './ScriptsPanel';
+import { shortTime } from '../format';
 import { requestQaPlan, takeScenario } from '../nav';
 import { buildScenarioView, formatDuration, STATUS_LABEL, VERDICT_LABEL, type StepRow } from '@droidlens/core/scenario-view';
 
@@ -148,7 +149,7 @@ function ReportsView() {
           <span className={`v-${s.verdict ?? 'blocked'}`}>{s.verdict ? s.verdict.toUpperCase() : t('진행 중')}</span>
         </div>
         <div className="faint" style={{ fontSize: 11 }}>
-          {new Date(s.startedAt).toLocaleString()} · {listLine(s)}
+          {shortTime(s.startedAt)} · {listLine(s)}
         </div>
         {s.tc && (
           <button

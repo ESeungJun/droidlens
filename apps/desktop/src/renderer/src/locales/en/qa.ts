@@ -2,7 +2,7 @@
 export const qa: Record<string, string> = {
   'QA 계획': 'QA plans',
   '+ 새 계획': '+ New plan',
-  '문서 {s} · TC {c} (고름 {k})': '{s} docs · {c} TCs ({k} selected)',
+  '문서 {s}개 · TC {c}개 (고름 {k})': '{s} docs · {c} TCs ({k} selected)',
   '뽑는 중': 'extracting',
   '실행 중': 'running',
   '다른 계획에서 작업이 돌고 있습니다. 끝나거나 멈춘 뒤에 이 계획을 실행할 수 있습니다.':
@@ -13,9 +13,12 @@ export const qa: Record<string, string> = {
   문서: 'Documents',
   PDF: 'PDF',
   엑셀: 'Excel',
-  '파일 넣기…': 'Add files…',
-  'Confluence·Figma 링크 (https://…)': 'Confluence or Figma link (https://…)',
-  '링크 넣기': 'Add link',
+  파일: 'File',
+  링크: 'Link',
+  '파일 고르기…': 'Choose files…',
+  'Confluence·Figma 주소 붙여넣기 (https://…)': 'Paste a Confluence or Figma URL (https://…)',
+  넣기: 'Add',
+  '문서 {n}': 'Doc {n}',
   'TC 뽑기': 'Extract TCs',
   '추가 요청 (선택) — 예: 로그인 절만, 경계 TC 는 빼고': 'Extra instructions (optional) — e.g. only the login section, no boundary TCs',
   '■ 멈추기': '■ Stop',
@@ -149,7 +152,6 @@ export const qa: Record<string, string> = {
   '비우면 첫 문서 제목으로': 'Leave empty to use the first document title',
   '기획 문서 고르기…': 'Choose spec documents…',
   '링크로 넣기': 'Add a link instead',
-  'md·txt·PDF·CSV·엑셀 · Confluence·Figma 링크': 'md · txt · PDF · CSV · Excel · Confluence and Figma links',
   '링크는 Claude Code 의 Confluence·Figma 커넥터로 읽습니다. 없으면 PDF 로 넣으세요.':
     "Links are read through Claude Code's Confluence and Figma connectors. Without them, add a PDF.",
   '이 컴퓨터의 Claude Code 로 요구사항과 TC 를 뽑습니다. 기기는 건드리지 않습니다':

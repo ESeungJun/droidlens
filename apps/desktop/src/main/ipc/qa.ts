@@ -49,7 +49,7 @@ export function register(handle: Handle): void {
   });
   handle('qaSourceLink', async (id: string, url: string) => {
     const c = dl.classifyQaSource(String(url ?? '').trim());
-    if (!('link' in c)) throw new Error('Confluence·Figma https 링크만 넣을 수 있습니다. 파일은 "파일 넣기" 로 고르세요');
+    if (!('link' in c)) throw new Error('Confluence·Figma https 링크만 넣을 수 있습니다. 파일은 "파일 고르기…" 로 넣으세요');
     const a = await dl.addQaSource(id, c.link.ref);
     return { id: a.source.id, title: a.source.ref, duplicate: a.duplicate, warnings: a.warnings };
   });
