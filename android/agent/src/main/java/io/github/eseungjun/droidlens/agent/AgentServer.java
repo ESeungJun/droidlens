@@ -2,12 +2,15 @@ package io.github.eseungjun.droidlens.agent;
 
 import android.app.Instrumentation;
 import android.app.UiAutomation;
+import android.content.res.Resources;
 import android.graphics.Rect;
 import android.net.LocalServerSocket;
 import android.net.LocalSocket;
+import android.os.Build;
 import android.os.Bundle;
 import android.os.Process;
 import android.util.Log;
+import android.util.TypedValue;
 import android.view.accessibility.AccessibilityNodeInfo;
 import android.view.accessibility.AccessibilityWindowInfo;
 
@@ -119,7 +122,7 @@ final class AgentServer {
                     break;
                 case "GET /hierarchy":
                     contentType = "text/xml; charset=utf-8";
-                    response = dumpHierarchy("1".equals(query.get("allWindows")));
+                    response = dumpHierarchy("1".equals(query.get("allWindows")), "1".equals(query.get("rendering")));
                     break;
                 case "POST /text":
                     response = setText(query.containsKey("text") ? query.get("text") : body, "append".equals(query.get("mode")));
@@ -178,8 +181,12 @@ final class AgentServer {
 
     // ---------- 뷰 계층 ----------
 
-    /** uiautomator dump와 같은 XML 형식이라 호스트의 파서를 그대로 쓴다 */
-    private String dumpHierarchy(boolean allWindows) throws Exception {
+    /**
+     * uiautomator dump와 같은 XML 형식이라 호스트의 파서를 그대로 쓴다.
+     * rendering: 글자 노드마다 렌더링 정보(글자 크기·단위)를 더 요청한다 (API 30+, View 만 나옴. 덤프가 약 70ms 느려져 디자인 비교 때만)
+     */
+    private String dumpHierarchy(boolean allWindows, boolean rendering) throws Exception {
+        this.rendering = rendering && Build.VERSION.SDK_INT >= Build.VERSION_CODES.R;
         StringBuilder sb = new StringBuilder(64 * 1024);
         sb.append("<?xml version='1.0' encoding='UTF-8' standalone='yes' ?><hierarchy rotation=\"0\">");
         if (allWindows) {
@@ -204,6 +211,7 @@ final class AgentServer {
     }
 
     private final Rect rect = new Rect();
+    private boolean rendering;
 
     private void appendNode(StringBuilder sb, AccessibilityNodeInfo n, int index) {
         if (!n.isVisibleToUser()) return;
@@ -226,6 +234,7 @@ final class AgentServer {
         bool(sb, "selected", n.isSelected());
         sb.append(" bounds=\"[").append(rect.left).append(',').append(rect.top).append("][")
                 .append(rect.right).append(',').append(rect.bottom).append("]\"");
+        if (rendering && n.getText() != null) appendRendering(sb, n);
         int count = n.getChildCount();
         if (count == 0) {
             sb.append("/>");
@@ -239,6 +248,28 @@ final class AgentServer {
             appendNode(sb, c, childIndex++);
         }
         sb.append("</node>");
+    }
+
+    /**
+     * text-size-px(화면 픽셀)·text-size-unit(TypedValue: 0 px, 1 dip, 2 sp). 앱이 알려 주지 않으면(Compose 등) 붙이지 않는다.
+     * Android 14+ 는 큰 글자를 비선형으로 키워 px ÷ density ÷ 배율 로 sp 가 되돌아가지 않아, sp 단위면 되돌린 값(text-size-sp)도 붙인다
+     */
+    @android.annotation.TargetApi(Build.VERSION_CODES.R)
+    private static void appendRendering(StringBuilder sb, AccessibilityNodeInfo n) {
+        try {
+            if (!n.getAvailableExtraData().contains(AccessibilityNodeInfo.EXTRA_DATA_RENDERING_INFO_KEY)) return;
+            if (!n.refreshWithExtraData(AccessibilityNodeInfo.EXTRA_DATA_RENDERING_INFO_KEY, new Bundle())) return;
+            AccessibilityNodeInfo.ExtraRenderingInfo info = n.getExtraRenderingInfo();
+            if (info == null || info.getTextSizeInPx() <= 0) return;
+            sb.append(" text-size-px=\"").append(info.getTextSizeInPx()).append('"');
+            sb.append(" text-size-unit=\"").append(info.getTextSizeUnit()).append('"');
+            if (info.getTextSizeUnit() == TypedValue.COMPLEX_UNIT_SP && Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+                float sp = TypedValue.deriveDimension(TypedValue.COMPLEX_UNIT_SP, info.getTextSizeInPx(), Resources.getSystem().getDisplayMetrics());
+                sb.append(" text-size-sp=\"").append(sp).append('"');
+            }
+        } catch (RuntimeException e) {
+            // 렌더링 정보가 없어도 덤프는 이어 간다 (호스트가 글자 높이로 추정한다)
+        }
     }
 
     private static void attr(StringBuilder sb, String name, CharSequence value) {

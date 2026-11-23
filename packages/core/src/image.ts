@@ -21,7 +21,11 @@ export interface DownscaledImage {
 
 /** downscaleToJpeg 와 같되 원본·결과 크기를 같이 돌려준다 (이미지 좌표를 기기 좌표로 바꿀 배율을 알리기 위함) */
 export function downscaleToJpegInfo(png: Buffer, maxEdge = 900, quality = 70): DownscaledImage {
-  const src = PNG.sync.read(png);
+  return rasterToJpeg(PNG.sync.read(png), maxEdge, quality);
+}
+
+/** RGBA 화소 배열을 긴 변 maxEdge 이하로 줄여 JPEG 로 */
+export function rasterToJpeg(src: { width: number; height: number; data: Uint8Array }, maxEdge = 900, quality = 70): DownscaledImage {
   const scale = Math.min(1, maxEdge / Math.max(src.width, src.height));
   const w = Math.max(1, Math.round(src.width * scale));
   const h = Math.max(1, Math.round(src.height * scale));
