@@ -119,7 +119,7 @@ DroidLens.event("purchase_clicked", JSONObject().put("itemId", 42))
 
 Just press two buttons in the app's **Settings** tab.
 
-1. **Register MCP** — registers the app's built-in MCP server (60 tools) with `claude mcp add --scope user`. No separate Node install needed.
+1. **Register MCP** — registers the app's built-in MCP server (63 tools) with `claude mcp add --scope user`. No separate Node install needed.
 2. **Install agents** — copies the bundled agents to `~/.claude/agents/`.
 
 | Agent | What it does |
@@ -175,6 +175,7 @@ How to run:
 - Desktop: **Scenarios → Scripts** tab to edit, run, and run the full regression suite
 - Claude Code: `script_run`, `suite_run`, `script_write`
 - CI/terminal: `node droidlens-mcp.mjs run <file|folder> [--serial <device>] [--junit out.xml] [--summary out.md]` (exit code 1 on failure). `--junit` writes per-step results as JUnit XML and `--summary` writes Markdown for a PR comment. See [examples/ci/android-emulator.yml](examples/ci/android-emulator.yml) for a workflow that runs scripts on an emulator
+- QA regression: `node droidlens-mcp.mjs qa run <QA plan id> [--serial <device>] [--junit out.xml] [--strict]` runs the selected cases that already passed and have a linked script, in priority order, and writes a results table (HTML, CSV, JUnit) to `~/.droidlens/qa/<plan>/runs/<run>/`. Exit code 1 if a case it ran failed or was blocked; with `--strict`, also if any selected case has no script yet
 
 See [examples/scripts](examples/scripts) for examples.
 

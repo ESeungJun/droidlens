@@ -497,8 +497,55 @@ test('에이전트 TC 수정: 허용·스크립트는 못 바꾸고, 확인 필�
 
   // 스크립트 잇기 (실행하는 동안 TC 가 바뀌었으면 잇지 않는다)
   const tc1 = (await qa.loadQaPlan(plan.id)).cases[0];
-  await assert.rejects(qa.linkQaCaseScript(plan.id, 'TC-001', 'x', qa.dangerFingerprint({ ...tc1, data: '다른 값' })), /바뀌어 스크립트를 잇지 않았습니다/);
-  const linked = await qa.linkQaCaseScript(plan.id, 'TC-001', 'TC-001_정상-로그인');
+  await assert.rejects(qa.linkQaCaseScript(plan.id, 'TC-001', 'x', { hash: 'a'.repeat(64), fingerprint: qa.dangerFingerprint({ ...tc1, data: '다른 값' }) }), /바뀌어 스크립트를 잇지 않았습니다/);
+  const linked = await qa.linkQaCaseScript(plan.id, 'TC-001', 'TC-001_정상-로그인', { hash: 'a'.repeat(64) });
+  assert.equal(linked.cases[0].scriptHash, 'a'.repeat(64));
   assert.equal(linked.cases[0].script, 'TC-001_정상-로그인');
-  await assert.rejects(qa.linkQaCaseScript(plan.id, 'TC-001', '../x'), /스크립트 이름/);
+  await assert.rejects(qa.linkQaCaseScript(plan.id, 'TC-001', '../x', { hash: 'a'.repeat(64) }), /스크립트 이름/);
 });
+
+test('회차(#76): 이은 스크립트는 해시가 같을 때만 그대로로 보고, 다른 TC 것이면 막는다. 회차 id 는 경로로 못 쓴다', async () => {
+  const plan = await qa.createQaPlan({ name: '회차', app: 'com.example.app' });
+  await qa.saveQaPlan({
+    ...plan,
+    requirements: [{ id: 'R-01', text: '다음' }],
+    cases: [{ id: 'TC-001', title: '다음', requirements: ['R-01'], priority: 'P0', kind: 'normal', steps: ['a'], expected: ['b'], selected: true }],
+  });
+  const dir = join(home, 'scripts');
+  mkdirSync(dir, { recursive: true });
+  const body = `name: s\napp: com.example.app\ntc:\n  plan: ${plan.id}\n  case: TC-001\nsteps:\n  - tap: { text: 다음 }\n`;
+  writeFileSync(join(dir, 'TC-001_s.yaml'), body);
+  const hash = qa.sha256(Buffer.from(body));
+  const linked = await qa.linkQaCaseScript(plan.id, 'TC-001', 'TC-001_s', { hash });
+  const c = linked.cases[0];
+  assert.equal((await qa.readCaseScript(plan.id, c)).changed, false);
+  writeFileSync(join(dir, 'TC-001_s.yaml'), body + '  - back\n');
+  assert.equal((await qa.readCaseScript(plan.id, c)).changed, true);
+  writeFileSync(join(dir, 'TC-001_s.yaml'), body.replace('case: TC-001', 'case: TC-002'));
+  assert.match((await qa.readCaseScript(plan.id, c)).error, /이 TC 의 것이 아닙니다/);
+
+  const run = await qa.createQaRun(plan.id);
+  const run2 = await qa.createQaRun(plan.id);
+  assert.notEqual(run.id, run2.id, '같은 초에 만들어도 겹치지 않는다');
+  assert.equal((await qa.latestQaRun(plan.id)).id, run2.id);
+  assert.throws(() => qa.qaRunDir(plan.id, '../x'), /회차 id 형식/);
+  await assert.rejects(qa.loadQaRun(plan.id, '../../x'), /회차 id 형식/);
+  await assert.rejects(qa.recordQaResult(plan.id, run.id, { case: 'TC-001', status: 'pass', mode: 'manual' }), /실행한 결과로만/);
+  await assert.rejects(qa.recordQaResult(plan.id, run.id, { case: 'TC-009', status: 'skip', mode: 'manual', detail: 'x' }), /TC 가 없습니다/);
+});
+
+test('회차(#76): 통과 근거 판정과 입력값 가리기', () => {
+  const step = (index, status, extra = {}) => ({ index, at: 0, title: 't', status, ...extra });
+  assert.match(qa.missingPassEvidence({ steps: [] }), /통과한 단계가 없습니다/);
+  assert.match(qa.missingPassEvidence({ steps: [step(1, 'pass', { check: { by: 'agent' } })] }), /통과한 단계가 없습니다/);
+  assert.equal(qa.missingPassEvidence({ steps: [step(1, 'pass', { check: { by: 'assert' } })] }), undefined);
+  assert.match(qa.missingPassEvidence({ steps: [step(1, 'pass', { check: { by: 'assert' } }), step(2, 'fail')] }), /실패로 남은/);
+  // 실패를 정정하면 실패로 보지 않는다
+  assert.equal(
+    qa.missingPassEvidence({ steps: [step(1, 'pass', { check: { by: 'assert' } }), step(2, 'fail'), step(3, 'pass', { corrects: 2 })] }),
+    undefined,
+  );
+  assert.equal(qa.maskCaseData('user@example.com / hunter22 로 로그인', 'id: user@example.com, pw: hunter22'), '*** / *** 로 로그인');
+  assert.equal(qa.maskCaseData('그대로', undefined), '그대로');
+});
+

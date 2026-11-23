@@ -119,7 +119,7 @@ DroidLens.event("purchase_clicked", JSONObject().put("itemId", 42))
 
 앱의 **설정** 탭에서 버튼 두 개만 누르면 됩니다.
 
-1. **MCP 자동 등록** — 앱에 내장된 MCP 서버(도구 60개)를 `claude mcp add --scope user`로 등록합니다. Node를 따로 설치할 필요가 없습니다.
+1. **MCP 자동 등록** — 앱에 내장된 MCP 서버(도구 63개)를 `claude mcp add --scope user`로 등록합니다. Node를 따로 설치할 필요가 없습니다.
 2. **에이전트 설치** — 전용 에이전트를 `~/.claude/agents/`에 복사합니다.
 
 | 에이전트 | 하는 일 |
@@ -175,6 +175,7 @@ steps:
 - 데스크톱 **시나리오 → 스크립트** 탭에서 편집·실행·전체 회귀 실행
 - Claude Code: `script_run`, `suite_run`, `script_write`
 - CI/터미널: `node droidlens-mcp.mjs run <파일|폴더> [--serial <기기>] [--junit out.xml] [--summary out.md]` (실패 시 종료 코드 1). `--junit` 은 단계별 결과를 JUnit XML 로, `--summary` 는 PR 댓글에 붙일 Markdown 으로 씁니다. 에뮬레이터에서 돌리는 워크플로 예시는 [examples/ci/android-emulator.yml](examples/ci/android-emulator.yml)
+- QA 회귀: `node droidlens-mcp.mjs qa run <QA 계획 id> [--serial <기기>] [--junit out.xml] [--strict]` — 고른 TC 중 통과해 스크립트가 이어진 것을 우선순위 순으로 돌리고 `~/.droidlens/qa/<계획>/runs/<회차>/` 에 결과표(HTML·CSV·JUnit)를 씁니다. 돌린 TC 가 실패·막힘이면 종료 코드 1, `--strict` 면 스크립트가 없어 안 돌린 TC 가 있어도 1입니다
 
 예시는 [examples/scripts](examples/scripts).
 

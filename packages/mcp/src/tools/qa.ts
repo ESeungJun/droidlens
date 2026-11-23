@@ -3,7 +3,7 @@ import { basename, resolve } from 'node:path';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import * as dl from '@droidlens/core';
-import { text, json, acts, readOnly, askUser, plainText } from '../common.js';
+import { text, json, acts, readOnly, askUser, plainText, device, serialArg, recorder, dangerAllowed } from '../common.js';
 
 /**
  * QA 계획 도구 (#75): 문서 넣기 → 요구사항·TC 뽑아 저장 → 사람이 검토·선택 → scenario_start(tc) 로 실행.
@@ -309,6 +309,97 @@ export function register(server: McpServer): void {
       }
       const next = await dl.setQaCaseAllowDanger(plan, caseId, allow, shown);
       return text(`${allow ? '허용했습니다' : '허용을 거뒀습니다'}: ${caseLine(next.cases.find((x) => x.id === caseId)!)}`);
+    },
+  );
+
+  // ---------- 실행·결과 (#76) ----------
+
+  server.registerTool(
+    'qa_run_scripts',
+    {
+      description:
+        'QA 회차를 시작(또는 이어서)하고, 고른 TC 중 스크립트가 이어진 것을 우선순위 순서로 기기에서 돌려 결과를 적는다. ' +
+        '스크립트가 없는 TC 는 돌리지 않고 목록으로 돌려준다: 그 TC 는 scenario_start(tc: {plan, case, run}) 로 하나씩 실행하면 결과가 이 회차에 적힌다. ' +
+        '확인 필수 동작은 사람이 그 TC 에 허용했고 스크립트가 이은 뒤 바뀌지 않았을 때만 누른다',
+      inputSchema: {
+        ...serialArg,
+        ...planArg,
+        run: z.string().optional().describe('이어서 적을 회차 id. 생략하면 새 회차'),
+      },
+      annotations: acts,
+    },
+    async ({ serial, plan, run }, extra) => {
+      if (recorder.active) throw new Error('진행 중인 시나리오가 있습니다. scenario_finish 로 끝낸 뒤 실행하세요');
+      const p = await dl.loadQaPlan(plan);
+      const sel = dl.orderQaCases(p);
+      if (!sel.length) throw new Error('고른 TC 가 없습니다. 사용자가 실행할 TC 를 고른 뒤 실행하세요');
+      // 대화창: 허용된 확인 필수 TC 를 스크립트로 누르기 전에 한 번 묻는다 (tap·script_run 과 같게)
+      const armed = sel.filter((c) => c.script && c.allowDanger && !c.review?.length);
+      if (armed.length) await dangerAllowed(true, true, `qa_run_scripts(${armed.map((c) => c.id).join(', ')})`);
+      const dev = await device(serial);
+      const r = await dl.runQaScripts(dev, plan, { run, signal: extra.signal });
+      const lines = [`회차 ${r.run.id} · 스크립트로 ${r.ran.length}개 실행`];
+      for (const x of r.ran) lines.push(`  ${x.case} ${dl.QA_STATUS_LABEL[x.status]}${x.detail ? ` — ${oneLine(x.detail, 200)}` : ''}`);
+      const bad = r.ran.filter((x) => x.status !== 'pass');
+      if (bad.length) lines.push(`실패·막힘 ${bad.length}개는 화면이 바뀌었을 수 있습니다. 원인을 보려면 리포트를 읽거나 scenario_start(tc) 로 다시 확인하세요 (스크립트는 다시 통과하면 새로 이어진다)`);
+      if (r.remaining.length) lines.push(`취소되어 스크립트 TC ${r.remaining.length}개(${r.remaining.map((c) => c.id).join(', ')})를 돌리지 못했습니다. run: "${r.run.id}" 로 다시 부르면 이어서 적습니다`);
+      if (r.needsReview.length)
+        lines.push(`다시 보기 표시가 있어 막힘으로 적은 TC: ${r.needsReview.map((c) => c.id).join(', ')}. 사용자가 확인(선택·허용을 다시 정함)해야 실행할 수 있습니다`);
+      if (r.pending.length) {
+        lines.push(`\n스크립트가 없는 TC ${r.pending.length}개 (우선순위 순). 하나씩 scenario_start(tc: {plan: "${plan}", case, run: "${r.run.id}"}) 로 실행하세요:`);
+        for (const c of r.pending) lines.push(`  ${caseLine(c)}${c.automatable === 'manual' ? ' (수동 TC: 실행하지 못하면 qa_case_result 로 건너뜀·막힘을 적는다)' : ''}`);
+      }
+      lines.push(`\n다 돌린 뒤 qa_report(plan: "${plan}", run: "${r.run.id}") 로 결과표를 만드세요`);
+      return text(lines.join('\n'));
+    },
+  );
+
+  server.registerTool(
+    'qa_case_result',
+    {
+      description:
+        '돌리지 못한 TC 의 결과를 회차에 적는다: skip(이번에 하지 않음) 또는 blocked(환경·앱 문제로 끝까지 못 감). 이유는 필수. ' +
+        '통과·실패는 직접 적지 않는다(scenario_finish 가 실행 근거와 함께 적는다)',
+      inputSchema: {
+        ...planArg,
+        run: z.string().describe('회차 id'),
+        case: z.string().regex(dl.CASE_ID).describe('TC 번호 (TC-001)'),
+        status: z.enum(['skip', 'blocked']).describe('skip: 이번에 하지 않음 · blocked: 환경·앱 문제로 끝까지 못 감'),
+        reason: z.string().trim().min(1).max(500).describe('왜 돌리지 못했는지 (결과표에 나온다)'),
+      },
+      annotations: acts,
+    },
+    async ({ plan, run, case: caseId, status, reason }) => {
+      await dl.recordQaResult(plan, run, { case: caseId, status, mode: 'manual', detail: reason });
+      return text(`회차 ${run} 에 ${caseId} ${dl.QA_STATUS_LABEL[status]} 를 적었습니다`);
+    },
+  );
+
+  server.registerTool(
+    'qa_report',
+    {
+      description:
+        'QA 회차 결과표를 만든다: HTML(사람용) · CSV(엑셀) · JUnit XML(CI). 요구사항별·TC별 결과와 개수를 돌려준다. run 을 생략하면 가장 최근 회차',
+      inputSchema: { ...planArg, run: z.string().optional().describe('회차 id. 생략하면 가장 최근') },
+      annotations: acts,
+    },
+    async ({ plan, run }) => {
+      const p = await dl.loadQaPlan(plan);
+      const r = run ? await dl.loadQaRun(plan, run) : await dl.latestQaRun(plan);
+      if (!r) throw new Error('회차가 없습니다. 먼저 qa_run_scripts 로 회차를 시작하세요');
+      const f = await dl.writeQaReport(p, r);
+      const c = f.summary.counts;
+      const req = f.summary.requirements;
+      return text(
+        [
+          `회차 ${r.id} · 통과 ${c.pass} · 실패 ${c.fail} · 막힘 ${c.blocked} · 건너뜀 ${c.skip} · 안 돌림 ${c['not-run']}`,
+          `요구사항 ${req.length}개: 통과 ${req.filter((x) => x.status === 'pass').length} · 실패 ${req.filter((x) => x.status === 'fail').length} · 안 돌림 ${req.filter((x) => x.status === 'not-run').length}`,
+          ...f.summary.rows.filter((x) => x.status === 'fail' || x.status === 'blocked').map((x) => `  ${x.case.id} ${dl.QA_STATUS_LABEL[x.status]} ${oneLine(x.case.title, 80)}`),
+          `결과표: ${f.html}`,
+          `CSV: ${f.csv}`,
+          `JUnit: ${f.junit}`,
+        ].join('\n'),
+      );
     },
   );
 }

@@ -225,7 +225,7 @@ test('scenario_start(tc): 고른 TC 만, 허용 없는 TC 는 allowDanger 를 �
   assert.match(risky.text, /TC-001 는 실제로 누르기 허용이 없는 TC/);
   assert.ok(!s.log().some((l) => l.includes('input tap')), '누르지 않았다');
   assert.equal((await s.call('tap', { text: '다음' })).isError, false);
-  await s.call('scenario_step', { title: '다음 버튼이 보임', status: 'pass', screenshot: false });
+  await s.call('scenario_step', { title: '다음 버튼이 보임', assert: { visible: { text: '다음' } }, screenshot: false });
   const fin = await s.call('scenario_finish', { verdict: 'pass', summary: 'ok' });
   assert.equal(fin.isError, false, fin.text);
   assert.match(fin.text, /TC-001 에 스크립트를 이었습니다/);

@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { z } from 'zod';
 import { parseFigmaUrl } from './sources.js';
 
@@ -99,6 +100,10 @@ export const qaCaseSchema = z
     selected: z.boolean().optional(),
     /** 통과해 저장된 회귀 스크립트 이름 */
     script: z.string().max(200).regex(PLAN_ID, '스크립트 이름은 글자·숫자·._- 만 씁니다').optional(),
+    /** 잇는 순간의 스크립트 파일 sha256. 이은 뒤 파일이 바뀌면 그 스크립트로 확인 필수 동작을 누르지 않는다 */
+    scriptHash: z.string().regex(/^[0-9a-f]{64}$/).optional(),
+    /** 잇는 순간의 TC 내용(dangerFingerprint)의 sha256. 그 뒤 TC 가 바뀌면 이 스크립트는 다른 TC 를 시험하는 것이라 돌리지 않는다 */
+    scriptCase: z.string().regex(/^[0-9a-f]{64}$/).optional(),
     /** 디자인 TC: 비교할 Figma 프레임 */
     design: z
       .object({
@@ -210,11 +215,19 @@ export function acceptAgentPlan(raw: unknown, prev?: QaPlan): QaPlan {
         selected: unselect ? false : (old?.selected ?? !c.danger),
         // 에이전트가 낸 표시는 받지 않는다
         review: review.size ? [...review] : undefined,
-        // 스크립트 연결은 실행기가 통과한 TC 에만 붙인다. 에이전트가 낸 값은 받지 않는다
-        script: old?.script,
+        // 스크립트 연결은 실행기가 통과한 TC 에만 붙인다. 에이전트가 낸 값은 받지 않고,
+        // TC 실행 내용이 바뀌면 옛 흐름을 녹화한 스크립트라 버린다 (새 내용에 받은 허용으로 옛 흐름을 누르지 않게)
+        script: same ? old?.script : undefined,
+        scriptHash: same ? old?.scriptHash : undefined,
+        scriptCase: same ? old?.scriptCase : undefined,
       };
     }),
   };
+}
+
+/** dangerFingerprint 의 sha256 (스크립트를 이은 TC 내용 비교용) */
+export function caseContentHash(c: Pick<QaCase, 'danger' | 'steps' | 'preconditions' | 'expected' | 'data'>): string {
+  return createHash('sha256').update(dangerFingerprint(c)).digest('hex');
 }
 
 /** 실제로 누르기 허용이 가리키는 실행 내용. 이 값이 같아야 이전 허용을 이어받는다 */

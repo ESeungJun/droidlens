@@ -250,7 +250,8 @@ export const recorder: {
   /** 직전 scenario_step 이후 한 조작 로그. 다음 단계에 붙고 비워진다 */
   actions: dl.ScenarioAction[];
   /** QA TC 를 실행하는 시나리오면 그 TC. allowDanger 는 사람이 그 TC 에 허용했는지 */
-  tc?: { plan: string; case: string; fingerprint: string };
+  /** TC 를 실행하는 시나리오. run 이 있으면 scenario_finish 가 그 회차에 결과를 적는다 (#76) */
+  tc?: { plan: string; case: string; fingerprint: string; run?: string };
 } = { active: false, steps: [], mocks: new Map(), actions: [] };
 
 /** 시나리오 진행 중이면 조작 로그를 남긴다 (스크립트로 녹화되지 않는 조작도 포함: 좌표 스와이프·앱 종료·목·Prefs 변경 등) */

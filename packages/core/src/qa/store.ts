@@ -14,6 +14,7 @@ import {
   type QaCase,
   type QaPlan,
   type QaSource,
+  caseContentHash,
 } from './plan.js';
 import { classifyQaSource, readQaSourceFile } from './sources.js';
 
@@ -35,8 +36,8 @@ function planFile(id: string): string {
 }
 
 const locks = new Map<string, Promise<unknown>>();
-/** 같은 계획을 읽고-고치고-쓰는 일은 한 프로세스 안에서 차례로 한다 (동시에 문서를 넣어 번호가 겹치지 않게) */
-function withPlanLock<T>(id: string, fn: () => Promise<T>): Promise<T> {
+/** 같은 계획(과 그 회차 기록)을 읽고-고치고-쓰는 일은 한 프로세스 안에서 차례로 한다 (동시에 문서를 넣어 번호가 겹치지 않게) */
+export function withPlanLock<T>(id: string, fn: () => Promise<T>): Promise<T> {
   const prev = locks.get(id) ?? Promise.resolve();
   const run = prev.then(fn, fn);
   const tail = run.catch(() => undefined);
@@ -203,14 +204,15 @@ export function updateQaCaseByAgent(id: string, caseId: string, patch: AgentCase
 /**
  * 통과해 저장한 회귀 스크립트를 TC 에 잇는다 (실행기 전용: scenario_finish 가 통과한 TC 에만 부른다)
  */
-export function linkQaCaseScript(id: string, caseId: string, script: string, fingerprint?: string): Promise<QaPlan> {
+export function linkQaCaseScript(id: string, caseId: string, script: string, opts: { hash: string; fingerprint?: string }): Promise<QaPlan> {
+  const { fingerprint } = opts;
   return withPlanLock(id, async () => {
     const plan = await loadQaPlan(id);
     const i = plan.cases.findIndex((c) => c.id === caseId);
     if (i < 0) throw new Error(`TC 가 없습니다: ${caseId}`);
     if (fingerprint !== undefined && dangerFingerprint(plan.cases[i]) !== fingerprint) throw new Error('실행하는 동안 TC 내용이 바뀌어 스크립트를 잇지 않았습니다');
     const cases = plan.cases.slice();
-    cases[i] = { ...cases[i], script };
+    cases[i] = { ...cases[i], script, scriptHash: opts.hash, scriptCase: caseContentHash(cases[i]) };
     const next = validatePlan({ ...plan, cases, updatedAt: Date.now() });
     await writeJson(planFile(id), next);
     return next;
