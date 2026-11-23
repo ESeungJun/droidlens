@@ -109,17 +109,21 @@ export async function loadQaRun(planId: string, runId: string): Promise<QaRun> {
   return r.data;
 }
 
-/** 가장 최근 회차 (없으면 undefined) */
-export async function latestQaRun(planId: string): Promise<QaRun | undefined> {
+/** 회차 id 목록 (최근 것부터) */
+export async function listQaRunIds(planId: string): Promise<string[]> {
   const dir = runsDir(planId);
-  if (!existsSync(dir)) return undefined;
+  if (!existsSync(dir)) return [];
   // 같은 초의 _2 … _99 는 숫자로 비교한다 (_10 이 _2 보다 앞에 오지 않게)
   const key = (x: string) => {
     const [b, n] = x.split('_');
     return `${b}_${(n ?? '1').padStart(2, '0')}`;
   };
-  const ids = (await readdir(dir)).filter((x) => RUN_ID.test(x)).sort((a, b) => key(a).localeCompare(key(b)));
-  for (const id of ids.reverse()) {
+  return (await readdir(dir)).filter((x) => RUN_ID.test(x)).sort((a, b) => key(b).localeCompare(key(a)));
+}
+
+/** 가장 최근 회차 (없으면 undefined) */
+export async function latestQaRun(planId: string): Promise<QaRun | undefined> {
+  for (const id of await listQaRunIds(planId)) {
     const r = await loadQaRun(planId, id).catch(() => undefined);
     if (r) return r;
   }
@@ -280,6 +284,8 @@ export async function runQaScripts(
         };
       }
     }
+    // 도중에 멈춘 TC 는 결과를 적지 않고 남은 것으로 둔다 (이미 실패를 본 경우만 남긴다)
+    if (opts.signal?.aborted && result.status !== 'fail') break;
     run = await recordQaResult(planId, run.id, result);
     ran.push(run.results.find((x) => x.case === c.id)!);
   }

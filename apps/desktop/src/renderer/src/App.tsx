@@ -7,6 +7,8 @@ import { LogTab } from './tabs/LogTab';
 import { LibsTab } from './tabs/LibsTab';
 import { AppInfoTab } from './tabs/AppInfoTab';
 import { ScenariosTab } from './tabs/ScenariosTab';
+import { QaTab } from './tabs/QaTab';
+import { useQaState } from './qaStore';
 import { SettingsTab } from './tabs/SettingsTab';
 import { NetworkTab } from './tabs/NetworkTab';
 import { PerfTab } from './tabs/PerfTab';
@@ -40,6 +42,7 @@ const TAB_LABELS = {
   info: '앱 정보',
   libs: '라이브러리',
   scen: '시나리오',
+  qa: 'QA',
   settings: '설정·연동',
 } as const;
 type TabId = keyof typeof TAB_LABELS;
@@ -49,7 +52,7 @@ const TAB_GROUPS: readonly { id: string; label: string; tabs: readonly TabId[] }
   { id: 'view', label: '화면', tabs: ['screen', 'inspect', 'flow'] },
   { id: 'diag', label: '진단', tabs: ['logs', 'network', 'perf'] },
   { id: 'app', label: '앱', tabs: ['data', 'info', 'libs'] },
-  { id: 'test', label: '테스트', tabs: ['scen'] },
+  { id: 'test', label: '테스트', tabs: ['scen', 'qa'] },
   { id: 'settings', label: '설정', tabs: ['settings'] },
 ];
 const groupOf = (tab: TabId) => TAB_GROUPS.find((g) => g.tabs.includes(tab));
@@ -98,6 +101,7 @@ export function App() {
   const [adbOk, setAdbOk] = useState<boolean | null>(null);
   const [chatOpen, setChatOpen] = useState(initial.get('chat') === '1');
   const updater = useUpdater();
+  const qa = useQaState();
   const [agent, setAgent] = useState<AgentStatus | null>(null);
   const [agentBusy, setAgentBusy] = useState(false);
 
@@ -328,6 +332,18 @@ export function App() {
             </button>
           )}
           <div className="spacer" />
+          {tab !== 'qa' && qa.confirms.length > 0 ? (
+            <button className="pill warn-pill" style={{ cursor: 'pointer' }} onClick={() => openTab('qa')} title={t('QA 실행이 사용자 확인을 기다립니다')}>
+              ⚠ {t('QA 확인 요청 {n}', { n: qa.confirms.length })}
+            </button>
+          ) : (
+            tab !== 'qa' &&
+            qa.job && (
+              <button className="pill accent" style={{ cursor: 'pointer' }} onClick={() => openTab('qa')}>
+                {qa.job.kind === 'extract' ? t('QA: TC 뽑는 중…') : t('QA: 회차 실행 중…')}
+              </button>
+            )
+          )}
           <UpdateButton u={updater} />
           <button className={`btn sm ${chatOpen ? 'primary' : ''}`} onClick={() => setChatOpen((v) => !v)} title={t('에이전트와 대화')}>
             {t('💬 에이전트 대화')}
@@ -411,7 +427,7 @@ export function App() {
               )}
             </div>
             <section className="content">
-              {!serial && tab !== 'scen' && tab !== 'settings' ? (
+              {!serial && tab !== 'scen' && tab !== 'qa' && tab !== 'settings' ? (
                 adbOk === null || !devicesLoaded ? (
                   <div className="empty">
                     <div>{t('기기 확인 중…')}</div>
@@ -462,6 +478,7 @@ export function App() {
                   {tab === 'libs' && <LibsTab />}
                   {tab === 'info' && <AppInfoTab />}
                   {tab === 'scen' && <ScenariosTab />}
+                  {tab === 'qa' && <QaTab />}
                   {tab === 'settings' && <SettingsTab onAdbChange={(a) => setAdbOk(a.ok)} updater={updater} />}
                 </>
               )}

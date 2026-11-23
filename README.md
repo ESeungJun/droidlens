@@ -77,6 +77,7 @@ Then enable **Developer options → USB debugging** on your device and connect i
 |  | **App info** | Version, SDK, permissions, activities; launch / restart / kill; deep links |
 |  | **Libraries** | Detects 100+ libraries and frameworks from the APK's DEX and native libs, estimates obfuscation |
 | **Test** | **Scenarios** | Verification reports (per-step screenshots and verdicts), write and run **YAML scripts**, run the full regression suite, accept the current screen as the new baseline when a screenshot comparison fails |
+|  | **QA** | Add spec documents (md, txt, PDF, CSV, Excel, Confluence and Figma links) → the planner agent extracts requirements and test cases → review them in a traceability table (edit, pick cases, allow confirm-required actions yourself) → run: cases with a script run directly, the rest each get a fresh verifier run (10-minute limit per case, stop anytime; confirm-required actions ask you on screen) → results table by requirement and case with design differences, HTML, CSV and JUnit export (uses this computer's Claude Code login) |
 | **Settings** | **Settings & Integrations** | adb path, one-click Claude Code MCP registration, install bundled agents |
 | | **💬 Agent chat** | Chat panel opened from the top bar. Ask the verifier or analyst agent while watching the mirror (uses this computer's Claude Code login — no API key needed) |
 

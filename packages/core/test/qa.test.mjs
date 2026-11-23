@@ -528,6 +528,7 @@ test('회차(#76): 이은 스크립트는 해시가 같을 때만 그대로로 �
   const run2 = await qa.createQaRun(plan.id);
   assert.notEqual(run.id, run2.id, '같은 초에 만들어도 겹치지 않는다');
   assert.equal((await qa.latestQaRun(plan.id)).id, run2.id);
+  assert.deepEqual(await qa.listQaRunIds(plan.id), [run2.id, run.id], '회차 목록은 최근 것부터');
   assert.throws(() => qa.qaRunDir(plan.id, '../x'), /회차 id 형식/);
   await assert.rejects(qa.loadQaRun(plan.id, '../../x'), /회차 id 형식/);
   await assert.rejects(qa.recordQaResult(plan.id, run.id, { case: 'TC-001', status: 'pass', mode: 'manual' }), /실행한 결과로만/);

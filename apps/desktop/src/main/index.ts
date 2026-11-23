@@ -4,6 +4,7 @@ import { copyFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import * as dl from '@droidlens/core';
 import { stopChat } from './chat';
+import { stopQa } from './qa';
 import { debug, getWindow, handle, readConfig, resourcePath, setWindow, windowBackground } from './context';
 import * as appIpc from './ipc/app';
 import * as chatIpc from './ipc/chat';
@@ -12,6 +13,7 @@ import * as filesIpc from './ipc/files';
 import * as graphIpc from './ipc/graph';
 import * as logcatIpc from './ipc/logcat';
 import * as mirrorIpc from './ipc/mirror';
+import * as qaIpc from './ipc/qa';
 import * as recordIpc from './ipc/record';
 import * as scriptIpc from './ipc/script';
 import * as sdkIpc from './ipc/sdk';
@@ -68,7 +70,7 @@ function createWindow(): void {
 }
 
 // ---------- IPC 등록 ----------
-for (const m of [deviceIpc, mirrorIpc, recordIpc, appIpc, logcatIpc, graphIpc, sdkIpc, scriptIpc, chatIpc, filesIpc, settingsIpc]) m.register(handle);
+for (const m of [deviceIpc, mirrorIpc, recordIpc, appIpc, logcatIpc, graphIpc, sdkIpc, scriptIpc, chatIpc, filesIpc, settingsIpc, qaIpc]) m.register(handle);
 
 /** 번들된 에이전트 APK를 ~/.droidlens/agent로 복사해 MCP 서버(별도 프로세스)도 쓸 수 있게 한다 */
 async function installAgentApk(): Promise<void> {
@@ -102,6 +104,7 @@ app.whenReady().then(async () => {
  */
 function stopAll(): void {
   stopChat();
+  stopQa();
   logcatIpc.stop();
   mirrorIpc.stop();
   recordIpc.stop();

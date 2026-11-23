@@ -3,5 +3,6 @@ import { common } from './en/common';
 import { core } from './en/core';
 import { data } from './en/data';
 import { inspect } from './en/inspect';
+import { qa } from './en/qa';
 
-export const en: Record<string, string> = { ...common, ...core, ...inspect, ...data };
+export const en: Record<string, string> = { ...common, ...core, ...inspect, ...data, ...qa };
