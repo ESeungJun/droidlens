@@ -8,6 +8,7 @@ import { runScript, type ScriptRunOptions } from '../script/run.js';
 import { readJson, timestamp, writeJson } from '../workspace.js';
 import { CASE_ID, PLAN_ID, PRIORITIES, caseContentHash, type QaCase, type QaPlan } from './plan.js';
 import type { ScenarioData } from '../scenario-view.js';
+import { QA_NOTE_CODES, qaNoteText, type QaNote } from '../qa-note.js';
 import { sha256 } from './sources.js';
 import { loadQaPlan, qaPlanDir, withPlanLock } from './store.js';
 
@@ -39,6 +40,14 @@ export const qaCaseResultSchema = z
     /** 시나리오 리포트(HTML) 경로 */
     report: z.string().max(2000).optional(),
     detail: z.string().max(2000).optional(),
+    /** 앱이 적은 메모의 코드 값 (#114). detail 에는 같은 뜻의 한국어 글을 같이 남긴다. 화면·내보내기는 이 값으로 언어를 고른다 */
+    note: z
+      .object({
+        code: z.enum(QA_NOTE_CODES),
+        args: z.record(z.string().max(20), z.union([z.string().max(2000), z.number()])).optional(),
+      })
+      .strict()
+      .optional(),
     durationMs: z.number().int().nonnegative().optional(),
     at: z.number().int(),
     /** 같은 회차에서 이 결과로 바뀐 앞 실행 결과 (최근 5개). 스크립트 실패 → 에이전트 재확인 통과 같은 흐름을 결과표에 남긴다 */
@@ -133,7 +142,7 @@ export async function latestQaRun(planId: string): Promise<QaRun | undefined> {
 /**
  * TC 결과 하나를 회차에 적는다 (같은 TC 의 앞 결과는 바꾸고, 바뀐 실행 결과는 history 에 남긴다).
  * manual(실행 없이 적는 건너뜀·막힘)은 고른 TC 에만, 실행해서 나온 결과(막힘 포함)가 없을 때만 적는다 (실패를 건너뜀으로 숨기지 않게).
- * 메모에 TC 입력값이 들어 있으면 가린다
+ * 메모에 TC 입력값이 들어 있으면 가린다. 앱 메모(note)만 받으면 detail 은 그 한국어 글로 채운다
  */
 export function recordQaResult(planId: string, runId: string, result: Omit<QaCaseResult, 'at'>): Promise<QaRun> {
   return withPlanLock(planId, async () => {
@@ -154,9 +163,12 @@ export function recordQaResult(planId: string, runId: string, result: Omit<QaCas
       prev && prev.mode !== 'manual'
         ? [...(prev.history ?? []), { status: prev.status, mode: prev.mode, at: prev.at }].slice(-5)
         : prev?.history;
+    const note = result.note && maskNote(result.note, c.data);
+    const detail = result.detail ?? (note ? qaNoteText(note, 'ko').slice(0, 2000) : undefined);
     const r = qaCaseResultSchema.parse({
       ...result,
-      ...(result.detail ? { detail: maskCaseData(result.detail, c.data) } : {}),
+      ...(note ? { note } : {}),
+      ...(detail ? { detail: maskCaseData(detail, c.data) } : {}),
       at: Date.now(),
       ...(history?.length ? { history } : {}),
     });
@@ -173,25 +185,26 @@ export function recordQaResult(planId: string, runId: string, result: Omit<QaCas
 export async function readCaseScript(
   planId: string,
   c: QaCase,
-): Promise<{ script: Script; path: string; changed: boolean } | { error: string }> {
-  if (!c.script) return { error: '이은 스크립트가 없습니다' };
+): Promise<{ script: Script; path: string; changed: boolean } | { error: string; note: QaNote }> {
+  const fail = (note: QaNote) => ({ error: qaNoteText(note, 'ko'), note });
+  if (!c.script) return fail({ code: 'scriptNone' });
   const path = join(await scriptsDir(), `${c.script}.yaml`);
   let bytes: Buffer;
   try {
     bytes = await readFile(path);
   } catch {
-    return { error: `스크립트 파일이 없습니다: ${c.script}` };
+    return fail({ code: 'scriptMissing', args: { script: c.script } });
   }
   let script: Script;
   try {
     script = parseScript(bytes.toString('utf8'));
   } catch (e) {
-    return { error: `스크립트 형식 오류: ${(e as Error).message.split('\n')[0]}` };
+    return fail({ code: 'scriptFormat', args: { error: (e as Error).message.split('\n')[0].slice(0, 500) } });
   }
-  if (script.tc?.plan !== planId || script.tc.case !== c.id) return { error: `스크립트 ${c.script} 가 이 TC 의 것이 아닙니다` };
+  if (script.tc?.plan !== planId || script.tc.case !== c.id) return fail({ code: 'scriptOtherCase', args: { script: c.script } });
   // TC 내용이 바뀌었으면 옛 흐름을 녹화한 스크립트다. 결과도 새 내용의 결과가 아니라 돌리지 않는다
   if (c.scriptCase && c.scriptCase !== caseContentHash(c))
-    return { error: 'TC 내용이 스크립트를 이은 뒤 바뀌었습니다. 바뀐 내용으로 다시 실행해 통과하면 스크립트가 새로 이어집니다' };
+    return fail({ code: 'caseChanged' });
   // 이은 TC 내용·파일 해시를 모르는 예전 연결도 바뀐 것으로 보고 확인 필수 동작은 누르지 않는다
   return { script, path, changed: !c.scriptCase || c.scriptHash !== sha256(bytes) };
 }
@@ -236,7 +249,7 @@ export async function runQaScripts(
       case: c.id,
       status: 'blocked',
       mode: 'manual',
-      detail: '다시 보기 표시가 있어 실행하지 않았습니다. 사람이 확인해야 합니다',
+      note: { code: 'needsReview' },
     }).catch(() => run);
   }
   const ran: QaCaseResult[] = [];
@@ -248,7 +261,7 @@ export async function runQaScripts(
     const s = await readCaseScript(planId, c);
     let result: Omit<QaCaseResult, 'at'>;
     if ('error' in s) {
-      result = { case: c.id, status: 'blocked', mode: 'script', script: c.script, detail: s.error };
+      result = { case: c.id, status: 'blocked', mode: 'script', script: c.script, note: s.note };
     } else {
       const t0 = Date.now();
       try {
@@ -259,11 +272,11 @@ export async function runQaScripts(
           guardDanger: !(c.allowDanger && !s.changed),
           qaRun: run.id,
         });
-        const note =
+        // 확인 필수 동작을 누르지 않은 까닭은 앱 메모(코드 값), 시나리오 요약은 에이전트·스크립트 글이라 그대로 뒤에 붙인다
+        const summary = r.scenario.summary?.slice(0, 1500);
+        const note: QaNote | undefined =
           s.changed && c.danger && c.allowDanger
-            ? c.scriptCase
-              ? '스크립트 파일이 TC 에 이은 뒤 바뀌어 확인 필수 동작은 누르지 않았습니다'
-              : '해시 없이 이은 스크립트라 확인 필수 동작은 누르지 않았습니다 (다시 실행해 통과하면 새로 이어집니다)'
+            ? { code: c.scriptCase ? 'scriptChangedDanger' : 'scriptNoHashDanger', ...(summary ? { args: { more: summary } } : {}) }
             : undefined;
         result = {
           case: c.id,
@@ -272,7 +285,7 @@ export async function runQaScripts(
           script: c.script,
           report: r.report,
           durationMs: r.durationMs,
-          ...(note || r.scenario.summary ? { detail: [note, r.scenario.summary].filter(Boolean).join(' · ').slice(0, 2000) } : {}),
+          ...(note ? { note } : r.scenario.summary ? { detail: r.scenario.summary.slice(0, 2000) } : {}),
         };
       } catch (e) {
         result = {
@@ -336,6 +349,12 @@ export function qaRunSummary(plan: QaPlan, run: QaRun): QaRunSummary {
  * 메모에 TC 입력값(계정·비밀번호 등)이 들어 있으면 가린다. 입력값을 띄어쓰기·구분 기호로 나눈 4글자 이상 조각을 찾는다
  * (결과표·CSV·JUnit 이 CI 산출물로 나가므로)
  */
+/** 앱 메모 인자 속 TC 입력값을 가린다 (오류 원문·요약에 입력값이 섞일 수 있다) */
+function maskNote(note: QaNote, data?: string): QaNote {
+  if (!note.args || !data) return note;
+  return { ...note, args: Object.fromEntries(Object.entries(note.args).map(([k, v]) => [k, typeof v === 'string' ? maskCaseData(v, data) : v])) };
+}
+
 export function maskCaseData(text: string, data?: string): string {
   if (!data) return text;
   const parts = [...new Set(data.split(/[\s,;:=|/]+/).filter((x) => x.length >= 4))].sort((a, b) => b.length - a.length);

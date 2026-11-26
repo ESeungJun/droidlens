@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { api, type QaCase, type QaPlanSummary, type QaPlanView, type QaRunView } from '../api';
 import { useApp } from '../App';
-import { useT } from '../i18n';
+import { useI18n, useT } from '../i18n';
+import { qaResultMemo } from '@droidlens/core/qa-note';
 import { answerQaConfirm, useQaState, type QaLogLine, type QaState } from '../qaStore';
 import { linkName, shortTime } from '../format';
 import { requestScenario, takeQaPlan } from '../nav';
@@ -1203,6 +1204,7 @@ function RunResult({
   onOpen: (path: string) => void;
 }) {
   const t = useT();
+  const { lang } = useI18n();
   const { openTab } = useApp();
   const { summary } = result;
   const c = summary.counts;
@@ -1293,7 +1295,7 @@ function RunResult({
                   ) : null}
                 </td>
                 <td className="qa-wrap faint">
-                  {r.result?.detail}
+                  {qaResultMemo(r.result, lang)}
                   {d && (
                     <div>{t('디자인 차이 {n}건 (높음 {h})', { n: d.counts.high + d.counts.medium + d.counts.low, h: d.counts.high })}</div>
                   )}

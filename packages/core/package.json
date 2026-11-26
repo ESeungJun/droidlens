@@ -16,6 +16,10 @@
     "./scenario-view": {
       "types": "./dist/scenario-view.d.ts",
       "default": "./dist/scenario-view.js"
+    },
+    "./qa-note": {
+      "types": "./dist/qa-note.d.ts",
+      "default": "./dist/qa-note.js"
     }
   },
   "scripts": {
