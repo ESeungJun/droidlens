@@ -162,6 +162,7 @@ export const qa: Record<string, string> = {
     'TCs with a script run directly; the rest each get an agent run. Passing TCs are saved as scripts',
   '검증 기록 탭에서 이 TC 의 단계별 기록을 엽니다': "Open this TC's step-by-step record in the Records tab",
   '기록 보기': 'View record',
+  '← 회차로 돌아가기': '← Back to run',
   // #98 검증 기록 회차 묶음
   '실패·막힘 {n}': 'Failed/blocked {n}',
   '통과 {n}': 'Passed {n}',

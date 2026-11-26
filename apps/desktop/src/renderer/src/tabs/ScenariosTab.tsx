@@ -130,8 +130,11 @@ function ReportsView() {
   const [selRun, setSelRun] = useState<string | null>(null);
   const [index, setIndex] = useState<QaRunIndexItem[]>([]);
   const [openRuns, setOpenRuns] = useState<Set<string>>(new Set());
+  // 회차의 '기록 보기' 로 연 기록이면 그 회차 (돌아가기 버튼, #134)
+  const [fromRun, setFromRun] = useState<string | null>(null);
   const setSel: typeof setSelState = (v) => {
     setSelRun(null);
+    setFromRun(null);
     setSelState(v);
   };
   const [loaded, setLoaded] = useState(false);
@@ -355,9 +358,19 @@ function ReportsView() {
             })}
       </div>
       {selGroup ? (
-        <RunDetail key={selGroup.key} g={selGroup} onOpenRecord={(s) => setSel(s)} />
+        <RunDetail key={selGroup.key} g={selGroup} onOpenRecord={(s) => {
+            const key = selGroup.key;
+            setSel(s);
+            setFromRun(key);
+          }}
+        />
       ) : sel ? (
         <div className="steps">
+          {fromRun && (
+            <button className="btn sm" style={{ marginBottom: 10 }} onClick={() => setSelRun(fromRun)}>
+              {t('← 회차로 돌아가기')}
+            </button>
+          )}
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
             <h2 style={{ margin: 0, fontSize: 18 }}>{sel.tc ? tcName(sel.tc.case, sel.name) : sel.name}</h2>
             <span className={`v-${sel.verdict ?? 'blocked'}`} style={{ fontWeight: 700 }}>{sel.verdict?.toUpperCase() ?? (scenarioStale(sel) ? t('끝나지 않음') : t('진행 중'))}</span>
