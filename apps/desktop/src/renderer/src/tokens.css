@@ -1,0 +1,70 @@
+/* 데스크톱 화면 색 토큰 원본. styles.css 는 여기 변수만 쓴다(직접 쓴 색은 check-tokens 가 막는다) */
+:root {
+  --bg: #0e0f12;
+  --panel: #15171c;
+  --panel-2: #1b1e24;
+  --line: #262a32;
+  --line-2: #323743;
+  --fg: #e6e8ec;
+  --fg-dim: #b3b9c4;
+  --fg-faint: #8d94a1;
+  --accent: #7dd3a8;
+  --accent-dim: rgba(125, 211, 168, 0.14);
+  --warn: #f2b46d;
+  --err: #f27474;
+  --info: #7cb4f2;
+  --purple: #c7a6f2;
+  /* 강조색 바탕 위 글자 */
+  --on-accent: #0b1a12;
+  /* 화면 미러·3D 뒤 배경의 가운데 색 */
+  --stage: #171a20;
+  /* 흐름 그래프 연결선 */
+  --edge: #4a505c;
+  --edge-back: #6b7280;
+  /* 인스펙터 깊이 색의 밝기 (글자·테두리) */
+  --depth-l: 65%;
+  --shadow: rgba(0, 0, 0, 0.5);
+  /* 아래부터는 테마와 상관없이 같은 색이라 라이트 블록에서 다시 정하지 않는다 */
+  /* 중지 버튼(.btn.on) 빨간 바탕 위 글자 */
+  --on-err: #fff;
+  /* 경고색 바탕 위 글자(검토 스샷 꼬리표) */
+  --on-warn: #000;
+  /* 인스펙터 깊이 점(색 바탕) 위 글자 */
+  --on-depth: #0d0f13;
+  /* 화면 미러의 기기 테두리 */
+  --device-frame: #050506;
+  /* 스크린샷이 아직 없을 때 자리 바탕 */
+  --shot-empty: #000;
+  /* 스크린샷 위 요소 고르기 상자 테두리 */
+  --pick-box: rgba(255, 255, 255, 0.35);
+  --radius: 8px;
+  --mono: 'SF Mono', ui-monospace, Menlo, monospace;
+  color-scheme: dark;
+}
+
+/* 라이트 테마. 테마 선택은 main 이 nativeTheme 으로 정하고 그 값이 prefers-color-scheme 으로 들어온다 (JS 가 돌기 전 첫 화면부터 맞는 색) */
+@media (prefers-color-scheme: light) {
+  :root {
+    --bg: #f4f5f7;
+    --panel: #ffffff;
+    --panel-2: #eceef2;
+    --line: #e0e3e8;
+    --line-2: #cbd0d8;
+    --fg: #1a1d23;
+    --fg-dim: #474e5a;
+    --fg-faint: #6b7280;
+    --accent: #14895b;
+    --accent-dim: rgba(20, 137, 91, 0.11);
+    --warn: #b0650c;
+    --err: #cf3434;
+    --info: #2c6cc0;
+    --purple: #7b45c4;
+    --on-accent: #ffffff;
+    --stage: #e8ebef;
+    --edge: #b4bac4;
+    --edge-back: #8a919c;
+    --depth-l: 40%;
+    --shadow: rgba(20, 24, 32, 0.18);
+    color-scheme: light;
+  }
+}
