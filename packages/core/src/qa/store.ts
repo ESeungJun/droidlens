@@ -215,13 +215,20 @@ export function updateQaCaseByAgent(id: string, caseId: string, patch: AgentCase
 /**
  * 통과해 저장한 회귀 스크립트를 TC 에 잇는다 (실행기 전용: scenario_finish 가 통과한 TC 에만 부른다)
  */
-export function linkQaCaseScript(id: string, caseId: string, script: string, opts: { hash: string; fingerprint?: string }): Promise<QaPlan> {
+export function linkQaCaseScript(
+  id: string,
+  caseId: string,
+  script: string,
+  opts: { hash: string; fingerprint?: string; /** 녹화가 아니라 고친 파일을 다시 잇기 (#140) */ relink?: boolean },
+): Promise<QaPlan> {
   const { fingerprint } = opts;
   return withPlanLock(id, async () => {
     const plan = await loadQaPlan(id);
     const i = plan.cases.findIndex((c) => c.id === caseId);
     if (i < 0) throw new Error(`TC 가 없습니다: ${caseId}`);
     if (fingerprint !== undefined && dangerFingerprint(plan.cases[i]) !== fingerprint) throw new Error('실행하는 동안 TC 내용이 바뀌어 스크립트를 잇지 않았습니다');
+    // 확인 필수 TC 는 사람이 허용한 것이 녹화된 그 스크립트다. 에이전트가 고친 파일은 잇지 않는다(다음 회차가 막힘으로 적고 에이전트로 넘긴다)
+    if (opts.relink && (plan.cases[i].danger || plan.cases[i].allowDanger)) throw new Error('확인 필수 TC 라 다시 잇지 않았습니다');
     const cases = plan.cases.slice();
     cases[i] = { ...cases[i], script, scriptHash: opts.hash, scriptCase: caseContentHash(cases[i]) };
     const next = validatePlan({ ...plan, cases, updatedAt: Date.now() });

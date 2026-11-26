@@ -8,3 +8,4 @@ export * from './export.js';
 export * from './open-records.js';
 export * from './delete.js';
 export * from './continuity.js';
+export * from './agent-tools.js';

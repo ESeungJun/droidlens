@@ -252,6 +252,11 @@ export const recorder: {
   /** QA TC 를 실행하는 시나리오면 그 TC. allowDanger 는 사람이 그 TC 에 허용했는지 */
   /** TC 를 실행하는 시나리오. run 이 있으면 scenario_finish 가 그 회차에 결과를 적는다 (#76) */
   tc?: { plan: string; case: string; fingerprint: string; run?: string };
+  /**
+   * 방금 끝낸 TC 에 이은 스크립트 (#140). 다음 scenario_start 전까지 그 스크립트를 고쳐 script_run 이 통과하면 해시를 다시 잇는다.
+   * 다른 TC 를 돌리는 중에 고친 스크립트는 다시 잇지 않아서, 다음 회차가 돌리지 않고 에이전트로 넘긴다
+   */
+  relink?: { plan: string; case: string; script: string; fingerprint: string };
 } = { active: false, steps: [], mocks: new Map(), actions: [] };
 
 /** 시나리오 진행 중이면 조작 로그를 남긴다 (스크립트로 녹화되지 않는 조작도 포함: 좌표 스와이프·앱 종료·목·Prefs 변경 등) */

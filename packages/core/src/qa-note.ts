@@ -13,6 +13,7 @@ export const QA_NOTE_CODES = [
   'timedOut',
   'agentNotStarted',
   'agentNoResult',
+  'scriptChanged',
   'scriptChangedDanger',
   'scriptNoHashDanger',
   'scriptNone',
@@ -58,6 +59,10 @@ const TEXT: Record<QaNoteCode, Record<QaNoteLang, (a: Args) => string>> = {
   agentNoResult: {
     ko: (a) => `에이전트가 결과를 적지 않고 끝났습니다${tail(a, 'error')}`,
     en: (a) => `The agent ended without recording a result${tail(a, 'error')}`,
+  },
+  scriptChanged: {
+    ko: () => '스크립트 파일이 TC 에 이은 뒤 바뀌어 돌리지 않았습니다. 에이전트로 다시 확인하면 다시 이어집니다',
+    en: () => 'The script file changed after it was linked to the TC, so it was not run. Verifying again with the agent links it again',
   },
   scriptChangedDanger: {
     ko: () => '스크립트 파일이 TC 에 이은 뒤 바뀌어 확인 필수 동작은 누르지 않았습니다',
