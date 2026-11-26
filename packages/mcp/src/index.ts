@@ -17,7 +17,7 @@ import * as sdk from './tools/sdk.js';
 import * as qa from './tools/qa.js';
 import * as design from './tools/design.js';
 
-export const VERSION = '0.13.0';
+export const VERSION = '0.14.0';
 
 /**
  * 클라이언트(에이전트)에게 주는 사용 안내. 도구 설명에 흩어져 있으면 첫 호출부터 맞는 도구를 고르기 어려워 순서를 한곳에 적는다
