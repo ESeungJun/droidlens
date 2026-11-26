@@ -24,11 +24,20 @@ function insideHome(p: string): string {
   return full;
 }
 
+/** <home>/qa/<계획>/runs/<회차>/results.xlsx 인지 */
+function isRunXlsx(full: string): boolean {
+  const qa = realPath(resolve(dl.droidlensHome(), 'qa')) + sep;
+  if (!full.startsWith(qa)) return false;
+  const parts = full.slice(qa.length).split(sep);
+  return parts.length === 4 && parts[1] === 'runs' && parts[3] === 'results.xlsx';
+}
+
 export function register(handle: Handle): void {
   handle('reveal', async (p: string) => shell.showItemInFolder(insideHome(p)));
   handle('openPath', async (p: string) => {
     const full = insideHome(p);
-    if (!/\.(html|png|mp4|json|mmd|apk)$/i.test(full) && full !== resolve(dl.droidlensHome())) throw new Error('열 수 없는 파일 형식입니다');
+    // .xlsx 는 매크로·외부 연결 위험이 있어 우리가 만든 회차 결과표만 연다 (#98)
+    if (!/\.(html|png|mp4|json|mmd|apk)$/i.test(full) && !isRunXlsx(full) && full !== resolve(dl.droidlensHome())) throw new Error('열 수 없는 파일 형식입니다');
     return shell.openPath(full);
   });
   handle('home', async () => dl.droidlensHome());

@@ -43,7 +43,7 @@ export interface ScenarioData {
   packageName?: string;
   device?: string;
   /** QA 계획의 TC 를 실행한 시나리오면 그 TC (qa/plan.ts) */
-  tc?: { plan: string; case: string };
+  tc?: { plan: string; case: string; run?: string };
   startedAt: number;
   finishedAt?: number;
   verdict?: 'pass' | 'fail' | 'blocked';

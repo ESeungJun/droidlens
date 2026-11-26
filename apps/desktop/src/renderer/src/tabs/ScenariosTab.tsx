@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
-import { api, type ScenarioData } from '../api';
+import { api, type QaRunIndexItem, type ScenarioData } from '../api';
 import { useApp } from '../App';
 import { useT } from '../i18n';
 import { ScriptsPanel } from './ScriptsPanel';
+import { RunDetail, RunHead, runKey, type RunGroup } from './QaRunRecord';
 import { shortTime } from '../format';
 import { requestQaPlan, takeScenario } from '../nav';
 import { buildScenarioView, formatDuration, STATUS_LABEL, VERDICT_LABEL, type StepRow } from '@droidlens/core/scenario-view';
@@ -63,11 +64,60 @@ function groupOf(s: ScenarioData, by: GroupBy, other: string): string {
   return '';
 }
 
+/** 목록 한 줄: 낱개 기록 또는 QA 회차 묶음 (#98) */
+type Entry = { kind: 'one'; s: ScenarioData } | { kind: 'run'; g: RunGroup };
+
+/** 같은 QA 회차의 기록을 회차 하나로 묶는다. 목록 순서(최신순)에서 회차의 가장 최근 기록 자리에 놓는다 */
+function toEntries(list: ScenarioData[], index: QaRunIndexItem[], planNames: Map<string, string>): Entry[] {
+  const byScenario = new Map<string, QaRunIndexItem>();
+  const byKey = new Map<string, QaRunIndexItem>();
+  for (const r of index) {
+    byKey.set(runKey(r.plan, r.run), r);
+    for (const id of r.scenarios) byScenario.set(id, r);
+  }
+  const out: Entry[] = [];
+  const groups = new Map<string, RunGroup>();
+  for (const s of list) {
+    const info = byScenario.get(s.id) ?? (s.tc?.run ? byKey.get(runKey(s.tc.plan, s.tc.run)) : undefined);
+    const plan = info?.plan ?? s.tc?.plan;
+    const run = info?.run ?? s.tc?.run;
+    if (!plan || !run) {
+      out.push({ kind: 'one', s });
+      continue;
+    }
+    const key = runKey(plan, run);
+    const g = groups.get(key);
+    if (g) {
+      g.items.push(s);
+      continue;
+    }
+    const ng: RunGroup = { key, plan, run, planName: info?.planName ?? planNames.get(plan) ?? plan, startedAt: info?.startedAt ?? s.startedAt, info, items: [s] };
+    groups.set(key, ng);
+    out.push({ kind: 'run', g: ng });
+  }
+  return out;
+}
+
+function entryGroup(e: Entry, by: GroupBy, other: string): string {
+  if (e.kind === 'one') return groupOf(e.s, by, other);
+  if (by === 'name') return e.g.planName;
+  if (by === 'app') return e.g.info?.app || e.g.items[0].packageName || other;
+  return groupOf(e.g.items[0], by, other);
+}
+
 function ReportsView() {
   const { run, toast, openTab } = useApp();
   const t = useT();
   const [list, setList] = useState<ScenarioData[]>([]);
-  const [sel, setSel] = useState<ScenarioData | null>(null);
+  const [sel, setSelState] = useState<ScenarioData | null>(null);
+  // 고른 QA 회차 (runKey). 회차를 고르면 오른쪽에 회차 요약을 보인다 (#98)
+  const [selRun, setSelRun] = useState<string | null>(null);
+  const [index, setIndex] = useState<QaRunIndexItem[]>([]);
+  const [openRuns, setOpenRuns] = useState<Set<string>>(new Set());
+  const setSel: typeof setSelState = (v) => {
+    setSelRun(null);
+    setSelState(v);
+  };
   const [loaded, setLoaded] = useState(false);
   const [groupBy, setGroupByState] = useState<GroupBy>(readGroupBy);
   const [folded, setFolded] = useState<Set<string>>(new Set());
@@ -86,10 +136,11 @@ function ReportsView() {
   }, []);
 
   const load = async () => {
-    const l = (await run(api.scenarios())) ?? [];
+    const [l, idx] = await Promise.all([run(api.scenarios()).then((x) => x ?? []), api.qaRunIndex().catch(() => [] as QaRunIndexItem[])]);
+    setIndex(idx);
     setList(l);
     setLoaded(true);
-    setSel((s) => (s ? l.find((x) => x.id === s.id) ?? null : (want && l.find((x) => x.id === want)) || l[0] || null));
+    setSelState((s) => (s ? l.find((x) => x.id === s.id) ?? null : (want && l.find((x) => x.id === want)) || l[0] || null));
     setPicked((cur) => new Set([...cur].filter((id) => l.some((x) => x.id === id))));
   };
   useEffect(() => {
@@ -109,14 +160,29 @@ function ReportsView() {
     }
   };
 
+  const entries = useMemo(() => toEntries(list, index, planNames), [list, index, planNames]);
   const groups = useMemo(() => {
-    const m = new Map<string, ScenarioData[]>();
-    for (const s of list) {
-      const g = groupOf(s, groupBy, t('앱 정보 없음'));
-      m.set(g, [...(m.get(g) ?? []), s]);
+    const m = new Map<string, Entry[]>();
+    for (const e of entries) {
+      const g = entryGroup(e, groupBy, t('앱 정보 없음'));
+      m.set(g, [...(m.get(g) ?? []), e]);
     }
     return [...m.entries()];
-  }, [list, groupBy, t]);
+  }, [entries, groupBy, t]);
+  const selGroup = useMemo(() => {
+    for (const e of entries) if (e.kind === 'run' && e.g.key === selRun) return e.g;
+    return null;
+  }, [entries, selRun]);
+  const idsOf = (e: Entry) => (e.kind === 'one' ? [e.s.id] : e.g.items.map((x) => x.id));
+  // QA 결과표에서 '기록 보기' 로 온 기록이 회차 안에 있으면 그 회차를 한 번 펼쳐 둔다 (사용자가 접은 회차는 다시 펴지 않게)
+  const [wantOpened, setWantOpened] = useState(false);
+  useEffect(() => {
+    if (!want || wantOpened) return;
+    const e = entries.find((x) => x.kind === 'run' && x.g.items.some((s) => s.id === want));
+    if (!e || e.kind !== 'run') return;
+    setWantOpened(true);
+    setOpenRuns((c) => (c.has(e.g.key) ? c : new Set([...c, e.g.key])));
+  }, [want, wantOpened, entries]);
 
   const toggle = (set: Set<string>, ids: string[], on: boolean) => {
     const next = new Set(set);
@@ -130,7 +196,7 @@ function ReportsView() {
     toast(t('리포트 {n}개를 지웠습니다', { n: ids.length }));
     setPicked(new Set());
     setPicking(false);
-    if (sel && ids.includes(sel.id)) setSel(null);
+    if (sel && ids.includes(sel.id)) setSelState(null);
     await load();
   };
 
@@ -140,8 +206,8 @@ function ReportsView() {
     return v.attention.length ? `${base} · ${t('확인할 것 {n}', { n: v.attention.length })}` : base;
   };
 
-  const item = (s: ScenarioData) => (
-    <div key={s.id} className={`scen-item ${sel?.id === s.id ? 'sel' : ''}`} onClick={() => (picking ? setPicked((c) => toggle(c, [s.id], !c.has(s.id))) : setSel(s))}>
+  const item = (s: ScenarioData, nested = false) => (
+    <div key={s.id} className={`scen-item ${nested ? 'nested' : ''} ${!selRun && sel?.id === s.id ? 'sel' : ''}`} onClick={() => (picking ? setPicked((c) => toggle(c, [s.id], !c.has(s.id))) : setSel(s))}>
       {picking && <input type="checkbox" checked={picked.has(s.id)} readOnly style={{ marginTop: 3 }} />}
       <div className="scen-body">
         <div style={{ display: 'flex', justifyContent: 'space-between', gap: 6 }}>
@@ -167,6 +233,38 @@ function ReportsView() {
       </div>
     </div>
   );
+
+  const runItem = (g: RunGroup) => {
+    const open = openRuns.has(g.key);
+    const ids = g.items.map((x) => x.id);
+    const all = ids.every((id) => picked.has(id));
+    return (
+      <div key={g.key}>
+        <div
+          className={`scen-item scen-run ${selRun === g.key ? 'sel' : ''}`}
+          onClick={() => (picking ? setPicked((c) => toggle(c, ids, !all)) : setSelRun(g.key))}
+        >
+          {picking ? (
+            <input type="checkbox" checked={all} readOnly style={{ marginTop: 3 }} />
+          ) : (
+            <button
+              className="scen-fold"
+              title={open ? t('TC 기록 접기') : t('TC 기록 펼치기')}
+              onClick={(e) => {
+                e.stopPropagation();
+                setOpenRuns((c) => toggle(c, [g.key], !open));
+              }}
+            >
+              {open ? '▾' : '▸'}
+            </button>
+          )}
+          <RunHead g={g} />
+        </div>
+        {open && g.items.map((s) => item(s, true))}
+      </div>
+    );
+  };
+  const entry = (e: Entry) => (e.kind === 'one' ? item(e.s) : runItem(e.g));
 
   return (
     <div className="scen" style={{ height: 'calc(100% - 45px)' }}>
@@ -215,10 +313,10 @@ function ReportsView() {
           </div>
         )}
         {groupBy === 'none'
-          ? list.map(item)
+          ? entries.map(entry)
           : groups.map(([g, items]) => {
               const open = !folded.has(g);
-              const ids = items.map((x) => x.id);
+              const ids = items.flatMap(idsOf);
               const all = ids.every((id) => picked.has(id));
               return (
                 <div key={g}>
@@ -235,12 +333,14 @@ function ReportsView() {
                     <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{g}</span>
                     <span className="n">{items.length}</span>
                   </div>
-                  {open && items.map(item)}
+                  {open && items.map(entry)}
                 </div>
               );
             })}
       </div>
-      {sel ? (
+      {selGroup ? (
+        <RunDetail key={selGroup.key} g={selGroup} onOpenRecord={(s) => setSel(s)} />
+      ) : sel ? (
         <div className="steps">
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
             <h2 style={{ margin: 0, fontSize: 18 }}>{sel.name}</h2>
