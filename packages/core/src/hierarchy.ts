@@ -25,6 +25,9 @@ export interface ViewNode {
   checked: boolean;
   selected: boolean;
   password: boolean;
+  /** 에이전트에 렌더링 정보를 요청했을 때만: 글자 크기(화면 픽셀)와 단위(TypedValue: 0 px, 1 dip, 2 sp). View 만 나온다 */
+  /** 에이전트 렌더링 정보: 화면 px, TypedValue 단위(0 px, 1 dip, 2 sp), Android 14+ 의 sp 단위면 되돌린 sp */
+  textSize?: { px: number; unit: number; sp?: number };
   children: ViewNode[];
 }
 
@@ -50,6 +53,8 @@ type RawNode = Record<string, string> & { node?: RawNode[] };
 
 function toViewNode(raw: RawNode, id: string, depth: number): ViewNode {
   const b = (k: string) => raw[k] === 'true';
+  const sizePx = Number(raw['text-size-px']);
+  const sizeSp = Number(raw['text-size-sp']);
   return {
     id,
     depth,
@@ -69,6 +74,9 @@ function toViewNode(raw: RawNode, id: string, depth: number): ViewNode {
     checked: b('checked'),
     selected: b('selected'),
     password: b('password'),
+    ...(sizePx > 0 && Number.isFinite(sizePx)
+      ? { textSize: { px: sizePx, unit: Number(raw['text-size-unit']) || 0, ...(sizeSp > 0 && Number.isFinite(sizeSp) ? { sp: sizeSp } : {}) } }
+      : {}),
     children: (raw.node ?? []).map((c, i) => toViewNode(c, `${id}.${i}`, depth + 1)),
   };
 }
@@ -123,6 +131,16 @@ export async function quickDump(dev: DeviceAdb): Promise<Hierarchy | undefined> 
   } catch {
     return undefined;
   }
+}
+
+/**
+ * 디자인 비교용 덤프: 에이전트에 글자 렌더링 정보를 같이 요청한다.
+ * 에이전트를 쓸 수 없으면 보통 덤프로 받는다 (rendering=false, 글자 크기는 글자 높이로 추정)
+ */
+export async function dumpHierarchyWithRendering(dev: DeviceAdb): Promise<{ hierarchy: Hierarchy; rendering: boolean }> {
+  const r = await withAgent(dev, async (a) => parseHierarchyXml(await a.hierarchyXml(false, true))).catch(() => undefined);
+  if (r) return { hierarchy: r.value, rendering: true };
+  return { hierarchy: await dumpHierarchy(dev), rendering: false };
 }
 
 /** 에이전트가 죽었거나 멈춘 실패 (응답이 온 오류와 달리 다시 보내도 나아지지 않는다) */
@@ -370,7 +388,7 @@ export function hierarchyStats(h: Hierarchy) {
 // ---------- 에이전트 탭 보호 ----------
 
 /**
- * 에이전트가 tap 도구로 누르기 전에 확인할 위험 단어 (되돌리기 어렵거나 밖으로 나가는 행동).
+ * 에이전트가 tap 도구로 누르기 전에 살펴볼 확인 필수 단어 (되돌리기 어렵거나 밖으로 나가는 행동).
  * 자동 탐색용 DANGEROUS_LABELS 보다 좁다: 에이전트는 '완료'·'제출' 같은 버튼을 정상 흐름에서 자주 누르기 때문.
  * 영어는 단어 단위로 비교해 'display'·'border' 같은 단어 속 pay·order 에 걸리지 않게 한다.
  */
@@ -383,13 +401,13 @@ function splitWords(s: string): string {
   return s.replace(/([a-z0-9])([A-Z])/g, '$1 $2').replace(/[_.\-/:]+/g, ' ');
 }
 
-/** 이 문자열이 위험 행동처럼 보이는가 */
+/** 이 문자열이 확인 필수 동작처럼 보이는가 */
 export function isRiskyLabel(s: string): boolean {
   return !!s && (TAP_GUARD_KO.test(s) || TAP_GUARD_EN.test(splitWords(s)));
 }
 
 /**
- * 누르려는 요소(와 그 안의 자식)에서 위험해 보이는 라벨을 찾는다. 없으면 undefined.
+ * 누르려는 요소(와 그 안의 자식)에서 확인 필수 라벨을 찾는다. 없으면 undefined.
  * 글자 → 접근성 설명 → 리소스 이름 순으로 보고, 아이콘만 있는 버튼은 리소스 이름(ic_delete, trash)으로 잡는다.
  */
 export function riskyLabelOf(n: ViewNode): string | undefined {
@@ -423,8 +441,8 @@ export function clickableAt(root: ViewNode, x: number, y: number): ViewNode | un
 }
 
 /**
- * 좌표 (x, y)를 누르면 위험한 행동이 될 것 같은지: 셀렉터로 찾은 요소(node)와, 그 좌표에서 실제로 반응할 요소
- * (라벨만 있는 글자를 골랐을 때 그 부모 버튼) 둘 다 본다. 위험하면 그 라벨, 아니면 undefined.
+ * 좌표 (x, y)를 누르면 확인 필수 동작이 될 것 같은지: 셀렉터로 찾은 요소(node)와, 그 좌표에서 실제로 반응할 요소
+ * (라벨만 있는 글자를 골랐을 때 그 부모 버튼) 둘 다 본다. 확인 필수면 그 라벨, 아니면 undefined.
  * MCP tap·graph_record·type_text 와 스크립트 러너가 같이 쓴다 ('어떤 경로로 눌렀나'가 아니라 '무엇이 눌리나'를 본다)
  */
 export function riskyTapLabel(root: ViewNode, x: number, y: number, node?: ViewNode): string | undefined {
@@ -432,9 +450,9 @@ export function riskyTapLabel(root: ViewNode, x: number, y: number, node?: ViewN
   return (node && riskyLabelOf(node)) || (hit && riskyLabelOf(hit)) || undefined;
 }
 
-/** 위험 버튼을 누르지 않았을 때의 안내. again: 다시 할 일 ('호출' | '실행') */
+/** 확인 필수 버튼을 누르지 않았을 때의 안내. again: 다시 할 일 ('호출' | '실행') */
 export function riskyTapMessage(label: string, again: string): string {
-  return `위험해 보이는 버튼("${label}")이라 누르지 않았습니다. 사용자가 이 행동을 직접 요청했다면 allowDanger: true 로 다시 ${again}하세요`;
+  return `확인 필수 버튼("${label}")이라 누르지 않았습니다. 사용자가 이 행동을 직접 요청했다면 allowDanger: true 로 다시 ${again}하세요`;
 }
 
 /** 두 글자씩 끊은 조각 집합 (비슷한 글자 찾기용) */

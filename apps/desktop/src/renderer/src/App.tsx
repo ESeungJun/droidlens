@@ -7,6 +7,8 @@ import { LogTab } from './tabs/LogTab';
 import { LibsTab } from './tabs/LibsTab';
 import { AppInfoTab } from './tabs/AppInfoTab';
 import { ScenariosTab } from './tabs/ScenariosTab';
+import { QaTab } from './tabs/QaTab';
+import { useQaState } from './qaStore';
 import { SettingsTab } from './tabs/SettingsTab';
 import { NetworkTab } from './tabs/NetworkTab';
 import { PerfTab } from './tabs/PerfTab';
@@ -18,8 +20,15 @@ import { useT } from './i18n';
 
 interface Ctx {
   serial: string | null;
+  /** 연결된 기기 (맨 위 막대 목록과 같은 것) */
+  devices: DeviceSummary[];
   pkg: string | null;
   setPkg(p: string | null): void;
+  /** 고른 기기의 앱 목록 (왼쪽 목록과 같은 것) */
+  pkgs: PackageSummary[];
+  /** 왼쪽 목록에서 고른 것과 같게 앱을 고른다 ('누르면 앱 열기' 설정을 따른다) */
+  selectApp(p: string): void;
+  openTab(id: TabId): void;
   /** 현재 포그라운드 화면 (App 한 곳에서 2초 간격으로 폴링해 모든 탭이 공유) */
   screen: CurrentScreen | null;
   toast(msg: string, err?: boolean): void;
@@ -39,17 +48,22 @@ const TAB_LABELS = {
   data: '앱 데이터',
   info: '앱 정보',
   libs: '라이브러리',
-  scen: '시나리오',
+  scen: '검증 기록',
+  qa: 'QA 계획',
   settings: '설정·연동',
 } as const;
-type TabId = keyof typeof TAB_LABELS;
+export type TabId = keyof typeof TAB_LABELS;
+const TAB_HINTS: Partial<Record<TabId, string>> = {
+  qa: '기획 문서로 TC 를 만들고 한 번에 실행합니다',
+  scen: 'QA·에이전트·스크립트가 실행할 때마다 남긴 단계별 기록',
+};
 
 /** 대분류 탭. 고른 대분류의 소분류가 아래 줄에 나온다 (하나뿐이면 줄을 두지 않는다) */
 const TAB_GROUPS: readonly { id: string; label: string; tabs: readonly TabId[] }[] = [
   { id: 'view', label: '화면', tabs: ['screen', 'inspect', 'flow'] },
   { id: 'diag', label: '진단', tabs: ['logs', 'network', 'perf'] },
   { id: 'app', label: '앱', tabs: ['data', 'info', 'libs'] },
-  { id: 'test', label: '테스트', tabs: ['scen'] },
+  { id: 'test', label: '테스트', tabs: ['qa', 'scen'] },
   { id: 'settings', label: '설정', tabs: ['settings'] },
 ];
 const groupOf = (tab: TabId) => TAB_GROUPS.find((g) => g.tabs.includes(tab));
@@ -89,15 +103,16 @@ export function App() {
     return g ? { [g.id]: tab } : {};
   });
   const group = groupOf(tab);
-  const openTab = (id: TabId) => {
+  const openTab = useCallback((id: TabId) => {
     setTab(id);
     const g = groupOf(id);
     if (g) setLastInGroup((m) => ({ ...m, [g.id]: id }));
-  };
+  }, []);
   const [toastMsg, setToastMsg] = useState<{ msg: string; err?: boolean } | null>(null);
   const [adbOk, setAdbOk] = useState<boolean | null>(null);
   const [chatOpen, setChatOpen] = useState(initial.get('chat') === '1');
   const updater = useUpdater();
+  const qa = useQaState();
   const [agent, setAgent] = useState<AgentStatus | null>(null);
   const [agentBusy, setAgentBusy] = useState(false);
 
@@ -153,10 +168,13 @@ export function App() {
     [toast],
   );
 
-  const selectApp = (p: string) => {
-    setPkg(p);
-    if (serial && openOnSelect && fgPkg !== p) run(api.bringToFront(serial, p));
-  };
+  const selectApp = useCallback(
+    (p: string) => {
+      setPkg(p);
+      if (serial && openOnSelect && fgPkg !== p) run(api.bringToFront(serial, p));
+    },
+    [serial, openOnSelect, fgPkg, run],
+  );
 
   // 기기 목록 조회가 실패 중인지. 한 번 실패했다고 목록을 비우면 모든 탭이 닫히므로 이전 목록을 유지하고,
   // 실패를 알리는 토스트도 4초마다가 아니라 실패로 바뀔 때 한 번만 띄운다
@@ -265,7 +283,10 @@ export function App() {
     () => pkgs.filter((p) => p.packageName !== 'io.github.eseungjun.droidlens.agent' && p.packageName.includes(filter.trim())),
     [pkgs, filter],
   );
-  const ctx = useMemo<Ctx>(() => ({ serial, pkg, setPkg, screen, toast, run }), [serial, pkg, screen, toast, run]);
+  const ctx = useMemo<Ctx>(
+    () => ({ serial, devices, pkg, setPkg, pkgs, selectApp, openTab, screen, toast, run }),
+    [serial, devices, pkg, pkgs, selectApp, openTab, screen, toast, run],
+  );
 
   return (
     <AppCtx.Provider value={ctx}>
@@ -328,6 +349,18 @@ export function App() {
             </button>
           )}
           <div className="spacer" />
+          {tab !== 'qa' && qa.confirms.length > 0 ? (
+            <button className="pill warn-pill" style={{ cursor: 'pointer' }} onClick={() => openTab('qa')} title={t('QA 실행이 사용자 확인을 기다립니다')}>
+              ⚠ {t('QA 확인 요청 {n}', { n: qa.confirms.length })}
+            </button>
+          ) : (
+            tab !== 'qa' &&
+            qa.job && (
+              <button className="pill accent" style={{ cursor: 'pointer' }} onClick={() => openTab('qa')}>
+                {qa.job.kind === 'extract' ? t('QA: TC 뽑는 중…') : t('QA: 회차 실행 중…')}
+              </button>
+            )
+          )}
           <UpdateButton u={updater} />
           <button className={`btn sm ${chatOpen ? 'primary' : ''}`} onClick={() => setChatOpen((v) => !v)} title={t('에이전트와 대화')}>
             {t('💬 에이전트 대화')}
@@ -403,7 +436,12 @@ export function App() {
               {group && group.tabs.length > 1 && (
                 <nav className="subtabs">
                   {group.tabs.map((id) => (
-                    <button key={id} className={`subtab ${tab === id ? 'active' : ''}`} onClick={() => openTab(id)}>
+                    <button
+                      key={id}
+                      className={`subtab ${tab === id ? 'active' : ''}`}
+                      onClick={() => openTab(id)}
+                      title={TAB_HINTS[id] && t(TAB_HINTS[id])}
+                    >
                       {t(TAB_LABELS[id])}
                     </button>
                   ))}
@@ -411,7 +449,7 @@ export function App() {
               )}
             </div>
             <section className="content">
-              {!serial && tab !== 'scen' && tab !== 'settings' ? (
+              {!serial && tab !== 'scen' && tab !== 'qa' && tab !== 'settings' ? (
                 adbOk === null || !devicesLoaded ? (
                   <div className="empty">
                     <div>{t('기기 확인 중…')}</div>
@@ -462,6 +500,7 @@ export function App() {
                   {tab === 'libs' && <LibsTab />}
                   {tab === 'info' && <AppInfoTab />}
                   {tab === 'scen' && <ScenariosTab />}
+                  {tab === 'qa' && <QaTab />}
                   {tab === 'settings' && <SettingsTab onAdbChange={(a) => setAdbOk(a.ok)} updater={updater} />}
                 </>
               )}

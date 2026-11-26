@@ -341,7 +341,7 @@ export class ScreenGraph {
     return shortestPath(this.edges.values(), from, to);
   }
 
-  /** 다시 따라가도 안전한 연결만 쓴 최단 경로 (위험 버튼·앱 밖으로 나가는 키·딥링크 제외) */
+  /** 다시 따라가도 안전한 연결만 쓴 최단 경로 (확인 필수 버튼·앱 밖으로 나가는 키·딥링크 제외) */
   replayPath(from: string, to: string): ScreenEdge[] | undefined {
     return shortestPath(this.edges.values(), from, to, (e) => isReplayable(e.action));
   }

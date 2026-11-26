@@ -6,7 +6,7 @@
 - [x] 스크린샷, 화면 녹화
 - [x] 뷰 계층 덤프·파싱·셀렉터·압축 텍스트·통계, 3D 깊이 뷰
 - [x] 현재 Activity / Fragment 인식
-- [x] 화면 그래프(구조 시그니처 기반 화면 식별), 수동 기록, 자동 탐색(DFS + 위험 라벨 회피), 최단 경로, mermaid
+- [x] 화면 그래프(구조 시그니처 기반 화면 식별), 수동 기록, 자동 탐색(DFS + 확인 필수 라벨 회피), 최단 경로, mermaid
 - [x] APK 라이브러리 탐지 (DEX type_ids 파싱 + 네이티브 lib + 시그니처 DB)
 - [x] logcat 스트림·크래시
 - [x] 시나리오 기록 + HTML 리포트
@@ -53,3 +53,15 @@
 - [x] 스크린샷 비교(시각적 회귀): 스크립트 `matchScreenshot`, MCP `screenshot_compare`, 리포트에서 지금 화면을 기준으로 받아들이기
 - [ ] 버전 간 비교: 라이브러리 diff, 화면 그래프 diff, REA `compare_application_versions` 연동
 - [x] 성능: 앱 시작 시간, 프레임(gfxinfo), 메모리(meminfo), CPU 수집 — 데스크톱 성능 탭, MCP `perf_startup`·`perf_stats`, 스크립트 `startup` 단계·`perf` assert
+
+## 4단계 — 문서로 QA (#72)
+
+- [x] QA 계획: 기획서·TC 문서(md·txt·PDF·CSV·엑셀, Confluence·Figma 링크) → `droidlens-qa-planner` 가 요구사항·TC 추출, MCP `qa_*` 도구
+- [x] 데스크톱 QA 탭: 문서 넣기 → TC 뽑기 → 추적표 검토 → 회차 실행(스크립트 먼저, 나머지는 TC 마다 verifier) → 결과표 (#78)
+- [x] 결과표 HTML·CSV·JUnit, CLI `qa run`(통과한 TC 를 스크립트로 회귀), 확인 필수 TC 는 사람이 허용해야 실제로 누름
+- [x] Figma 디자인 비교 TC(문구·글자·간격·색 차이)
+- [x] 검증 기록을 QA 회차로 묶고 엑셀·단계별 HTML·아티팩트 올리기 요청으로 내보내기 (#98)
+- [x] README 사용법과 예시 기획서·TC 표(`examples/qa`), 예시를 끝까지 돌리는 확인 스크립트 (#79)
+- [ ] 외부 TC 관리 도구(TestRail·Zephyr·Jira Xray) 연동
+- [ ] 여러 기기 동시 실행
+- [ ] 결과 추이 대시보드(3단계 "결과 대시보드"와 함께)

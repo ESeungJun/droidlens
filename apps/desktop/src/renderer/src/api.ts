@@ -11,9 +11,18 @@ import type {
   LogLine,
   PackageSummary,
   PerfSample,
+  QaCase,
+  QaPlan,
+  QaPlanSummary,
+  QaRun,
+  QaRunSummary,
+  QaRunIndexItem,
+  DesignRunSummary,
   ScenarioData,
   StartupResult,
   hierarchyStats,
+  qaCoverage,
+  qaReviewList,
 } from '@droidlens/core';
 
 declare global {
@@ -108,6 +117,36 @@ export interface ScriptRunResult {
 export type ScriptProgress =
   | { kind: 'script'; file: string; index: number; total: number }
   | { kind: 'step'; file: string; index: number; total: number; title: string; status: 'running' | 'pass' | 'fail' | 'skip'; detail?: string };
+
+export interface QaPlanView {
+  plan: QaPlan;
+  coverage: ReturnType<typeof qaCoverage>;
+  review: ReturnType<typeof qaReviewList>;
+  /** 회차 id (최근 것부터) */
+  runs: string[];
+}
+export interface QaRunView {
+  run: QaRun;
+  summary: QaRunSummary;
+  design: Record<string, DesignRunSummary>;
+  /** 결과표 파일 (아직 만들지 않았으면 없음) */
+  files?: { html: string; csv: string; junit: string };
+}
+export interface QaSourceAdded {
+  id?: string;
+  title: string;
+  duplicate?: boolean;
+  warnings?: string[];
+  error?: string;
+}
+export type QaJobKind = 'extract' | 'run';
+export type QaEvent =
+  | { kind: 'job'; job: QaJobKind; plan: string; state: 'start' }
+  | { kind: 'job'; job: QaJobKind; plan: string; state: 'end'; run?: string; error?: string; cancelled?: boolean }
+  | { kind: 'run'; plan: string; run: string }
+  | { kind: 'case'; plan: string; case: string; mode: 'script' | 'agent'; index: number; total: number }
+  | { kind: 'step'; plan: string; case: string; title: string; status: 'running' | 'pass' | 'fail' | 'skip'; detail?: string }
+  | { kind: 'agent'; plan: string; case?: string; event: ChatEvent };
 
 export interface Progress {
   kind: 'libs' | 'explore' | 'avd';
@@ -221,7 +260,30 @@ export const api = {
   onLogcat: (fn: (p: { id: number; lines: LogLine[] }) => void) => window.dl.on('logcat', (p) => fn(p as never)),
   onLogcatClosed: (fn: (p: { id: number }) => void) => window.dl.on('logcat:closed', (p) => fn(p as never)),
   onProgress: (fn: (p: Progress) => void) => window.dl.on('progress', (p) => fn(p as Progress)),
+  qaPlans: () => call<QaPlanSummary[]>('qaPlans'),
+  qaPlanCreate: (name: string, app?: string) => call<QaPlan>('qaPlanCreate', name, app),
+  qaPlanGet: (id: string) => call<QaPlanView>('qaPlanGet', id),
+  qaPlanRename: (id: string, name: string, app?: string) => call<QaPlan>('qaPlanRename', id, name, app),
+  /** 파일 대화상자를 띄워 고른 문서를 넣는다 (취소하면 빈 목록) */
+  qaSourcePick: (id: string) => call<QaSourceAdded[]>('qaSourcePick', id),
+  qaSourceLink: (id: string, url: string) => call<QaSourceAdded>('qaSourceLink', id, url),
+  qaCaseUpdate: (id: string, caseId: string, patch: Partial<QaCase>) => call<QaPlan>('qaCaseUpdate', id, caseId, patch),
+  qaSelect: (id: string, caseIds: string[], on: boolean) => call<QaPlan>('qaSelect', id, caseIds, on),
+  /** shown: 사람이 보고 허용한 TC 내용 (그사이 바뀌었으면 허용하지 않는다) */
+  qaCaseAllow: (id: string, caseId: string, allow: boolean, shown?: QaCase) => call<QaPlan>('qaCaseAllow', id, caseId, allow, shown),
+  qaJob: () => call<{ kind: QaJobKind; plan: string } | null>('qaJob'),
+  qaExtract: (id: string, note?: string) => call<void>('qaExtract', id, note),
+  qaRun: (id: string, opts: { serial: string; run?: string; recheckFailed?: boolean; timeoutMs?: number }) => call<void>('qaRun', id, opts),
+  qaStop: () => call<void>('qaStop'),
+  qaConfirm: (id: string, approve: boolean) => call<boolean>('qaConfirm', id, approve),
+  qaRunGet: (id: string, runId: string) => call<QaRunView>('qaRunGet', id, runId),
+  qaReport: (id: string, runId: string) => call<{ html: string; csv: string; junit: string }>('qaReport', id, runId),
+  qaRunIndex: () => call<QaRunIndexItem[]>('qaRunIndex'),
+  qaRunExport: (id: string, runId: string, kind: 'xlsx' | 'html', lang: 'ko' | 'en') => call<{ path: string; bytes: number }>('qaRunExport', id, runId, kind, lang),
+  qaRunPreview: (id: string, runId: string, lang: 'ko' | 'en') => call<string>('qaRunPreview', id, runId, lang),
+  onQaEvent: (fn: (e: QaEvent) => void) => window.dl.on('qa:event', (p) => fn(p as QaEvent)),
 };
 
 export type { ApkAnalysis, AppInfo, CurrentScreen, DeviceInfo, DeviceSummary, GraphAction, GraphData, Hierarchy, Interaction, LogLine, PackageSummary, ScenarioData };
+export type { QaCase, QaPlan, QaPlanSummary, QaRun, QaRunSummary, QaRunIndexItem, DesignRunSummary };
 export type { ViewNode, ScreenNode, NetworkEntry, NetworkDetail, MockRule, PrefsFile, DbInfo, QueryResult, SdkEvent, SdkInfo, PerfSample, StartupResult } from '@droidlens/core';

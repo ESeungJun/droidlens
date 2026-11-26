@@ -1,0 +1,27 @@
+const imgIcon = "http://localhost:3845/assets/abc.svg";
+function TabBar({ className }: { className?: string }) {
+  return (
+    <div className={className || "h-[40px] relative"} data-node-id="1:11">
+      <p className="text-[11px] text-[#999999]" data-node-id="I1:11;2:1">홈</p>
+    </div>
+  );
+}
+export default function Settings() {
+  return (
+    <div className="bg-white relative size-full" data-name="설정 화면" data-node-id="1:2">
+      <p className="absolute font-['Pretendard:SemiBold',sans-serif] leading-[1.4] text-[#191919] text-[20px]" data-node-id="1:3">설정</p>
+      <div className="absolute flex flex-col gap-[4px] px-[20px] py-[8px]" data-node-id="1:4">
+        <div className="font-medium text-[15px] text-[color:var(--text\/primary,#191919)]" data-node-id="1:5">
+          <p className="leading-[21px]">알림 받기</p>
+        </div>
+        <p className="text-[13px] text-[#888888] leading-[18px]" data-node-id="1:6">마케팅 정보를 받아요</p>
+        <p className="text-[15px] text-[#191919] font-bold" data-node-id="1:8">12,000원</p>
+      </div>
+      <div className="absolute bg-[#ff5a00] rounded-[8px]" data-node-id="1:9">
+        <p className="text-[16px] text-white font-semibold leading-[24px]" data-node-id="1:10">저장하기</p>
+      </div>
+      <TabBar className="absolute left-0 top-[600px]" />
+    </div>
+  );
+}
+These styles are contained in the design: ...

@@ -20,3 +20,5 @@ export * from './visual.js';
 export * from './report-junit.js';
 export * from './a11y.js';
 export * from './confirm.js';
+export * from './qa/index.js';
+export * from './design/index.js';

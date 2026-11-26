@@ -1,4 +1,4 @@
-// 뷰 계층 파싱·셀렉터·화면 시그니처·위험 버튼 판정 (기기 없이 되는 순수 함수)
+// 뷰 계층 파싱·셀렉터·화면 시그니처·확인 필수 버튼 판정 (기기 없이 되는 순수 함수)
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
@@ -100,7 +100,7 @@ test('riskyLabelOf: 카드 안의 따로 누를 수 있는 삭제 버튼 때문�
 
 test('riskyTapLabel: 좌표에서 실제로 반응할 요소를 본다', () => {
   const { root } = parseHierarchyXml(SCREEN);
-  // 카드 본문 → 카드(안전), 카드 안 휴지통 → 휴지통(위험)
+  // 카드 본문 → 카드(안전), 카드 안 휴지통 → 휴지통(확인 필수)
   assert.equal(clickableAt(root, 300, 350).resourceId, 'com.example:id/card');
   assert.equal(riskyTapLabel(root, 300, 350), undefined);
   assert.equal(riskyTapLabel(root, 950, 370), 'ic_trash');

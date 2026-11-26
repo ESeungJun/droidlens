@@ -4,6 +4,10 @@ on:
     branches: [master, develop]
   pull_request:
 
+# 빌드·시험·하네스 검사는 저장소를 읽기만 한다. PR 코드가 도는 작업에 쓰기 권한을 주지 않는다
+permissions:
+  contents: read
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -24,6 +28,8 @@ jobs:
       - run: pnpm build
       # 순수 모듈(비밀값 가리기·리포트 표시 모델) 단위 테스트. 빌드 결과(dist)를 시험한다
       - run: pnpm test
+      # 예시 기획서·TC 표(examples/qa)로 README 의 QA 절차가 검토 단계까지 되는지 본다. 기기가 필요한 실행은 scripts/verify 를 손으로(#79)
+      - run: node scripts/verify/F16-qa-example.mjs --no-device
       - name: Build on-device agent APK
         working-directory: android
         shell: bash
@@ -36,3 +42,19 @@ jobs:
           exit 1
       - run: pnpm --filter @droidlens/desktop typecheck
       - run: pnpm --filter @droidlens/desktop build
+
+  # 구현 하네스(#91): 규칙표 · 구조 규칙(레이어) · 하드코딩 색 · 기능 지도 · 하네스 시험. 의존성 설치 없이 빨리 끝난다
+  harness:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - run: bash scripts/harness/check-rules.sh
+      - run: bash scripts/harness/check-layers.sh
+      - run: bash scripts/harness/check-tokens.sh
+      - run: bash scripts/harness/check-map.sh
+      # 기기 확인 스크립트는 CI 에서 돌리지 못해 문법만 본다(scripts/verify, #91)
+      - run: for f in scripts/verify/*.sh; do bash -n "$f" || exit 1; done
+      - run: for t in scripts/harness/tests/*.test.sh; do bash "$t" || exit 1; done

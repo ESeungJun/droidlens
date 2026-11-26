@@ -1,7 +1,7 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import * as dl from '@droidlens/core';
-import { device, hasSelector, resolveNode, recordStep, logAction, nodeLabel, recorder, cleanSelector, text, serialArg, selectorShape, pickSelector, describeNode, readOnly, acts, refuseRisky, allowDangerArg, PIXELS } from '../common.js';
+import { device, hasSelector, resolveNode, recordStep, logAction, nodeLabel, recorder, cleanSelector, text, serialArg, selectorShape, pickSelector, describeNode, readOnly, acts, allowDangerArg, guardRisky, PIXELS } from '../common.js';
 
 export function register(server: McpServer): void {
   // ---------- 조작 ----------
@@ -9,7 +9,7 @@ export function register(server: McpServer): void {
   server.registerTool(
     'tap',
     {
-      description: '셀렉터로 찾은 요소의 중앙을 탭하거나, x/y 좌표를 탭. 셀렉터 사용을 권장. 삭제·결제·로그아웃·전송 같은 위험 버튼은 allowDanger 없이는 누르지 않는다',
+      description: '셀렉터로 찾은 요소의 중앙을 탭하거나, x/y 좌표를 탭. 셀렉터 사용을 권장. 삭제·결제·로그아웃·전송 같은 확인 필수 버튼은 allowDanger 없이는 누르지 않는다',
       inputSchema: {
         ...serialArg,
         ...selectorShape,
@@ -35,7 +35,7 @@ export function register(server: McpServer): void {
         what = describeNode(node);
       }
       if (x === undefined || y === undefined) throw new Error('셀렉터나 x/y 중 하나가 필요합니다');
-      if (!a.allowDanger) await refuseRisky(dev, x, y, node, tree);
+      await guardRisky(a.allowDanger, dev, x, y, node, tree, 'tap');
       if (a.long) await dl.longPress(dev, x, y);
       else await dl.tap(dev, x, y);
       // 녹화: 셀렉터로 눌렀으면 셀렉터를, 아니면 좌표를 남긴다 (셀렉터 쪽이 해상도·레이아웃 변화에 강하다)
@@ -44,7 +44,7 @@ export function register(server: McpServer): void {
         target
           ? ((a.long ? { longPress: target } : { tap: target }) as dl.ScriptStep)
           : { tapAt: { x: Math.round(x), y: Math.round(y) } },
-        `${a.long ? '길게 누름' : '탭'} ${node ? nodeLabel(node) : `좌표 (${Math.round(x)}, ${Math.round(y)})`}${a.allowDanger ? ' · 위험 버튼 허용' : ''}`,
+        `${a.long ? '길게 누름' : '탭'} ${node ? nodeLabel(node) : `좌표 (${Math.round(x)}, ${Math.round(y)})`}${a.allowDanger ? ' · 확인 필수 버튼 허용' : ''}`,
       );
       return text(`${a.long ? 'long-pressed' : 'tapped'}: ${what}`);
     },
@@ -101,7 +101,7 @@ export function register(server: McpServer): void {
         into = await resolveNode(dev, sel, tree);
         const { x, y } = dl.center(into);
         // 포커스를 주려는 탭도 기기를 누르는 것이라 tap 과 같은 검사를 거친다
-        if (!a.allowDanger) await refuseRisky(dev, x, y, into, tree);
+        await guardRisky(a.allowDanger, dev, x, y, into, tree, 'type_text');
         await dl.tap(dev, x, y);
         await dl.sleep(300);
       }

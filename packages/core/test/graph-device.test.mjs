@@ -175,7 +175,7 @@ test('recordTransition: 누른 좌표를 그 자리 요소(라벨·셀렉터)로
   assert.equal(g.edges.size, 1);
 });
 
-test('followPath: 같은 요소를 다시 찾아 누르고, 다른 화면·위험 버튼·다시 실행할 수 없는 연결이면 멈춘다', async () => {
+test('followPath: 같은 요소를 다시 찾아 누르고, 다른 화면·확인 필수 버튼·다시 실행할 수 없는 연결이면 멈춘다', async () => {
   const pkg = 'com.ex.follow';
   const f = fakeDevice(app(pkg));
   f.open('home');
@@ -232,7 +232,7 @@ test('navigateTo: 이미 그 화면이면 그대로, 아니면 앱을 다시 실
   await assert.rejects(navigateTo(f.dev, g, settings.id), /앱 첫 화면에서 이 화면까지 기록된 경로가 없습니다/);
   g.addEdge(a.from.id, settings.id, { type: 'tap', x: 1, y: 1, label: '삭제' });
   f.open('home', 'detail');
-  await assert.rejects(navigateTo(f.dev, g, settings.id), /위험 버튼·딥링크·앱 밖 이동을 거치는 경로만 기록돼 있어/);
+  await assert.rejects(navigateTo(f.dev, g, settings.id), /확인 필수 버튼·딥링크·앱 밖 이동을 거치는 경로만 기록돼 있어/);
 });
 
 test('explore: 첫 화면부터 깊이 우선으로 누르고 돌아오며 지도를 만든다 (결과·명령 순서 고정)', async () => {
@@ -249,8 +249,8 @@ test('explore: 첫 화면부터 깊이 우선으로 누르고 돌아오며 지�
   assert.deepEqual(
     r.skipped.map((s) => [s.label, s.reason]),
     [
-      ['삭제', '위험 라벨'],
-      ['Buy', '위험 라벨'],
+      ['삭제', '확인 필수 라벨'],
+      ['Buy', '확인 필수 라벨'],
     ],
   );
   assert.ok(r.errors.some((e) => e.includes('ANR (응답 없음)')));
@@ -258,7 +258,7 @@ test('explore: 첫 화면부터 깊이 우선으로 누르고 돌아오며 지�
   assert.ok(!r.graph.edges.some((e) => e.from.startsWith('DeepestActivity')), '최대 깊이 화면은 더 들어가지 않는다');
 });
 
-test('explore: 지금 화면부터(relaunch:false) 지정한 인터랙션만, 위험 라벨은 허용하지 않으면 건너뛴다', async () => {
+test('explore: 지금 화면부터(relaunch:false) 지정한 인터랙션만, 확인 필수 라벨은 허용하지 않으면 건너뛴다', async () => {
   const pkg = 'com.ex.only';
   const f = fakeDevice(app(pkg));
   f.open('home', 'page1');
@@ -280,7 +280,7 @@ test('explore: 지금 화면부터(relaunch:false) 지정한 인터랙션만, �
   assert.deepEqual(
     r.skipped.map((s) => [s.label, s.reason]),
     [
-      ['Buy', '위험 라벨 (허용하지 않음)'],
+      ['Buy', '확인 필수 라벨 (허용하지 않음)'],
       ['Gone', '현재 화면에서 찾을 수 없음'],
     ],
   );

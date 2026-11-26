@@ -1,0 +1,16 @@
+Here is the metadata for the node:
+<frame id="1:2" name="설정 화면" x="1200" y="-300" width="360" height="640">
+  <text id="1:3" name="설정" x="20" y="56" width="40" height="28" />
+  <frame id="1:4" name="알림 줄" x="0" y="112" width="360" height="60">
+    <text id="1:5" name="알림 받기" x="20" y="8" width="80" height="21" />
+    <text id="1:6" name="마케팅 정보를 받아요" x="20" y="33" width="140" height="18" />
+    <group id="1:7" name="가격 묶음" x="270" y="0" width="70" height="40">
+      <text id="1:8" name="12,000원" x="280" y="8" width="60" height="21" />
+    </group>
+  </frame>
+  <frame id="1:9" name="저장 버튼" x="20" y="568" width="320" height="48">
+    <text id="1:10" name="저장하기" x="120" y="12" width="80" height="24" />
+  </frame>
+  <instance id="1:11" name="Tab Bar" x="0" y="600" width="360" height="40" />
+</frame>
+IMPORTANT: After you call this tool, you MUST call get_design_context ...

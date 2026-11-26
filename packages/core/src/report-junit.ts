@@ -7,7 +7,7 @@ import type { SuiteResult } from './script.js';
  */
 
 /** XML 1.0 에 쓸 수 없는 제어 문자를 빼고 이스케이프한다 */
-function esc(s: string): string {
+export function xmlEscape(s: string): string {
   return s
     // eslint-disable-next-line no-control-regex
     .replace(/[\x00-\x08\x0b\x0c\x0e-\x1f]/g, '')
@@ -23,17 +23,17 @@ export function suiteToJUnit(r: SuiteResult): string {
   const suites = r.results.map((x) => {
     if (!x.result) {
       // 스크립트를 읽지 못했거나 실행 전에 실패
-      return `  <testsuite name="${esc(x.name)}" tests="1" failures="0" errors="1" skipped="0" time="0">\n    <testcase name="${esc(x.name)}" classname="${esc(x.path)}" time="0">\n      <error message="${esc((x.error ?? '').split('\n')[0])}">${esc(x.error ?? '')}</error>\n    </testcase>\n  </testsuite>`;
+      return `  <testsuite name="${xmlEscape(x.name)}" tests="1" failures="0" errors="1" skipped="0" time="0">\n    <testcase name="${xmlEscape(x.name)}" classname="${xmlEscape(x.path)}" time="0">\n      <error message="${xmlEscape((x.error ?? '').split('\n')[0])}">${xmlEscape(x.error ?? '')}</error>\n    </testcase>\n  </testsuite>`;
     }
     const d = x.result.scenario;
     // info 단계(조작 기록)는 판정이 아니라 시험 수에 넣지 않는다
     const steps = d.steps.filter((s) => s.status !== 'info');
     const cases = steps.map((s, i) => {
       const prevAt = i === 0 ? d.startedAt : steps[i - 1].at;
-      const head = `    <testcase name="${esc(`${s.index}. ${s.title}`)}" classname="${esc(x.name)}" time="${sec(s.at - prevAt)}"`;
+      const head = `    <testcase name="${xmlEscape(`${s.index}. ${s.title}`)}" classname="${xmlEscape(x.name)}" time="${sec(s.at - prevAt)}"`;
       if (s.status === 'fail') {
         const shot = s.screenshot ? `\n스크린샷: ${join(d.dir, s.screenshot)}` : '';
-        return `${head}>\n      <failure message="${esc((s.detail ?? '실패').split('\n')[0])}">${esc(`${s.detail ?? ''}${s.screen ? `\n화면: ${s.screen}` : ''}${shot}`)}</failure>\n    </testcase>`;
+        return `${head}>\n      <failure message="${xmlEscape((s.detail ?? '실패').split('\n')[0])}">${xmlEscape(`${s.detail ?? ''}${s.screen ? `\n화면: ${s.screen}` : ''}${shot}`)}</failure>\n    </testcase>`;
       }
       if (s.status === 'skip') return `${head}>\n      <skipped/>\n    </testcase>`;
       return `${head}/>`;
@@ -42,9 +42,9 @@ export function suiteToJUnit(r: SuiteResult): string {
     const skipped = steps.filter((s) => s.status === 'skip').length;
     // 단계는 다 통과했는데 판정이 통과가 아니면(준비 단계 실패 등) 스위트 오류로 남긴다
     const blocked = x.result.verdict !== 'pass' && !failures
-      ? `\n    <testcase name="${esc(x.name)}" classname="${esc(x.name)}" time="0">\n      <error message="${esc(d.summary ?? x.result.verdict)}">${esc(d.summary ?? '')}</error>\n    </testcase>`
+      ? `\n    <testcase name="${xmlEscape(x.name)}" classname="${xmlEscape(x.name)}" time="0">\n      <error message="${xmlEscape(d.summary ?? x.result.verdict)}">${xmlEscape(d.summary ?? '')}</error>\n    </testcase>`
       : '';
-    return `  <testsuite name="${esc(x.name)}" tests="${steps.length + (blocked ? 1 : 0)}" failures="${failures}" errors="${blocked ? 1 : 0}" skipped="${skipped}" time="${sec(x.result.durationMs)}">\n${cases.join('\n')}${blocked}\n  </testsuite>`;
+    return `  <testsuite name="${xmlEscape(x.name)}" tests="${steps.length + (blocked ? 1 : 0)}" failures="${failures}" errors="${blocked ? 1 : 0}" skipped="${skipped}" time="${sec(x.result.durationMs)}">\n${cases.join('\n')}${blocked}\n  </testsuite>`;
   });
   const failed = r.results.filter((x) => !x.result || x.result.verdict !== 'pass').length;
   return `<?xml version="1.0" encoding="UTF-8"?>\n<testsuites name="droidlens" tests="${r.results.length}" failures="${failed}" time="${sec(r.durationMs)}">\n${suites.join('\n')}\n</testsuites>\n`;

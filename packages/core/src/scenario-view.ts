@@ -42,6 +42,8 @@ export interface ScenarioData {
   goal?: string;
   packageName?: string;
   device?: string;
+  /** QA 계획의 TC 를 실행한 시나리오면 그 TC (qa/plan.ts) */
+  tc?: { plan: string; case: string; run?: string };
   startedAt: number;
   finishedAt?: number;
   verdict?: 'pass' | 'fail' | 'blocked';
@@ -50,6 +52,28 @@ export interface ScenarioData {
   /** 시나리오 전체 조작 로그 (시간순) */
   actions?: ScenarioAction[];
   dir: string;
+}
+
+/**
+ * TC 에 이은 스크립트·기록 이름: 앞에 TC 번호를 한 번만 붙인다.
+ * 번호가 이미 여러 번 붙어 있으면("TC-001 TC-001", #92 이전에 저장된 스크립트) 하나로 줄인다 (#102)
+ */
+export function tcName(caseId: string, name: string): string {
+  if (!caseId) return name; // 빈 번호면 아래 반복이 끝나지 않는다 (#113)
+  let rest = typeof name === 'string' ? name.trim() : '';
+  while (rest === caseId || rest.startsWith(`${caseId} `)) rest = rest.slice(caseId.length).trim();
+  return rest ? `${caseId} ${rest}` : caseId;
+}
+
+/** 이만큼 아무 단계도 없이 끝나지 않은 기록은 주인(에이전트·MCP 서버)이 사라진 것으로 본다 (#101) */
+export const SCENARIO_STALE_MS = 30 * 60_000;
+
+/** 끝나지 않았는데 마지막 활동(시작·마지막 단계)이 SCENARIO_STALE_MS 보다 오래된 기록 */
+export function scenarioStale(d: Pick<ScenarioData, 'finishedAt' | 'startedAt' | 'steps'>, now = Date.now()): boolean {
+  if (d.finishedAt) return false;
+  // 펼치기(...)는 단계가 아주 많으면 RangeError 라 하나씩 본다 (#113)
+  const last = (Array.isArray(d.steps) ? d.steps : []).reduce((m, s) => Math.max(m, Number(s?.at) || 0), Number(d.startedAt) || 0);
+  return now - last > SCENARIO_STALE_MS;
 }
 
 /** 앱 위를 가리는 것으로 알려진 시스템 창 (에이전트 설치 때 뜨는 Play 프로텍트 등) */

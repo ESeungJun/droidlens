@@ -518,12 +518,12 @@
       {
         "screen": "HomeActivity@49875b512dda",
         "label": "삭제",
-        "reason": "위험 라벨"
+        "reason": "확인 필수 라벨"
       },
       {
         "screen": "PagerActivity@eebbbb69c126",
         "label": "Buy",
-        "reason": "위험 라벨"
+        "reason": "확인 필수 라벨"
       }
     ],
     "errors": [
@@ -873,7 +873,7 @@
       {
         "screen": "PagerActivity@eebbbb69c126",
         "label": "Buy",
-        "reason": "위험 라벨 (허용하지 않음)"
+        "reason": "확인 필수 라벨 (허용하지 않음)"
       },
       {
         "screen": "PagerActivity@eebbbb69c126",

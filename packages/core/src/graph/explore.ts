@@ -1,7 +1,7 @@
 /**
  * 자동 탐색 explore(): 시작 화면부터 누를 수 있는 요소를 하나씩 눌러 새 화면을 지도에 올리고(깊이 우선),
  * BACK·반대 스와이프로 돌아온다. 돌아오지 못하면 앱을 다시 열어 기록된 경로로 원래 화면까지 간다.
- * 위험 라벨(결제·삭제 등)·뒤로 가기와 같은 버튼은 누르지 않는다. MCP explore 도구·데스크톱 흐름 탭이 부른다.
+ * 확인 필수 라벨(결제·삭제 등)·뒤로 가기와 같은 버튼은 누르지 않는다. MCP explore 도구·데스크톱 흐름 탭이 부른다.
  */
 import { DeviceAdb, sleep } from '../adb.js';
 import { assertPackage } from '../app.js';
@@ -26,9 +26,9 @@ export interface ExploreOptions {
   startAt?: string;
   /** 시작 화면에서는 이 인터랙션만 실행하고, 열린 화면부터는 maxDepth 까지 평소처럼 탐색 */
   only?: Interaction[];
-  /** only 에 위험 라벨(결제·삭제 등) 요소가 있어도 누른다. 끄면 건너뛴다 (기본 false) */
+  /** only 에 확인 필수 라벨(결제·삭제 등) 요소가 있어도 누른다. 끄면 건너뛴다 (기본 false) */
   allowDanger?: boolean;
-  /** 위험 라벨 외에 추가로 피할 라벨 정규식 */
+  /** 확인 필수 라벨 외에 추가로 피할 라벨 정규식 */
   avoid?: RegExp;
   signal?: AbortSignal;
   onProgress?: (e: { step: number; message: string; screen?: string }) => void;
@@ -177,11 +177,11 @@ class Exploration {
     return cands.map((c) => ({ id: `tap:${c.key}`, label: c.label, kind: 'tap', key: c.key, explicit: false }));
   }
 
-  /** 라벨만 보고 누르지 않을 행동: 뒤로 가기와 같은 버튼(기록 없이), 위험 라벨·피할 라벨(건너뜀으로 기록). 직접 고른 행동은 여기서 거르지 않는다 */
+  /** 라벨만 보고 누르지 않을 행동: 뒤로 가기와 같은 버튼(기록 없이), 확인 필수 라벨·피할 라벨(건너뜀으로 기록). 직접 고른 행동은 여기서 거르지 않는다 */
   private skipByLabel(move: Move, hereId: string): boolean {
     if (!move.explicit && NAV_ONLY_LABELS.test(move.label.trim())) return true;
     if (!move.explicit && (DANGEROUS_LABELS.test(move.label) || this.opts.avoid?.test(move.label))) {
-      this.skipped.push({ screen: hereId, label: move.label, reason: '위험 라벨' });
+      this.skipped.push({ screen: hereId, label: move.label, reason: '확인 필수 라벨' });
       return true;
     }
     return false;
@@ -196,7 +196,7 @@ class Exploration {
     return false;
   }
 
-  /** 행동을 기기에 보낼 모양으로 만든다. 지금 화면에서 요소를 못 찾거나 허용하지 않은 위험 요소면 건너뜀으로 기록하고 undefined */
+  /** 행동을 기기에 보낼 모양으로 만든다. 지금 화면에서 요소를 못 찾거나 허용하지 않은 확인 필수 요소면 건너뜀으로 기록하고 undefined */
   private async actionFor(move: Move, hereId: string): Promise<GraphAction | undefined> {
     if (move.kind === 'swipe') {
       const [x1, y1, x2, y2] = swipeVector(await screenSize(this.dev), move.direction!);
@@ -208,9 +208,9 @@ class Exploration {
       this.skipped.push({ screen: hereId, label: move.label, reason: '현재 화면에서 찾을 수 없음' });
       return undefined;
     }
-    // 직접 고른 것도 위험 여부는 지도 파일이 아니라 지금 기기 화면의 라벨로 판단한다
+    // 직접 고른 것도 확인 필수 여부는 지도 파일이 아니라 지금 기기 화면의 라벨로 판단한다
     if (move.explicit && !this.opts.allowDanger && DANGEROUS_LABELS.test(cand.label)) {
-      this.skipped.push({ screen: hereId, label: cand.label, reason: '위험 라벨 (허용하지 않음)' });
+      this.skipped.push({ screen: hereId, label: cand.label, reason: '확인 필수 라벨 (허용하지 않음)' });
       return undefined;
     }
     const action = pressAction(move.kind, cand);

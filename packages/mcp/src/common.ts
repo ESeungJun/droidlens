@@ -120,10 +120,22 @@ export async function confirmDestructive(
   ctx: { serial?: string; app?: string; tool?: string } = {},
 ): Promise<void> {
   if (process.env.DROIDLENS_CONFIRM !== '1') return;
+  await askUser(server, what, { question: `DroidLens: ${what}. 되돌릴 수 없습니다. 실행할까요?`, ctx });
+}
+
+/**
+ * 사용자에게 직접 묻는다: MCP elicitation → 데스크톱 확인 소켓 → 둘 다 없으면 거부.
+ * refuse: 물을 수 없을 때 사용자에게 안내할 다른 길 (기본은 DroidLens 앱이나 터미널에서 직접 하기)
+ */
+export async function askUser(
+  server: McpServer,
+  what: string,
+  opts: { question?: string; refuse?: string; ctx?: { serial?: string; app?: string; tool?: string } } = {},
+): Promise<void> {
   if (server.server.getClientCapabilities()?.elicitation) {
     const r = await server.server
       .elicitInput({
-        message: `DroidLens: ${what}. 되돌릴 수 없습니다. 실행할까요?`,
+        message: opts.question ?? `DroidLens: ${what}. 실행할까요?`,
         requestedSchema: { type: 'object', properties: { confirm: { type: 'boolean', title: '실행' } }, required: ['confirm'] },
       })
       .catch(() => undefined);
@@ -133,30 +145,94 @@ export async function confirmDestructive(
   const socket = process.env.DROIDLENS_CONFIRM_SOCKET;
   const token = process.env.DROIDLENS_CONFIRM_TOKEN;
   if (socket && token) {
-    const outcome = await dl.requestConfirm(socket, token, { what, ...ctx });
+    const outcome = await dl.requestConfirm(socket, token, { what, ...opts.ctx });
     if (outcome === 'approved') return;
     if (outcome === 'denied') throw new Error(`사용자가 거부해 실행하지 않았습니다: ${what}. 다시 시도하지 말고 사용자에게 어떻게 할지 물으세요`);
     if (outcome === 'timeout') throw new Error(`사용자가 시간 안에 확인하지 않아 실행하지 않았습니다: ${what}. 필요하면 사용자에게 알리고 다시 요청받으세요`);
   }
   throw new Error(
-    `사용자 확인이 필요한 조작이라 실행하지 않았습니다: ${what}. 이 대화에서는 확인을 받을 수 없으니, 사용자에게 DroidLens 앱 화면이나 터미널의 Claude Code 에서 직접 하도록 안내하세요`,
+    `사용자 확인이 필요한 조작이라 실행하지 않았습니다: ${what}. 이 대화에서는 확인을 받을 수 없으니, ${opts.refuse ?? '사용자에게 DroidLens 앱 화면이나 터미널의 Claude Code 에서 직접 하도록 안내하세요'}`,
   );
 }
 
 /**
- * 좌표 (x, y)를 누르기 전 위험 버튼 검사. 기기를 누르는 MCP 도구(tap·graph_record·type_text)가 모두 이 한 곳을 거친다.
- * node: 셀렉터로 찾은 요소, tree: 이미 받은 뷰 계층(없으면 새로 덤프). 위험하면 던진다
+ * 좌표 (x, y)를 누르기 전 확인 필수 버튼 검사. 기기를 누르는 MCP 도구(tap·graph_record·type_text)가 모두 이 한 곳을 거친다.
+ * node: 셀렉터로 찾은 요소, tree: 이미 받은 뷰 계층(없으면 새로 덤프). 확인 필수면 던진다
  */
 export async function refuseRisky(dev: dl.DeviceAdb, x: number, y: number, node?: dl.ViewNode, tree?: dl.ViewNode): Promise<void> {
   const risky = dl.riskyTapLabel(tree ?? (await dl.dumpHierarchy(dev)).root, x, y, node);
   if (risky) throw new Error(dl.riskyTapMessage(risky, '호출'));
 }
 
+/**
+ * 도구 인자 allowDanger 를 실제로 쓸지. TC 를 실행하는 시나리오에서는 사람이 그 TC 에 허용했을 때만 쓴다
+ * (에이전트가 인자로 켜서 허용 없는 확인 필수 버튼을 누르지 못하게). 허용은 매번 계획 파일에서 다시 읽어,
+ * 진행 중에 허용을 거두거나 TC 내용이 바뀌면 바로 막는다.
+ * bulk: 여러 버튼을 한꺼번에 누르는 도구(explore·script_run·suite_run). TC 시나리오 안에서는 허용과 상관없이 받지 않는다
+ */
+export async function dangerAllowed(requested: boolean | undefined, bulk = false, tool?: string): Promise<boolean> {
+  if (!requested) return false;
+  const tc = recorder.active ? recorder.tc : undefined;
+  if (!tc) {
+    // 대화창: 여러 버튼을 한꺼번에 누르는 도구는 확인 필수 버튼까지 누를지 한 번 묻는다 (한 버튼은 guardRisky 가 그 버튼을 보고 묻는다)
+    if (bulk && process.env.DROIDLENS_CONFIRM === '1') await askConfirm(`${tool ?? '이 도구'} 를 확인 필수 버튼(삭제·결제·전송 등)까지 실제로 누르며 실행`, tool);
+    return true;
+  }
+  const stop = `누르지 말고 이 단계를 막힘(blocked)으로 남기세요`;
+  if (bulk) throw new Error(`TC 를 실행하는 시나리오에서는 이 도구에 allowDanger 를 쓸 수 없습니다. 허용된 동작은 tap 으로 한 번만 누르세요`);
+  const c = (await dl.loadQaPlan(tc.plan).catch(() => undefined))?.cases.find((x) => x.id === tc.case);
+  if (!c?.allowDanger) {
+    throw new Error(`${tc.case} 는 실제로 누르기 허용이 없는 TC 라 allowDanger 를 쓸 수 없습니다. ${stop}. 사용자에게 qa_case_allow 로 허용할지 물으세요`);
+  }
+  if (dl.dangerFingerprint(c) !== tc.fingerprint) throw new Error(`${tc.case} 내용이 시나리오를 시작한 뒤 바뀌어 allowDanger 를 쓸 수 없습니다. ${stop}`);
+  return true;
+}
+
+/** 대화창 확인에 쓸 서버 (createServer 가 묶는다) */
+let confirmServer: McpServer | undefined;
+export function bindConfirmServer(server: McpServer): void {
+  confirmServer = server;
+}
+
+async function askConfirm(what: string, tool?: string): Promise<void> {
+  if (!confirmServer) throw new Error(`사용자 확인이 필요한 조작이라 실행하지 않았습니다: ${what}`);
+  await askUser(confirmServer, what, { question: `DroidLens: ${what}. 실행할까요?`, ctx: { tool } });
+}
+
+/**
+ * 좌표 (x, y)를 누르기 전 확인 필수 버튼 검사 (allowDanger 포함). 기기를 누르는 도구가 모두 이 한 곳을 거친다.
+ * allowDanger 가 없으면 확인 필수 버튼을 거부하고, 있으면 TC 시나리오에서는 그 TC 의 허용을 확인한다.
+ * 대화창(DROIDLENS_CONFIRM=1)에서는 TC 안팎 모두, 누르려는 버튼이 확인 필수일 때 그 버튼을 보여 주고 묻는다
+ */
+export async function guardRisky(
+  requested: boolean | undefined,
+  dev: dl.DeviceAdb,
+  x: number,
+  y: number,
+  node: dl.ViewNode | undefined,
+  tree: dl.ViewNode | undefined,
+  tool: string,
+): Promise<void> {
+  if (!(await dangerAllowed(requested))) return refuseRisky(dev, x, y, node, tree);
+  // 대화창에서는 TC 허용이 있어도 누를 버튼마다 묻는다 (TC 허용이 그 시나리오의 다른 확인 필수 버튼까지 열지 않게)
+  if (process.env.DROIDLENS_CONFIRM !== '1') return;
+  const risky = dl.riskyTapLabel(tree ?? (await dl.dumpHierarchy(dev)).root, x, y, node);
+  if (risky) await askConfirm(`확인 필수 버튼 "${risky.replace(/\s+/g, ' ').slice(0, 100)}" 실제로 누르기`, tool);
+}
+
+/**
+ * 사람에게 보여 줄 에이전트·문서 글에서 화면을 속일 수 있는 문자를 뺀다:
+ * 제어 문자(C0·C1, ESC 포함), 줄 구분자, 글자 방향을 뒤집는 문자(U+202A–202E, U+2066–2069, U+200E·200F·061C)
+ */
+export function plainText(v: string): string {
+  return v.replace(/[\u0000-\u001f\u007f-\u009f\u2028\u2029\u202a-\u202e\u2066-\u2069\u200e\u200f\u061c]+/g, ' ');
+}
+
 export const allowDangerArg = {
   allowDanger: z
     .boolean()
     .optional()
-    .describe('위험 버튼(삭제·결제·로그아웃·전송)도 누른다. 사용자가 직접 요청했을 때만 true'),
+    .describe('확인 필수 버튼(삭제·결제·로그아웃·전송)도 누른다. 사용자가 직접 요청했을 때만 true'),
 };
 
 // ---------- 시나리오 녹화 ----------
@@ -173,6 +249,9 @@ export const recorder: {
   mocks: Map<string, dl.MockRule>;
   /** 직전 scenario_step 이후 한 조작 로그. 다음 단계에 붙고 비워진다 */
   actions: dl.ScenarioAction[];
+  /** QA TC 를 실행하는 시나리오면 그 TC. allowDanger 는 사람이 그 TC 에 허용했는지 */
+  /** TC 를 실행하는 시나리오. run 이 있으면 scenario_finish 가 그 회차에 결과를 적는다 (#76) */
+  tc?: { plan: string; case: string; fingerprint: string; run?: string };
 } = { active: false, steps: [], mocks: new Map(), actions: [] };
 
 /** 시나리오 진행 중이면 조작 로그를 남긴다 (스크립트로 녹화되지 않는 조작도 포함: 좌표 스와이프·앱 종료·목·Prefs 변경 등) */

@@ -9,14 +9,16 @@ const INVOKE = new Set([
   'bringToFront', 'chatConfirm', 'chatSend', 'chatStatus', 'chatStop', 'copy', 'crashes', 'currentScreen', 'deeplink', 'deviceInfo', 'devices',
   'explore', 'exploreStop', 'graphExport', 'graphGet', 'graphImage', 'graphImport', 'graphNavigate', 'graphRecord', 'graphRecordHere',
   'graphReset', 'home', 'installAgents', 'integration', 'key', 'launch', 'logcatStart', 'logcatStop', 'longPress', 'mirrorStart',
-  'mirrorStop', 'openExternal', 'openPath', 'packages', 'perfResetFrames', 'perfSample', 'perfStartup', 'platform', 'recordStart', 'recordStatus', 'recordStop', 'registerMcp', 'reveal',
+  'mirrorStop', 'openExternal', 'openPath', 'packages', 'perfResetFrames',
+  'qaCaseAllow', 'qaCaseUpdate', 'qaConfirm', 'qaExtract', 'qaJob', 'qaPlanCreate', 'qaPlanGet', 'qaPlanRename', 'qaPlans', 'qaReport', 'qaRun', 'qaRunExport', 'qaRunGet', 'qaRunIndex', 'qaRunPreview',
+  'qaSelect', 'qaSourceLink', 'qaSourcePick', 'qaStop', 'perfSample', 'perfStartup', 'platform', 'recordStart', 'recordStatus', 'recordStop', 'registerMcp', 'reveal',
   'saveScreenshot', 'scenarioDelete', 'scenarioImage', 'scenarios', 'screenshot', 'screenshotPng', 'scriptDelete', 'scriptRead',
   'scriptRun', 'scriptsList', 'scriptStop', 'scriptWrite', 'sdk', 'sdkApps', 'setAdbPath', 'setTheme', 'snapshot', 'stop', 'swipe', 'tap',
   'typeText', 'updateCheck', 'updateInstall',
 ]);
 /** 메인이 보내는 이벤트 채널 */
 const EVENTS = new Set([
-  'chat:event', 'logcat', 'logcat:closed', 'mirror:closed', 'mirror:packet', 'mirror:session', 'progress', 'script:progress', 'update:progress',
+  'chat:event', 'logcat', 'logcat:closed', 'mirror:closed', 'mirror:packet', 'mirror:session', 'progress', 'qa:event', 'script:progress', 'update:progress',
 ]);
 
 contextBridge.exposeInMainWorld('dl', {

@@ -1,6 +1,8 @@
 import { writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { ensureDir, safeName, timestamp, writeJson } from './workspace.js';
+import { ensureDir, readJson, safeName, timestamp, writeFileAtomic, writeJson } from './workspace.js';
+import { SCENARIO_TOKENS } from './report-tokens.js';
+import { CASE_ID, PLAN_ID } from './qa/plan.js';
 import {
   buildScenarioView,
   formatDuration,
@@ -20,7 +22,8 @@ import {
 export class Scenario {
   constructor(readonly data: ScenarioData) {}
 
-  static async start(name: string, meta: { goal?: string; packageName?: string; device?: string } = {}): Promise<Scenario> {
+  static async start(name: string, meta: { goal?: string; packageName?: string; device?: string; tc?: ScenarioData['tc'] } = {}): Promise<Scenario> {
+    if (meta.tc && (!PLAN_ID.test(meta.tc.plan) || !CASE_ID.test(meta.tc.case))) throw new Error(`TC 연결 형식이 아닙니다: ${meta.tc.plan} ${meta.tc.case}`);
     const id = `${timestamp()}_${safeName(name)}`;
     const dir = await ensureDir('scenarios', id);
     const s = new Scenario({ id, name, ...meta, startedAt: Date.now(), steps: [], dir });
@@ -83,12 +86,22 @@ export class Scenario {
     this.data.summary = summary;
     await this.persist();
     const html = join(this.data.dir, 'report.html');
-    await writeFile(html, renderReport(this.data));
+    // 이름 바꾸기로 쓴다: report.html 이 링크여도 링크를 바꿀 뿐 가리키는 파일에 쓰지 않는다 (#113)
+    await writeFileAtomic(html, renderReport(this.data));
     return html;
   }
 
-  private persist(): Promise<void> {
-    return writeJson(join(this.data.dir, 'scenario.json'), this.data);
+  /**
+   * 디스크에 이미 마무리된 기록은 끝나지 않은 메모리 값으로 되돌리지 않는다 (#113).
+   * 앱이 멈춘 회차의 기록을 막힘으로 닫은 뒤, 늦게 꺼지는 MCP 서버가 처리 중이던 단계를 적으며 다시 여는 일을 막는다
+   */
+  private async persist(): Promise<void> {
+    const file = join(this.data.dir, 'scenario.json');
+    if (!this.data.finishedAt) {
+      const disk = await readJson<Partial<ScenarioData>>(file).catch(() => undefined);
+      if (disk?.finishedAt) return;
+    }
+    await writeJson(file, this.data);
   }
 }
 
@@ -100,12 +113,7 @@ const clock = (at: number) => {
   return [d.getHours(), d.getMinutes(), d.getSeconds()].map((n) => String(n).padStart(2, '0')).join(':');
 };
 
-const REPORT_CSS = `
-:root{--bg:#f6f7f6;--card:#fff;--fg:#151917;--muted:#5f6763;--line:#dfe3e0;--soft:#eef1ef;
---pass:#17803d;--pass-bg:#e6f4ea;--fail:#c62828;--fail-bg:#fdecec;--warn:#a15c00;--warn-bg:#fff3dc;--info:#2b5fb4;--info-bg:#e8effb;--accent:#0f6b5c;
---sans:-apple-system,"Apple SD Gothic Neo","Pretendard",system-ui,sans-serif;--mono:ui-monospace,Menlo,monospace;color-scheme:light}
-@media (prefers-color-scheme:dark){:root{--bg:#0f1211;--card:#171b19;--fg:#e7ebe9;--muted:#97a19c;--line:#2a312e;--soft:#1e2422;
---pass:#5cc882;--pass-bg:#16301f;--fail:#ff7b72;--fail-bg:#3a1a1a;--warn:#f0b14a;--warn-bg:#35280f;--info:#82aaf0;--info-bg:#172440;--accent:#4fc2ab;color-scheme:dark}}
+const REPORT_CSS = `${SCENARIO_TOKENS}
 *{box-sizing:border-box}
 [hidden]{display:none!important}
 body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.6 var(--sans);font-variant-numeric:tabular-nums}
@@ -164,13 +172,13 @@ dl.kv li .t{color:var(--muted);font-family:var(--mono);font-size:11px;margin-rig
 .shots{display:grid;gap:8px;align-self:start;width:132px}
 .shot{display:block;padding:0;border:1px solid var(--line);border-radius:10px;overflow:hidden;background:var(--soft);cursor:zoom-in;width:100%;position:relative}
 .shot img{display:block;width:100%;height:auto}
-.shot .tag{position:absolute;left:6px;bottom:6px;font-size:11px;font-weight:600;padding:1px 6px;border-radius:6px;background:var(--warn);color:#fff}
+.shot .tag{position:absolute;left:6px;bottom:6px;font-size:11px;font-weight:600;padding:1px 6px;border-radius:6px;background:var(--warn);color:var(--on-warn)}
 .noshot{width:132px;aspect-ratio:9/19;border:1px dashed var(--line);border-radius:10px;display:grid;place-items:center;text-align:center;font-size:12px;color:var(--muted);padding:8px}
 .log{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px 16px}
 .log summary{cursor:pointer;font-weight:600}
 .log ol{margin:10px 0 0;padding-left:22px;font-size:13px;display:grid;gap:2px}
 .log .t{color:var(--muted);font-family:var(--mono);font-size:11px;margin-right:8px}
-.lb{position:fixed;inset:0;background:rgba(0,0,0,.8);display:grid;place-items:center;padding:24px;z-index:20;cursor:zoom-out}
+.lb{position:fixed;inset:0;background:var(--scrim);display:grid;place-items:center;padding:24px;z-index:20;cursor:zoom-out}
 .lb img{max-height:92vh;max-width:100%;width:auto;border-radius:12px}
 button:focus-visible,a:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 @media (max-width:560px){.step:not(.wide){grid-template-columns:minmax(0,1fr) 92px;gap:12px}.shots,.noshot{width:92px}.ea{grid-template-columns:1fr}.how{margin-left:0;width:100%}}
@@ -188,7 +196,20 @@ document.querySelectorAll('.filters button').forEach(b=>b.addEventListener('clic
 }));
 `;
 
-export function renderReport(d: ScenarioData): string {
+/** 숫자로 믿고 HTML 에 그대로 넣는 칸을 숫자로 맞춘다. 디스크에서 다시 읽은 기록은 손댄 것일 수 있다 (#113) */
+const num = (x: unknown) => (Number.isFinite(Number(x)) ? Number(x) : 0);
+function numeric(d: ScenarioData): ScenarioData {
+  return {
+    ...d,
+    startedAt: num(d.startedAt),
+    finishedAt: d.finishedAt === undefined ? undefined : num(d.finishedAt),
+    steps: d.steps.map((s) => ({ ...s, index: num(s.index), at: num(s.at), corrects: s.corrects === undefined ? undefined : num(s.corrects) })),
+    actions: d.actions?.map((a) => ({ ...a, at: num(a.at) })),
+  };
+}
+
+export function renderReport(input: ScenarioData): string {
+  const d = numeric(input);
   const v = buildScenarioView(d);
   const c = v.counts;
   const verdictCls = v.verdict === 'pass' ? 'pass' : v.verdict === 'fail' ? 'fail' : 'warn';

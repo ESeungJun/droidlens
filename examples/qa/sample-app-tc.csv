@@ -1,0 +1,9 @@
+No,Title,Spec,Priority,Type,Preconditions,Steps,Expected
+1,Status line on launch,1.1,P0,normal,Sample app installed (debug build),"1. Open the sample app","The status line reads ""SDK <version> running: true"""
+2,Buttons in order,1.2,P1,normal,Sample app is open,"1. Look at the main screen","Buttons appear from top to bottom: GET 요청, POST 요청, 폼 POST, 404 요청, 로컬 서버 요청, 스트림 업로드, 스트리밍 응답, DB에 메모 추가, PREFS 저장, 커스텀 이벤트"
+3,Add a note,2.1,P0,normal,Sample app is open,"1. Tap ""DB에 메모 추가""","The status line reads ""note #<number>"""
+4,Note number goes up,2.2,P1,boundary,A note was just added,"1. Tap ""DB에 메모 추가""
+2. Tap ""DB에 메모 추가"" again","The second number is the first number + 1"
+5,Save settings,3.1,P1,normal,Sample app is open,"1. Tap ""PREFS 저장""","The status line reads ""prefs 저장됨"""
+6,Record a custom event,4.1,P1,normal,Sample app is open,"1. Tap ""커스텀 이벤트""","The status line reads ""이벤트 기록됨"""
+7,Local server unreachable,5.1,P2,exception,"No server on port 8099 (no adb reverse for 8099)","1. Tap ""로컬 서버 요청""","The status line starts with ""실패:"" and the app keeps running"

@@ -361,11 +361,11 @@ export function FlowTab() {
     setExploring(false);
     await reload();
     if (r) {
-      const danger = r.skipped.filter((s) => s.reason === '위험 라벨').length;
+      const danger = r.skipped.filter((s) => s.reason === '확인 필수 라벨').length;
       const missing = r.skipped.length - danger;
       toast(
         t('탐색 완료: 버튼 {n}번 누름', { n: r.steps }) +
-          (danger ? t(', 위험 라벨 {n}개 건너뜀', { n: danger }) : '') +
+          (danger ? t(', 확인 필수 라벨 {n}개 건너뜀', { n: danger }) : '') +
           (missing ? t(', 화면에서 못 찾은 버튼 {n}개', { n: missing }) : '') +
           (r.limited ? t(' — 안전 상한({n}번)에 닿아 멈췄습니다. 깊이를 줄여 보세요', { n: r.steps }) : ''),
         r.limited,
@@ -385,7 +385,7 @@ export function FlowTab() {
     await reload();
     if (!r) return;
     setFocus({ title: t('{s}에서 지정한 동작의 흐름', { s: screen.label }), nodes: new Set(r.touched.nodes), edges: new Set(r.touched.edges) });
-    // 시작 화면에서 건너뛴 것 = 지정했지만 실행하지 못한 동작 (화면에서 못 찾았거나 위험 버튼을 허용하지 않음)
+    // 시작 화면에서 건너뛴 것 = 지정했지만 실행하지 못한 동작 (화면에서 못 찾았거나 확인 필수 버튼을 허용하지 않음)
     const missed = r.skipped.filter((x) => x.screen === r.startScreen);
     toast(
       t('지정한 동작 {n}개로 화면 {s}개, 연결 {e}개를 따라갔습니다', { n: only.length, s: r.touched.nodes.length - 1, e: r.touched.edges.length }) +
@@ -659,7 +659,7 @@ function ScreenDetail({
       {dangerPicked && (
         <label className="chk warn-text" style={{ fontSize: 11, marginTop: 4 }}>
           <input type="checkbox" checked={allowDanger} onChange={(e) => setAllowDanger(e.target.checked)} />
-          {t('⚠ 결제·삭제·전송 같은 위험 버튼이 포함돼 있습니다. 체크하면 실제로 누르고, 체크하지 않으면 건너뜁니다.')}
+          {t('⚠ 결제·삭제·전송 같은 확인 필수 버튼이 포함돼 있습니다. 체크하면 실제로 누르고, 체크하지 않으면 건너뜁니다.')}
         </label>
       )}
 

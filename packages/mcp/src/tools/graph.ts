@@ -1,7 +1,7 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import * as dl from '@droidlens/core';
-import { device, text, json, serialArg, appArg, PIXELS, selectorShape, pickSelector, readOnly, acts, hasSelector, resolveNode, logAction, refuseRisky, allowDangerArg } from '../common.js';
+import { device, text, json, serialArg, appArg, PIXELS, selectorShape, pickSelector, readOnly, acts, hasSelector, resolveNode, logAction, allowDangerArg, dangerAllowed, guardRisky } from '../common.js';
 
 export function register(server: McpServer): void {
   // ---------- 화면 그래프 ----------
@@ -11,7 +11,7 @@ export function register(server: McpServer): void {
     {
       description:
         '현재 화면을 앱의 화면 그래프에 기록. action을 주면 그 조작을 실행하고 행동 전후 화면과 전이(edge)를 함께 기록한다. 시나리오를 진행하면서 화면 경로 지도를 만들 때 사용. ' +
-        'tap·longpress 는 tap 도구와 같이 삭제·결제·로그아웃·전송 같은 위험 버튼을 allowDanger 없이는 누르지 않는다',
+        'tap·longpress 는 tap 도구와 같이 삭제·결제·로그아웃·전송 같은 확인 필수 버튼을 allowDanger 없이는 누르지 않는다',
       inputSchema: {
         ...serialArg,
         ...appArg,
@@ -52,8 +52,8 @@ export function register(server: McpServer): void {
           label = dl.labelOf(n);
         }
         if (x === undefined || y === undefined) throw new Error(`${action.type}에는 셀렉터나 x/y가 필요합니다`);
-        // tap 도구와 같은 위험 버튼 검사 (이 경로로 보호를 지나치지 않게)
-        if (!allowDanger) await refuseRisky(dev, x, y, n, before.hierarchy.root);
+        // tap 도구와 같은 확인 필수 버튼 검사 (이 경로로 보호를 지나치지 않게)
+        await guardRisky(allowDanger, dev, x, y, n, before.hierarchy.root, 'graph_record');
         ga = { type: action.type, x, y, label, selector: sel };
       } else if (action.type === 'key') {
         ga = { type: 'key', key: action.key ?? 'back' };
@@ -105,7 +105,7 @@ export function register(server: McpServer): void {
     'explore',
     {
       description:
-        '앱을 자동 탐색(DFS)해 화면 그래프를 만든다. 결제·삭제·로그아웃·전송 등 위험 라벨은 누르지 않는다. 시간이 오래 걸릴 수 있음 (스텝당 2~4초). ' +
+        '앱을 자동 탐색(DFS)해 화면 그래프를 만든다. 결제·삭제·로그아웃·전송 등 확인 필수 라벨은 누르지 않는다. 시간이 오래 걸릴 수 있음 (스텝당 2~4초). ' +
         'startScreen 과 only 를 주면 그 화면(기록된 경로로 이동)에서 지정한 동작만 먼저 실행하고, 열린 화면부터 maxDepth 까지 탐색한다',
       inputSchema: {
         ...serialArg,
@@ -127,7 +127,7 @@ export function register(server: McpServer): void {
         allowDanger: z
           .boolean()
           .optional()
-          .describe('only 에 결제·삭제·전송 같은 위험 라벨 요소가 있어도 누른다. 사용자가 명시적으로 요청했을 때만 true (기본 false: 건너뜀)'),
+          .describe('only 에 결제·삭제·전송 같은 확인 필수 라벨 요소가 있어도 누른다. 사용자가 명시적으로 요청했을 때만 true (기본 false: 건너뜀)'),
       },
       annotations: acts,
     },
@@ -142,7 +142,7 @@ export function register(server: McpServer): void {
         relaunch,
         startAt: startScreen,
         only,
-        allowDanger,
+        allowDanger: await dangerAllowed(allowDanger, true, 'explore'),
         avoid: avoid ? new RegExp(avoid, 'i') : undefined,
         // 클라이언트가 도구 호출을 취소하면 탐색도 멈춘다
         signal: extra.signal,

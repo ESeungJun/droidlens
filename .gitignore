@@ -13,3 +13,5 @@ docs/html/
 
 # 테스트가 잠깐 쓰는 DroidLens 홈 (끝나면 지운다)
 packages/core/test/.test-home-*/
+# doc-diagrams 렌더 확인용
+docs/images/*.html

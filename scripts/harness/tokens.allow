@@ -1,0 +1,22 @@
+# check-tokens.sh 예외. 한 줄에 경로 하나(글롭 가능, * 는 하위 폴더까지), # 뒤는 이유.
+# 토큰 원본 파일과, 손대지 않고 둘 기존 위반(기준선 + 이슈 번호)만 적는다.
+# 기존 위반은 `bash scripts/harness/check-tokens.sh --baseline` 으로 파일 단위로 한 번에 더한다.
+# 이 파일을 넓히면(예: * 한 줄) 검사가 통째로 꺼진다. PR 에서 이 파일이 바뀌면 꼭 본다.
+#
+# 스택이 처음부터 hex 색을 넣어 두는 자산(앱 리소스의 색 정의·아이콘 등)은 설치할 때 이 저장소 경로로 적는다.
+#
+# 예:
+# src/styles/tokens.css                 # 토큰 원본
+# src/legacy/*                          # 기준선, 이슈 #12
+
+# 토큰 원본. 색 값은 이 파일들에만 두고 나머지는 var(--…) 로 쓴다(#94)
+apps/desktop/src/renderer/src/tokens.css      # 데스크톱 화면 토큰 원본(라이트·다크)
+packages/core/src/report-tokens.ts            # 단독 HTML 리포트(시나리오·QA 결과표·디자인 비교)의 자체 :root 토큰
+packages/core/src/qa/export.ts                # 단계별 HTML 단독 파일의 자체 :root 토큰 (#98)
+
+# 영구 예외: 색이 화면 스타일이 아니라 데이터·입력이다
+packages/core/src/design/guide.ts             # 색 값을 읽고 바꾸는 코드(파싱 대상 예시·흰/검 변환)
+apps/desktop/src/main/context.ts              # 렌더러가 뜨기 전 네이티브 창 바탕색(CSS 변수를 못 씀)
+packages/core/test/*                          # 시험 데이터(디자인 비교 픽스처)
+packages/mcp/test/*                           # 시험 데이터(디자인 비교 픽스처)
+android/sample/*                              # 디자인 비교 시험용 샘플 앱 화면(일부러 다른 색)

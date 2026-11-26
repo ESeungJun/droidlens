@@ -16,7 +16,7 @@ import android.util.Log;
  */
 public class AgentInstrumentation extends Instrumentation {
     static final String TAG = "DroidLensAgent";
-    static final int VERSION = 5;
+    static final int VERSION = 6;
     static final String SOCKET_NAME = "droidlens_agent";
 
     @Override

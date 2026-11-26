@@ -13,7 +13,7 @@ import { droidlensHome } from './workspace.js';
 
 export const AGENT_PACKAGE = 'io.github.eseungjun.droidlens.agent';
 /** android/agent/build.gradle 의 versionCode, AgentInstrumentation.VERSION 과 같아야 한다 (test/agent-version.test.mjs 가 확인) */
-export const AGENT_VERSION = 5;
+export const AGENT_VERSION = 6;
 /** 에이전트는 TCP가 아닌 abstract 유닉스 소켓으로 열고 adb(shell) 연결만 받는다 */
 const AGENT_REMOTE = 'localabstract:droidlens_agent';
 const INSTRUMENT = `${AGENT_PACKAGE}/.AgentInstrumentation`;
@@ -61,8 +61,10 @@ export class AgentClient {
     return JSON.parse(await this.req('GET', '/ping', undefined, 3000));
   }
 
-  hierarchyXml(allWindows = false): Promise<string> {
-    return this.req('GET', '/hierarchy', allWindows ? { allWindows: '1' } : undefined);
+  /** rendering: 글자 노드의 렌더링 정보(글자 크기)를 같이 받는다 (디자인 비교용, 덤프가 조금 느려진다) */
+  hierarchyXml(allWindows = false, rendering = false): Promise<string> {
+    const q = { ...(allWindows ? { allWindows: '1' } : {}), ...(rendering ? { rendering: '1' } : {}) };
+    return this.req('GET', '/hierarchy', Object.keys(q).length ? q : undefined);
   }
 
   /** 포커스된 입력창의 텍스트를 바꾼다 (append=true면 뒤에 붙임) */
