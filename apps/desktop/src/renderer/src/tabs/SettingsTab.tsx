@@ -17,6 +17,7 @@ export function SettingsTab({ onAdbChange, updater }: { onAdbChange?(s: AdbStatu
   const theme = useTheme();
   const [adb, setAdb] = useState<AdbStatus | null>(cache.adb ?? null);
   const [adbPath, setAdbPath] = useState('');
+  const [cfgDir, setCfgDir] = useState<string | null>(null);
   const [integ, setInteg] = useState<Integration | null>(cache.integ ?? null);
   const [version, setVersion] = useState(cache.version ?? '');
   const [busy, setBusy] = useState('');
@@ -69,6 +70,14 @@ export function SettingsTab({ onAdbChange, updater }: { onAdbChange?(s: AdbStatu
       toast(r.ok ? t('adb {version} 연결됨', { version: r.version ?? '' }) : t('adb 실행 실패: {error}', { error: r.error ?? '' }), !r.ok);
       loadAdb();
     }
+  };
+
+  const saveCfgDir = async () => {
+    const v = (cfgDir ?? integ?.configDirSetting ?? '').trim();
+    if ((await run(api.setClaudeConfigDir(v))) === undefined) return;
+    toast(v ? t('Claude Code 설정 폴더를 바꿨습니다') : t('기본 설정 폴더를 씁니다'));
+    setCfgDir(null);
+    loadInteg();
   };
 
   const register = async () => {
@@ -131,10 +140,38 @@ Linux   sudo apt install adb`}
           <div className="kv" style={{ marginBottom: 8 }}>
             <span>Claude Code</span>
             <span>{!integ ? pending('integ') : integ.claudeVersion ?? <span className="error">{t('찾지 못함')}</span>}</span>
+            <span>{t('로그인')}</span>
+            <span>{!integ ? pending('integ') : <AuthState a={integ.auth} />}</span>
+            <span>{t('설정 폴더')}</span>
+            <span className="mono" style={{ fontSize: 11 }}>{!integ ? pending('integ') : integ.configDir}</span>
             <span>{t('MCP 등록')}</span>
             <span>{!integ ? pending('integ') : integ.registered ? <span style={{ color: 'var(--accent)' }}>{t('등록됨')}</span> : t('미등록')}</span>
             <span>{t('MCP 스크립트')}</span>
             <span style={{ fontSize: 11 }}>{!integ ? pending('integ') : integ.mcpScriptExists ? integ.mcpScript : <span className="error">{t('없음 (pnpm build 필요)')}</span>}</span>
+          </div>
+          {integ && (integ.auth.state === 'none' || integ.auth.state === 'expired') && (
+            <div className="qa-ask" style={{ marginBottom: 10 }}>
+              <b>{t('앱이 쓰는 Claude Code 로그인이 끊겼습니다.')}</b>
+              <div className="faint" style={{ marginTop: 4 }}>
+                {t('터미널에서 아래 명령으로 다시 로그인한 뒤 ↻ 를 눌러 주세요. 터미널마다 설정 폴더가 다르면 아래 "설정 폴더"에 로그인된 폴더를 넣어도 됩니다.')}
+              </div>
+              <pre className="mono" style={{ fontSize: 11, whiteSpace: 'pre-wrap', wordBreak: 'break-all', margin: '6px 0' }}>{integ.loginCommand}</pre>
+              <div className="qa-row">
+                <button className="btn sm primary" onClick={() => api.copy(integ.loginCommand).then(() => toast(t('명령을 복사했습니다')))}>
+                  {t('로그인 명령 복사')}
+                </button>
+              </div>
+            </div>
+          )}
+          <div style={{ display: 'flex', gap: 6, marginBottom: 10 }}>
+            <input
+              className="input"
+              style={{ flex: 1 }}
+              placeholder={t('Claude Code 설정 폴더 (비우면 기본)')}
+              value={cfgDir ?? integ?.configDirSetting ?? ''}
+              onChange={(e) => setCfgDir(e.target.value)}
+            />
+            <button className="btn" disabled={cfgDir === null} onClick={saveCfgDir}>{t('저장')}</button>
           </div>
           <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
             <button className="btn primary" disabled={!integ?.claudeVersion || busy === 'mcp'} onClick={register}>
@@ -206,5 +243,21 @@ Linux   sudo apt install adb`}
         <DeviceSetup />
       </div>
     </div>
+  );
+}
+
+/** 로그인 상태 한 줄 (#120). 메일·조직은 보이지 않고 방식·구독·유지 기한만 */
+function AuthState({ a }: { a: Integration['auth'] }) {
+  const { t } = useI18n();
+  if (a.state === 'none') return <span className="error">{t('로그인 안 됨')}</span>;
+  if (a.state === 'expired') return <span className="error">{t('로그인 만료')}</span>;
+  if (a.state === 'unknown') return <span className="muted">{t('확인할 수 없음')}</span>;
+  const extra = [a.method, a.plan].filter(Boolean).join(', ');
+  return (
+    <span>
+      <span style={{ color: 'var(--accent)' }}>{t('로그인됨')}</span>
+      {extra && <span className="faint"> ({extra})</span>}
+      {a.expiresAt && <div className="faint" style={{ fontSize: 11 }}>{t('{date}까지 유지', { date: new Date(a.expiresAt).toLocaleDateString() })}</div>}
+    </span>
   );
 }

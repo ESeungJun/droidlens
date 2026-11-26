@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { api, type QaCase, type QaPlanSummary, type QaPlanView, type QaRunView } from '../api';
+import { AuthHelp } from '../AuthHelp';
 import { useApp } from '../App';
 import { useI18n, useT } from '../i18n';
 import { qaResultMemo } from '@droidlens/core/qa-note';
@@ -486,7 +487,8 @@ function QaLog({ lines: all, onlyCase }: { lines: QaLogLine[]; onlyCase?: string
             </span>
           ) : l.kind === 'error' ? (
             <span className="error">
-              {t('오류')}: {l.text}
+              {t('오류')}: {t(l.text)}
+              <AuthHelp text={l.text} />
             </span>
           ) : (
             <span className="qa-text">{l.text}</span>
