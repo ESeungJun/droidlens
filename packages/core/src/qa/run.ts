@@ -5,6 +5,8 @@ import { z } from 'zod';
 import type { DeviceAdb } from '../adb.js';
 import { parseScript, scriptsDir, type Script } from '../script/schema.js';
 import { runScript, type ScriptRunOptions } from '../script/run.js';
+import { appInfo } from '../app.js';
+import { needsRestart, scriptSetupChangesData, unmetVersionCondition, type PrevCaseRun } from './continuity.js';
 import { readJson, timestamp, writeJson } from '../workspace.js';
 import { CASE_ID, PLAN_ID, PRIORITIES, caseContentHash, caseTrack, type QaCase, type QaPlan, type QaTrack } from './plan.js';
 import type { ScenarioData } from '../scenario-view.js';
@@ -219,6 +221,10 @@ export interface QaScriptRunResult {
   needsReview: QaCase[];
   /** 취소로 돌리지 못한 스크립트 TC */
   remaining: QaCase[];
+  /** 준비 단계에서 앱을 강제 종료하고 새로 띄운 횟수 (앞 TC 에 이어 간 TC 는 세지 않는다, #130) */
+  restarts: number;
+  /** 회차를 시작할 때 읽은 설치된 앱 versionName (스크립트 TC 가 있을 때만 읽는다. 에이전트 단계가 다시 쓴다) */
+  installed?: string;
 }
 
 /**
@@ -253,25 +259,38 @@ export async function runQaScripts(
     }).catch(() => run);
   }
   const ran: QaCaseResult[] = [];
+  // 사전 조건의 앱 버전("13.9.0 미만")은 실행 전에 설치된 버전과 맞춰 본다. 모르면 검사하지 않는다 (#130)
+  const installed = scripted.length && plan.app ? (await appInfo(dev, plan.app).catch(() => undefined))?.versionName : undefined;
+  // 바로 앞에서 실제로 돌린 TC. 통과했고 조건이 같으면 앱을 끄지 않고 이어 간다 (#130)
+  let prev: PrevCaseRun | undefined;
+  let restarts = 0;
   let i = 0;
   for (; i < scripted.length; i++) {
     if (opts.signal?.aborted) break;
     const c = scripted[i];
     opts.onCase?.(c, i, scripted.length);
-    const s = await readCaseScript(planId, c);
+    const unmet = unmetVersionCondition(c.preconditions, installed);
+    const s = unmet ? undefined : await readCaseScript(planId, c);
     let result: Omit<QaCaseResult, 'at'>;
-    if ('error' in s) {
-      result = { case: c.id, status: 'blocked', mode: 'script', script: c.script, note: s.note };
+    if (unmet) {
+      result = { case: c.id, status: 'blocked', mode: 'script', script: c.script, note: { code: 'versionUnmet', args: { cond: unmet.text.slice(0, 200), installed: installed! } } };
+    } else if (!s || 'error' in s) {
+      result = { case: c.id, status: 'blocked', mode: 'script', script: c.script, note: s?.note ?? { code: 'scriptNone' } };
     } else {
       const t0 = Date.now();
+      const guardDanger = !(c.allowDanger && !s.changed);
+      const setupData = scriptSetupChangesData(s.script.setup);
+      const keepProcess = !needsRestart(prev, { preconditions: c.preconditions, changesData: setupData });
       try {
         const r = await runScript(dev, s.script, {
           sourcePath: s.path,
           signal: opts.signal,
           onStep: opts.onStep,
-          guardDanger: !(c.allowDanger && !s.changed),
+          guardDanger,
           qaRun: run.id,
+          keepProcess,
         });
+        if (r.restarted) restarts++;
         // 확인 필수 동작을 누르지 않은 까닭은 앱 메모(코드 값), 시나리오 요약은 에이전트·스크립트 글이라 그대로 뒤에 붙인다
         const summary = r.scenario.summary?.slice(0, 1500);
         const note: QaNote | undefined =
@@ -297,13 +316,15 @@ export async function runQaScripts(
           durationMs: Date.now() - t0,
         };
       }
+      // 확인 필수 동작은 guardDanger 가 꺼졌을 때만 실제로 누른다
+      prev = { status: result.status, preconditions: c.preconditions, changedData: setupData || (!guardDanger && !!c.danger) };
     }
     // 도중에 멈춘 TC 는 결과를 적지 않고 남은 것으로 둔다 (이미 실패를 본 경우만 남긴다)
     if (opts.signal?.aborted && result.status !== 'fail') break;
     run = await recordQaResult(planId, run.id, result);
     ran.push(run.results.find((x) => x.case === c.id)!);
   }
-  return { run, ran, pending, needsReview, remaining: scripted.slice(i) };
+  return { run, ran, pending, needsReview, remaining: scripted.slice(i), restarts, installed };
 }
 
 export interface QaRunRow {

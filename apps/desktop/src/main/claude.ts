@@ -140,12 +140,23 @@ export interface ClaudeRequest {
   mcpEnv?: Record<string, string>;
   /** 작업 폴더 이름 (~/.droidlens/<이름>) */
   workDir: string;
+  /**
+   * 대화 하나에 메시지를 여러 번 보낸다 (#130). 표준 입력을 열어 두고(--input-format stream-json) message 는 쓰지 않는다.
+   * 메시지는 handle.send 로 보내고, 턴마다 done 이 온다. 다 보냈으면 handle.endInput 으로 끝낸다
+   */
+  stream?: boolean;
 }
 
 export interface ClaudeContext {
   execPath: string;
   mcpScript: string;
   agentsDir: string;
+}
+
+/** stream 실행의 턴 하나가 끝난 결과. ended: 프로세스가 끝나 대화를 이어 갈 수 없다 */
+export interface TurnEnd {
+  error?: string;
+  ended?: boolean;
 }
 
 export interface ClaudeHandle {
@@ -155,6 +166,13 @@ export interface ClaudeHandle {
   answer(id: string, approve: boolean): boolean;
   /** 프로세스가 끝나면 풀린다 */
   exited: Promise<void>;
+  /**
+   * stream 실행에 메시지 하나를 보낸다. 그 턴이 끝나면(result) 풀리고, 도중에 프로세스가 끝나면 ended 와 함께 풀린다.
+   * 앞 턴이 끝나기 전에 부르면 거부한다
+   */
+  send(message: string): Promise<TurnEnd>;
+  /** stream 실행의 입력을 닫는다. 진행 중인 턴이 끝나면 프로세스가 스스로 끝난다 */
+  endInput(): void;
 }
 
 /** 실행 중 로그인이 끊겨 나온 영어 원문은 한국어 안내로 바꾼다 */
@@ -273,6 +291,7 @@ export async function startClaude(
     `--disallowedTools=${BLOCKED_BUILTIN_TOOLS.join(',')}`,
     '--append-system-prompt-file',
     path(promptFile),
+    ...(req.stream ? ['--input-format', 'stream-json'] : []),
   ];
   if (req.sessionId) args.push('--resume', req.sessionId);
 
@@ -282,8 +301,16 @@ export async function startClaude(
     stdio: ['pipe', 'pipe', 'pipe'],
     shell: win,
   });
-  // 사용자 메시지는 표준 입력으로 (-p 는 인자가 없으면 stdin 을 프롬프트로 읽는다)
-  child.stdin!.end(req.message);
+  // 사용자 메시지는 표준 입력으로 (-p 는 인자가 없으면 stdin 을 프롬프트로 읽는다). stream 은 send 로 한 줄씩
+  if (!req.stream) child.stdin!.end(req.message);
+  child.stdin!.on('error', () => undefined);
+  /** stream: 진행 중인 턴이 끝나면 부를 것 */
+  let turn: ((r: TurnEnd) => void) | null = null;
+  const endTurn = (r: TurnEnd) => {
+    const t = turn;
+    turn = null;
+    t?.(r);
+  };
   let resolveExit!: () => void;
   const exited = new Promise<void>((r) => (resolveExit = r));
 
@@ -320,29 +347,33 @@ export async function startClaude(
           emit({ kind: 'toolResult', id: c.tool_use_id, text, isError: !!c.is_error });
         }
       } else if (ev.type === 'result') {
-        doneSent = true;
-        emit({
-          kind: 'done',
-          sessionId: ev.session_id ?? sessionId,
-          costUsd: ev.total_cost_usd,
-          durationMs: ev.duration_ms,
-          error: ev.is_error ? authHint(String(ev.result ?? ev.subtype)) : undefined,
-        });
+        // stream 실행은 턴마다 result 가 온다. 프로세스가 끝날 때 done 을 한 번 더 보내지 않도록 그 턴만 끝낸다
+        if (!req.stream) doneSent = true;
+        const error = ev.is_error ? authHint(String(ev.result ?? ev.subtype)) : undefined;
+        emit({ kind: 'done', sessionId: ev.session_id ?? sessionId, costUsd: ev.total_cost_usd, durationMs: ev.duration_ms, error });
+        endTurn({ error });
       }
     }
   });
   let stderr = '';
   child.stderr!.on('data', (d: Buffer) => (stderr += d.toString()));
+  let closed = false;
   child.on('close', (code) => {
+    closed = true;
     broker.close();
     void rm(runDir, { recursive: true, force: true }).catch(() => undefined);
-    if (!doneSent) emit({ kind: 'done', sessionId, error: code ? authHint(stderr.trim().slice(-600)) || `종료 코드 ${code}` : undefined });
+    const error = code ? authHint(stderr.trim().slice(-600)) || `종료 코드 ${code}` : undefined;
+    // stream 실행은 턴 사이에 끝나면 보낼 것이 없다. 턴 도중에 끝났으면 그 턴을 오류로 끝낸다
+    if (!doneSent && (!req.stream || turn || error)) emit({ kind: 'done', sessionId, error });
+    endTurn({ error: error ?? '에이전트가 턴을 끝내기 전에 멈췄습니다', ended: true });
     resolveExit();
   });
   child.on('error', (e) => {
+    closed = true;
     broker.close();
     if (!doneSent) emit({ kind: 'done', sessionId, error: e.message });
     doneSent = true;
+    endTurn({ error: e.message, ended: true });
     resolveExit();
   });
 
@@ -356,5 +387,16 @@ export async function startClaude(
     },
     answer: (id, approve) => typeof id === 'string' && broker.answer(id, approve === true),
     exited,
+    send(message) {
+      if (!req.stream) return Promise.reject(new Error('stream 실행이 아닙니다'));
+      if (turn) return Promise.reject(new Error('앞 턴이 끝나지 않았습니다'));
+      if (closed || child.stdin!.destroyed) return Promise.resolve({ error: '에이전트가 이미 끝났습니다', ended: true });
+      const done = new Promise<TurnEnd>((r) => (turn = r));
+      child.stdin!.write(JSON.stringify({ type: 'user', message: { role: 'user', content: message } }) + '\n');
+      return done;
+    },
+    endInput() {
+      if (!child.stdin!.destroyed) child.stdin!.end();
+    },
   };
 }
