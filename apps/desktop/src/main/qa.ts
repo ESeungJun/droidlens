@@ -358,7 +358,8 @@ export function runQaPlan(planId: string, opts: QaRunOptions, dev: dl.DeviceAdb,
       ]
         .filter(Boolean)
         .join('\n'),
-      allowedTools: ['mcp__droidlens__*'],
+      // 계획 편집·허용 켜기·회차 열기는 빼고 실행에 쓰는 도구만 (#140)
+      allowedTools: dl.qaRunAllowedTools(),
       mcpEnv: { DROIDLENS_SERIAL: opts.serial, ...(plan.app ? { DROIDLENS_APP: plan.app } : {}) },
       workDir: 'qa',
     });
