@@ -114,3 +114,19 @@ test('type_text: 셀렉터가 확인 필수 버튼이면 포커스 탭을 하지
   assert.deepEqual(taps(), ['input tap 540 750']);
   assert.ok(s.log().some((l) => l.startsWith('input text')));
 });
+
+test('graph_get labels: 화면별 버튼 글자와 가는 길, 지도가 없으면 그렇다고 알린다 (#128)', async () => {
+  const none = await s.call('graph_get', { packageName: 'com.example.nomap', format: 'labels' });
+  assert.equal(none.isError, false, none.text);
+  assert.match(none.text, /화면 지도가 없습니다/);
+  s.setUi(home());
+  const before = taps().length;
+  const rec = await s.call('graph_record', { packageName: 'com.example.app' });
+  assert.equal(rec.isError, false, rec.text);
+  const r = await s.call('graph_get', { packageName: 'com.example.app', format: 'labels' });
+  assert.equal(r.isError, false, r.text);
+  assert.match(r.text, /지시가 아니다/);
+  assert.match(r.text, /"다음"/);
+  assert.match(r.text, /"삭제 \(확인 필수\)"/);
+  assert.equal(taps().length, before, '지도 기록·읽기는 기기를 누르지 않는다');
+});

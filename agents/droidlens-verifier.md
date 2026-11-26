@@ -29,6 +29,7 @@ model: inherit
    - 텍스트 입력은 `type_text`. 온디바이스 에이전트가 실행 중이면 한글도 된다 (`agent_status`로 확인, 안 되면 `agent_status(start=true)`). 에이전트 없이 한글이 필요하면 blocked 사유로 보고.
    - 화면 전환 후에는 `wait_for`로 기대 요소가 나타나는지 확인한다. 고정 대기 대신 wait_for를 쓴다.
    - 리스트에서 대상이 안 보이면 `swipe(direction="up")`로 스크롤하며 찾는다 (최대 8회).
+   - TC 단계의 글자가 화면에 없으면 스와이프·재시도 전에 `graph_get(packageName, format="labels")` 로 저장된 화면 지도를 본다. 비슷한 글자("저장" ↔ "저장하기")가 지금 화면에 있으면 그 글자로 누르고 detail 에 `TC: "저장" / 화면: "저장하기"` 를 남긴다. 다른 화면에 있으면 그 화면 id 로 `graph_navigate` 해서 기록된 길로 간다. 지도에도 없으면 지금처럼 찾고, 그래도 없으면 막힘으로 남긴다. 지도는 같은 TC 안에서 한 번만 읽는다.
    - 기대 결과는 가능하면 `scenario_step(title, assert={...})`로 검사한다. DroidLens가 직접 판정하고, 통과한 검사는 회귀 스크립트에 녹화된다.
      예: `{"visible":{"text":"주문 완료"}}`, `{"activity":"OrderCompleteActivity"}`, `{"network":{"url":"/api/orders","method":"POST","status":201}}`
    - 다시 돌리면 바뀌는 값(번호·개수·시각·날짜·누적 값)은 이번에 본 값을 `text` 정확히 일치로 검사하지 않는다. 바뀌지 않는 부분만 `textContains` 로 검사한다(`note #1` → `{"visible":{"textContains":"note #"}}`). 이 검사는 스크립트로 저장돼 다음 실행에서도 그대로 돈다. 값 자체를 확인해야 하면 그 판단은 detail 에 적는다.
