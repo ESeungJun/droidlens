@@ -15,6 +15,8 @@ import { qaResultMemo } from '@droidlens/core/qa-note';
 const STATUS_LABEL = { pass: '통과', fail: '실패', blocked: '막힘', skip: '건너뜀', 'not-run': '안 돌림' } as const;
 const STATUS_TONE = { pass: 'pass', fail: 'fail', blocked: 'warn', skip: 'mute', 'not-run': 'mute' } as const;
 const MODE_LABEL = { script: '스크립트', agent: '에이전트', manual: '직접 기록' } as const;
+/** 검증 갈래 (#129) */
+const TRACK_LABEL = { flow: '기획 흐름', design: '디자인 가이드', tc: 'TC 문서' } as const;
 /** claude.ai 아티팩트 한 페이지 한도 */
 const ARTIFACT_MAX_BYTES = 16 * 1024 * 1024;
 
@@ -187,6 +189,17 @@ export function RunDetail({ g, onOpenRecord }: { g: RunGroup; onOpenRecord: (s: 
               {t(STATUS_LABEL[s])} <b>{c[s]}</b>
             </span>
           ))}
+        </div>
+      )}
+      {view?.summary.byTrack && (Object.keys(view.summary.byTrack).length > 1 || view.summary.byTrack.tc) && (
+        <div className="faint" style={{ marginBottom: 8 }}>
+          {(['tc', 'flow', 'design'] as const)
+            .filter((tr) => view.summary.byTrack[tr])
+            .map((tr) => {
+              const b = view.summary.byTrack[tr]!;
+              return `${t(TRACK_LABEL[tr])} ${t('통과 {p}/{n}', { p: b.pass, n: b.total })}`;
+            })
+            .join(', ')}
         </div>
       )}
       {view && (

@@ -33,6 +33,19 @@ export const REVIEW_LABEL: Record<QaReviewReason, string> = {
   'danger-changed': '다시 보기: 확인 필수 TC 내용이 바뀌었어요. 다시 허용해 주세요',
 };
 
+/**
+ * 검증 갈래 (#129). 문서 종류마다 검증하는 방식이 다르다.
+ * flow 기획 흐름: 기획서에서 뽑은 사용자 흐름 TC · design 디자인 가이드: Figma 프레임과 화면 차이 비교 ·
+ * tc TC 문서: 사람이 넣은 TC 표를 모델 없이 원문 그대로 가져온 것 (에이전트가 고치지 못한다)
+ */
+export const CASE_TRACKS = ['flow', 'design', 'tc'] as const;
+export type QaTrack = (typeof CASE_TRACKS)[number];
+export const CASE_TRACK_LABEL: Record<QaTrack, string> = {
+  flow: '기획 흐름',
+  design: '디자인 가이드',
+  tc: 'TC 문서',
+};
+
 export const CASE_KIND_LABEL: Record<(typeof CASE_KINDS)[number], string> = {
   normal: '정상',
   exception: '예외',
@@ -81,6 +94,13 @@ export const qaCaseSchema = z
     requirements: z.array(z.string().regex(REQ_ID)).default([]),
     priority: z.enum(PRIORITIES),
     kind: z.enum(CASE_KINDS),
+    /** 검증 갈래. 없으면 kind 로 정한다 (옛 계획 파일 호환: caseTrack) */
+    track: z.enum(CASE_TRACKS).optional(),
+    /** 에이전트가 TC 문서 밖에서 더 제안한 TC. 사람이 넣기 전까지 고르지 않는다 (false 는 지운다) */
+    suggested: z
+      .boolean()
+      .optional()
+      .transform((v) => v || undefined),
     preconditions: z.array(line).default([]),
     steps: z.array(line).min(1, '단계가 하나 이상 필요합니다'),
     expected: z.array(line).min(1, '기대 결과가 하나 이상 필요합니다'),
@@ -159,8 +179,9 @@ export const qaPlanSchema = z
       c.requirements.forEach((rid, j) => {
         if (!reqs.has(rid)) ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['cases', i, 'requirements', j], message: `없는 요구사항입니다: ${rid}` });
       });
-      if (c.kind !== 'design' && c.requirements.length === 0)
-        ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['cases', i, 'requirements'], message: '덮는 요구사항이 하나 이상 필요합니다 (디자인 TC 제외)' });
+      // TC 문서에서 가져온 TC 는 요구사항 없이 들어온다 (나중에 에이전트가 요구사항을 잇는다)
+      if (c.kind !== 'design' && c.track !== 'tc' && c.requirements.length === 0)
+        ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['cases', i, 'requirements'], message: '덮는 요구사항이 하나 이상 필요합니다 (디자인·TC 문서 TC 제외)' });
       if (c.kind === 'design' && !c.design)
         ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['cases', i, 'design'], message: '디자인 TC에는 Figma 프레임(design.figma)이 필요합니다' });
     });
@@ -184,9 +205,67 @@ export function validatePlan(raw: unknown): QaPlan {
   return withDefaults(r.data);
 }
 
-/** selected 를 정하지 않은 TC: 확인 필수 동작이 없을 때만 기본 선택 */
+/** selected 를 정하지 않은 TC: 확인 필수 동작이 없고 추가 제안이 아닐 때만 기본 선택 */
 function withDefaults(p: QaPlan): QaPlan {
-  return { ...p, cases: p.cases.map((c) => ({ ...c, selected: c.selected ?? !c.danger })) };
+  return { ...p, cases: p.cases.map((c) => ({ ...c, selected: c.selected ?? (!c.danger && !c.suggested) })) };
+}
+
+/** TC 의 검증 갈래. track 이 없는 옛 TC 는 디자인 TC 면 design, 아니면 flow */
+export function caseTrack(c: Pick<QaCase, 'track' | 'kind'>): QaTrack {
+  return c.track ?? (c.kind === 'design' ? 'design' : 'flow');
+}
+
+/** TC 문서 갈래 TC 에서 에이전트가 고칠 수 있는 칸: 요구사항 잇기와 확인 필수 표시 (원문은 바꾸지 못한다) */
+export const AGENT_TC_TRACK_FIELDS = ['requirements', 'danger'] as const;
+
+/**
+ * 에이전트가 낸 TC 목록을 TC 문서 갈래 규칙에 맞춘다 (형식 검사 전).
+ * - 이미 있는 TC 문서 TC 는 저장된 원문을 그대로 두고 요구사항·확인 필수 표시만 받는다. 빠뜨려도 지우지 않는다
+ * - 에이전트는 TC 문서 갈래를 새로 만들 수 없다 (track:'tc' 는 지운다)
+ * - 계획에 TC 문서가 있으면 새로 낸 TC 는 추가 제안이 된다 (사람이 넣기 전까지 고르지 않는다). 디자인 가이드 갈래는 빼고
+ */
+function guardTcTrack(raw: unknown, prev?: QaPlan): unknown {
+  if (!prev || !raw || typeof raw !== 'object' || !Array.isArray((raw as { cases?: unknown }).cases)) return raw;
+  const prevTc = prev.cases.filter((c) => c.track === 'tc');
+  const before = new Map(prev.cases.map((c) => [c.id, c]));
+  const reqIds = new Set(
+    Array.isArray((raw as { requirements?: unknown }).requirements)
+      ? ((raw as { requirements: unknown[] }).requirements.map((r) => (r && typeof r === 'object' ? (r as { id?: unknown }).id : undefined)) as unknown[])
+      : [],
+  );
+  const given = new Map<string, Record<string, unknown>>();
+  const others: unknown[] = [];
+  for (const c of (raw as { cases: unknown[] }).cases) {
+    const o = c && typeof c === 'object' ? (c as Record<string, unknown>) : undefined;
+    const id = typeof o?.id === 'string' ? o.id : undefined;
+    if (o && id && before.get(id)?.track === 'tc') {
+      given.set(id, o);
+      continue;
+    }
+    if (!o) {
+      others.push(c);
+      continue;
+    }
+    const old = id ? before.get(id) : undefined;
+    const { track, suggested: _s, ...rest } = o;
+    const isDesign = track === 'design' || (track === undefined && rest.kind === 'design');
+    others.push({
+      ...rest,
+      ...(track === 'tc' ? {} : track !== undefined ? { track } : {}),
+      // 사람이 넣은(제안 표시를 지운) TC 는 제안으로 돌아가지 않는다
+      // 디자인 가이드 갈래(Figma 프레임 비교)는 TC 문서와 다른 문서의 검증이라 제안으로 돌리지 않는다
+      ...(old ? (old.suggested ? { suggested: true } : {}) : prevTc.length && !isDesign ? { suggested: true, selected: false } : {}),
+    });
+  }
+  const tc = prevTc.map((c) => {
+    const g = given.get(c.id);
+    if (!g) return { ...c, requirements: c.requirements.filter((r) => reqIds.has(r)) };
+    const reqs = Array.isArray(g.requirements) ? g.requirements : c.requirements;
+    // 확인 필수 표시는 더하거나 바꿀 수만 있다 (빼면 저장된 표시를 둔다)
+    const danger = typeof g.danger === 'string' && g.danger.trim() ? g.danger : c.danger;
+    return { ...c, requirements: reqs, danger };
+  });
+  return { ...(raw as object), cases: [...tc, ...others] };
 }
 
 /**
@@ -194,7 +273,7 @@ function withDefaults(p: QaPlan): QaPlan {
  * 이미 저장된 계획(prev)이 있으면 같은 번호 TC의 사람 결정(allowDanger·selected·script)을 이어받는다.
  */
 export function acceptAgentPlan(raw: unknown, prev?: QaPlan): QaPlan {
-  const plan = validatePlan(raw);
+  const plan = validatePlan(guardTcTrack(raw, prev));
   const before = new Map(prev?.cases.map((c) => [c.id, c]));
   return {
     ...plan,
@@ -212,7 +291,7 @@ export function acceptAgentPlan(raw: unknown, prev?: QaPlan): QaPlan {
       return {
         ...c,
         allowDanger,
-        selected: unselect ? false : (old?.selected ?? !c.danger),
+        selected: unselect ? false : (old?.selected ?? (!c.danger && !c.suggested)),
         // 에이전트가 낸 표시는 받지 않는다
         review: review.size ? [...review] : undefined,
         // 스크립트 연결은 실행기가 통과한 TC 에만 붙인다. 에이전트가 낸 값은 받지 않고,
@@ -254,6 +333,8 @@ export interface CoverageRow {
   cases: string[];
   /** 고른 TC 중 이 요구사항을 덮는 것 */
   selected: string[];
+  /** 이 요구사항을 덮는 TC 의 갈래 (flow → design → tc 순) */
+  tracks: QaTrack[];
 }
 
 /** 요구사항별로 덮는 TC (추적표). missingKinds: 정상 또는 예외 TC 가 빠진 요구사항 (디자인 TC 로만 덮인 것은 뺀다) */
@@ -262,12 +343,23 @@ export function qaCoverage(plan: QaPlan): {
   uncovered: string[];
   unselected: string[];
   missingKinds: { id: string; missing: ('normal' | 'exception')[] }[];
+  /** TC 문서 갈래가 이미 덮은 요구사항. 기획서 갈래에서 같은 내용의 TC 를 또 만들지 않는다 */
+  coveredByTc: string[];
 } {
   const rows = plan.requirements.map((requirement) => {
     const cases = plan.cases.filter((c) => c.requirements.includes(requirement.id));
-    return { requirement, cases: cases.map((c) => c.id), selected: cases.filter((c) => c.selected).map((c) => c.id) };
+    const tracks = new Set(cases.map(caseTrack));
+    return {
+      requirement,
+      cases: cases.map((c) => c.id),
+      selected: cases.filter((c) => c.selected).map((c) => c.id),
+      tracks: CASE_TRACKS.filter((t) => tracks.has(t)),
+    };
   });
+  const coveredByTc = rows.filter((r) => r.tracks.includes('tc')).map((r) => r.requirement.id);
   const missingKinds = plan.requirements.flatMap((r) => {
+    // TC 문서가 덮은 요구사항은 그 문서를 따른다 (정상·예외를 새로 만들라고 하지 않는다)
+    if (coveredByTc.includes(r.id)) return [];
     const kinds = new Set(plan.cases.filter((c) => c.requirements.includes(r.id)).map((c) => c.kind));
     if (!kinds.size || (kinds.size === 1 && kinds.has('design'))) return [];
     const missing = (['normal', 'exception'] as const).filter((k) => !kinds.has(k));
@@ -278,6 +370,7 @@ export function qaCoverage(plan: QaPlan): {
     uncovered: rows.filter((r) => r.cases.length === 0).map((r) => r.requirement.id),
     unselected: rows.filter((r) => r.cases.length > 0 && r.selected.length === 0).map((r) => r.requirement.id),
     missingKinds,
+    coveredByTc,
   };
 }
 

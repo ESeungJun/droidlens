@@ -6,7 +6,7 @@ import type { DeviceAdb } from '../adb.js';
 import { parseScript, scriptsDir, type Script } from '../script/schema.js';
 import { runScript, type ScriptRunOptions } from '../script/run.js';
 import { readJson, timestamp, writeJson } from '../workspace.js';
-import { CASE_ID, PLAN_ID, PRIORITIES, caseContentHash, type QaCase, type QaPlan } from './plan.js';
+import { CASE_ID, PLAN_ID, PRIORITIES, caseContentHash, caseTrack, type QaCase, type QaPlan, type QaTrack } from './plan.js';
 import type { ScenarioData } from '../scenario-view.js';
 import { QA_NOTE_CODES, qaNoteText, type QaNote } from '../qa-note.js';
 import { sha256 } from './sources.js';
@@ -315,6 +315,8 @@ export interface QaRunRow {
 export interface QaRunSummary {
   rows: QaRunRow[];
   counts: Record<QaStatus | 'not-run', number>;
+  /** 검증 갈래별 개수 (#129). 그 갈래에 TC 가 있을 때만 */
+  byTrack: Partial<Record<QaTrack, Record<QaStatus | 'not-run', number> & { total: number }>>;
   /** 요구사항별: 덮는 고른 TC 가 모두 통과면 pass, 하나라도 실패·막힘이면 fail, 아니면 not-run */
   requirements: { id: string; text: string; status: 'pass' | 'fail' | 'not-run'; cases: string[] }[];
 }
@@ -331,6 +333,13 @@ export function qaRunSummary(plan: QaPlan, run: QaRun): QaRunSummary {
   });
   const counts = { pass: 0, fail: 0, blocked: 0, skip: 0, 'not-run': 0 } as QaRunSummary['counts'];
   for (const r of rows) counts[r.status]++;
+  const byTrack: QaRunSummary['byTrack'] = {};
+  for (const r of rows) {
+    const t = caseTrack(r.case);
+    const b = (byTrack[t] ??= { total: 0, pass: 0, fail: 0, blocked: 0, skip: 0, 'not-run': 0 });
+    b.total++;
+    b[r.status]++;
+  }
   const status = new Map(rows.map((r) => [r.case.id, r.status]));
   const requirements = plan.requirements.map((req) => {
     const cases = ordered.filter((c) => c.requirements.includes(req.id)).map((c) => c.id);
@@ -342,7 +351,7 @@ export function qaRunSummary(plan: QaPlan, run: QaRun): QaRunSummary {
         : 'not-run';
     return { id: req.id, text: req.text, status: s, cases };
   });
-  return { rows, counts, requirements };
+  return { rows, counts, byTrack, requirements };
 }
 
 /**

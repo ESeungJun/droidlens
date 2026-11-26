@@ -28,8 +28,9 @@ function caseLine(c: dl.QaCase): string {
     c.danger ? `확인 필수${c.allowDanger ? '(허용)' : ''}` : '',
     c.script ? `스크립트 ${c.script}` : '',
     c.review?.length ? '다시 보기' : '',
+    c.suggested ? '추가 제안' : '',
   ].filter(Boolean);
-  return `${marks.join(' ')} ${c.id} [${dl.CASE_KIND_LABEL[c.kind]} ${c.priority}] ${c.title}${c.requirements.length ? ` ← ${c.requirements.join(',')}` : ''}`;
+  return `${marks.join(' ')} ${c.id} [${c.track === 'tc' ? `${dl.CASE_TRACK_LABEL.tc} · ` : ''}${dl.CASE_KIND_LABEL[c.kind]} ${c.priority}] ${c.title}${c.requirements.length ? ` ← ${c.requirements.join(',')}` : ''}`;
 }
 
 /** 저장 뒤 사람에게 보여 줄 요약: 추적표 빈 곳, 다시 보기, 확인 필수 */
@@ -37,9 +38,16 @@ function planReport(p: dl.QaPlan): string {
   const cov = dl.qaCoverage(p);
   const review = dl.qaReviewList(p);
   const danger = p.cases.filter((c) => c.danger);
+  const tracks = dl.CASE_TRACKS.map((t) => [t, p.cases.filter((c) => dl.caseTrack(c) === t).length] as const).filter(([, n]) => n);
+  const suggested = p.cases.filter((c) => c.suggested);
   return [
     `${p.name} (${p.id})${p.app ? ` · ${p.app}` : ''}`,
     `문서 ${p.sources.length} · 요구사항 ${p.requirements.length} · TC ${p.cases.length} (고름 ${p.cases.filter((c) => c.selected).length})`,
+    tracks.length > 1 || tracks.some(([t]) => t === 'tc') ? `갈래: ${tracks.map(([t, n]) => `${dl.CASE_TRACK_LABEL[t]} ${n}`).join(', ')}` : '',
+    cov.coveredByTc.length
+      ? `TC 문서가 이미 덮은 요구사항: ${cov.coveredByTc.join(', ')} — 기획서 갈래에서 같은 내용의 TC 를 또 만들지 마세요`
+      : '',
+    suggested.length ? `추가 제안 ${suggested.length}개(${suggested.map((c) => c.id).join(', ')})는 사용자가 QA 탭에서 넣기 전까지 고르지 않습니다` : '',
     cov.uncovered.length ? `TC 가 없는 요구사항: ${cov.uncovered.join(', ')}` : '',
     cov.unselected.length ? `고른 TC 가 없는 요구사항: ${cov.unselected.join(', ')}` : '',
     cov.missingKinds.length
@@ -159,7 +167,13 @@ export function register(server: McpServer): void {
           : r.source.kind === 'figma'
             ? `디자인 TC 의 design.figma 에 이 링크를 씁니다. 화면 내용은 Figma 커넥터로 봅니다`
             : `글 ${r.textLength?.toLocaleString() ?? 0}자 — qa_source_read 로 읽으세요`;
-      return text([head, ...r.warnings.map((w) => `⚠ ${w}`), next].join('\n'));
+      const tc = r.tcImport
+        ? `TC 표를 알아보고 TC ${r.tcImport.cases}개를 원문 그대로 가져왔습니다 (TC 문서 갈래, ${r.tcImport.sheets.map((s) => `${s.sheet || 'CSV'} ${s.cases}개`).join(', ')}). ` +
+          '이 TC 들은 옮겨 적거나 다시 만들지 마세요. qa_plan_save 에서는 {id, requirements, danger?} 만 적어 요구사항을 잇고, 문서가 덮지 못한 요구사항만 새 TC 로 내세요 (추가 제안이 됩니다)'
+        : r.tcTables
+          ? `표의 머리글을 알아보지 못했습니다. TC 표라면 사용자에게 DroidLens QA 탭에서 열을 골라 가져오게 안내하세요`
+          : '';
+      return text([head, ...r.warnings.map((w) => `⚠ ${w}`), ...(r.tcImport?.warnings ?? []).map((w) => `⚠ ${w}`), tc, next].filter(Boolean).join('\n'));
     },
   );
 
@@ -228,7 +242,9 @@ export function register(server: McpServer): void {
       description:
         '뽑은 요구사항·TC 전체를 저장 (같은 번호는 덮어쓴다). 형식이 틀리면 고칠 곳을 줄마다 알려 준다. ' +
         '요구사항: {id:"R-01", text, source?:{source:"S1", locator?:"2.1"}}. ' +
-        'TC: {id:"TC-001", title, requirements:["R-01"], priority:"P0|P1|P2", kind:"normal|exception|boundary|design", preconditions?:[], steps:[], expected:[], data?, danger?, automatable?:"yes|partial|manual", design?:{figma, node?}, source?, notes?}. ' +
+        'TC: {id:"TC-001", title, requirements:["R-01"], priority:"P0|P1|P2", kind:"normal|exception|boundary|design", track?:"flow|design", preconditions?:[], steps:[], expected:[], data?, danger?, automatable?:"yes|partial|manual", design?:{figma, node?}, source?, notes?}. ' +
+        'track: flow 기획 흐름(기획서), design 디자인 가이드(Figma 프레임 비교). TC 문서에서 가져온 TC(TC 문서 갈래)는 원문을 고칠 수 없어 {id, requirements, danger?} 만 적으면 되고, 빠뜨려도 지워지지 않는다. ' +
+        '계획에 TC 문서 TC 가 있으면 새로 낸 TC 는 추가 제안이 되어 사용자가 넣기 전까지 고르지 않는다. ' +
         'danger 에는 결제·삭제·전송·탈퇴·로그아웃처럼 되돌리기 어려운 동작을 적는다(그런 TC 는 기본으로 고르지 않는다). ' +
         '선택·실제로 누르기 허용·스크립트는 사람이 정한 값을 이어받고 여기서 넣은 값은 무시한다',
       inputSchema: {

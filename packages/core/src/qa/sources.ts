@@ -1,3 +1,4 @@
+import type { QaTable } from './tc-table.js';
 import { createHash } from 'node:crypto';
 import { readFile, stat } from 'node:fs/promises';
 import { basename, extname } from 'node:path';
@@ -48,6 +49,8 @@ export interface QaSourceFile {
   text: string;
   /** 글이 잘렸거나 비었을 때 사람이 알아야 할 것 */
   warnings: string[];
+  /** csv·xlsx 의 표 (TC 표 가져오기용, #129) */
+  tables?: QaTable[];
 }
 
 export interface QaSourceLink {
@@ -107,16 +110,22 @@ export async function readQaSourceFile(path: string): Promise<QaSourceFile> {
   const bytes = await readFile(path);
   const warnings: string[] = [];
   let text: string;
+  let tables: QaTable[] | undefined;
   switch (c.kind) {
     case 'md':
     case 'txt':
       text = decodeText(bytes, warnings);
       break;
-    case 'csv':
-      text = tableToMarkdown(parseCsv(decodeText(bytes, warnings), extname(path).toLowerCase() === '.tsv' ? '\t' : undefined, warnings), warnings);
+    case 'csv': {
+      const rows = parseCsv(decodeText(bytes, warnings), extname(path).toLowerCase() === '.tsv' ? '\t' : undefined, warnings);
+      text = tableToMarkdown(rows, warnings);
+      const body = rows.slice(0, MAX_TABLE_ROWS + 1);
+      tables = [{ sheet: '', rows: body, rowNums: body.map((_, i) => i + 1) }];
       break;
+    }
     case 'xlsx':
-      text = xlsxToMarkdown(bytes, warnings);
+      tables = xlsxTables(bytes, warnings);
+      text = tables.map((t) => `## 시트: ${t.sheet}\n\n${tableToMarkdown(t.rows, warnings, t.sheet)}`).join('\n\n');
       break;
     case 'pdf':
       text = await pdfToMarkdown(bytes, warnings);
@@ -130,7 +139,7 @@ export async function readQaSourceFile(path: string): Promise<QaSourceFile> {
     text = text.slice(0, MAX_SOURCE_TEXT);
     warnings.push(`글이 길어 앞 ${MAX_SOURCE_TEXT.toLocaleString()}자만 옮겼습니다. 문서를 나눠 넣어 주세요`);
   }
-  return { kind: c.kind, ref: path, title: basename(path), hash: sha256(bytes), bytes, text, warnings };
+  return { kind: c.kind, ref: path, title: basename(path), hash: sha256(bytes), bytes, text, warnings, tables };
 }
 
 export function sha256(b: Uint8Array): string {
@@ -236,6 +245,13 @@ const xml = new XMLParser({
 
 /** 시트마다 `## 시트: 이름` 아래 markdown 표로 */
 export function xlsxToMarkdown(bytes: Uint8Array, warnings: string[] = []): string {
+  return xlsxTables(bytes, warnings)
+    .map((t) => `## 시트: ${t.sheet}\n\n${tableToMarkdown(t.rows, warnings, t.sheet)}`)
+    .join('\n\n');
+}
+
+/** 시트마다 값이 있는 행만 (원본 행 번호와 함께) */
+export function xlsxTables(bytes: Uint8Array, warnings: string[] = []): QaTable[] {
   let files: Record<string, Uint8Array>;
   let unpacked = 0;
   try {
@@ -265,7 +281,7 @@ export function xlsxToMarkdown(bytes: Uint8Array, warnings: string[] = []): stri
   const sheets: Record<string, string>[] = read('xl/workbook.xml')?.workbook?.sheets?.sheet ?? [];
   if (!sheets.length) throw new Error('엑셀 파일에 시트가 없습니다');
 
-  const out: string[] = [];
+  const out: QaTable[] = [];
   const seen = new Set<string>();
   if (sheets.length > MAX_XLSX_SHEETS) warnings.push(`시트가 많아 앞 ${MAX_XLSX_SHEETS}개만 읽었습니다`);
   for (const sh of sheets.slice(0, MAX_XLSX_SHEETS)) {
@@ -285,8 +301,12 @@ export function xlsxToMarkdown(bytes: Uint8Array, warnings: string[] = []): stri
     // 객체로 바꾸기 전에 문자열에서 행 상한까지만 남긴다 (큰 시트 XML 을 통째로 파싱하지 않게)
     const rowsXml: Record<string, unknown>[] = xml.parse(cutRows(sheetXml, MAX_TABLE_ROWS + 2, MAX_XLSX_PART))?.worksheet?.sheetData?.row ?? [];
     const nonEmpty: string[][] = [];
+    const rowNums: number[] = [];
     let colsCut = false;
+    let rowNo = 0;
     for (const r of rowsXml) {
+      const rAttr = Number(r['@r']);
+      rowNo = Number.isInteger(rAttr) && rAttr > 0 ? rAttr : rowNo + 1;
       // 머리줄 + 상한 + 1행까지만 모은다 (넘친 것은 tableToMarkdown 이 잘랐다고 알린다)
       if (nonEmpty.length > MAX_TABLE_ROWS + 1) break;
       const row: string[] = [];
@@ -303,13 +323,16 @@ export function xlsxToMarkdown(bytes: Uint8Array, warnings: string[] = []): stri
         if (v !== '') row[col] = v;
       }
       const filled = Array.from(row, (v) => v ?? '');
-      if (filled.some((v) => v.trim() !== '')) nonEmpty.push(filled);
+      if (filled.some((v) => v.trim() !== '')) {
+        nonEmpty.push(filled);
+        rowNums.push(rowNo);
+      }
     }
     if (colsCut) warnings.push(`${sh['@name']}: 열이 많아 앞 ${MAX_TABLE_COLS}열만 옮겼습니다`);
     if (!nonEmpty.length) continue;
-    out.push(`## 시트: ${sh['@name']}\n\n${tableToMarkdown(nonEmpty, warnings, sh['@name'])}`);
+    out.push({ sheet: String(sh['@name'] ?? ''), rows: nonEmpty, rowNums });
   }
-  return out.join('\n\n');
+  return out;
 }
 
 /** 시트 XML 을 n번째 </row> (또는 maxChars 안의 마지막 </row>) 뒤에서 자르고 닫는 태그를 붙인다 */

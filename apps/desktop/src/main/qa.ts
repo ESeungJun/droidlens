@@ -135,6 +135,9 @@ export function extractQaPlan(planId: string, note: string | undefined, ctx: Cla
       plan.cases.length
         ? '이미 저장된 TC 가 있다. qa_plan_get(full=true) 로 받아 이어서 고친다(사람이 고른 값은 저장할 때 그대로 남는다).'
         : '',
+      plan.cases.some((c) => c.track === 'tc')
+        ? `TC 문서에서 원문 그대로 가져온 TC ${plan.cases.filter((c) => c.track === 'tc').length}개가 이미 있다(TC 문서 갈래). 옮겨 적거나 다시 만들지 말고 {id, requirements, danger?} 로 요구사항만 잇는다. 새 TC 는 문서가 덮지 못한 요구사항에만 낸다(추가 제안이 된다).`
+        : '',
       plan.app ? `대상 앱 패키지: ${plan.app}` : '',
       note?.trim() ? `사용자 요청: ${note.trim().slice(0, 2000)}` : '',
       '끝나면 최종 보고 형식으로 보고한다.',
