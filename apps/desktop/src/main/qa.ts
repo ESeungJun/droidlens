@@ -13,7 +13,8 @@ export const QA_CASE_TIMEOUT_MS = 10 * 60_000;
 /** TC 뽑기에 주는 시간. 문서가 길고 Figma 프레임이 많으면 오래 걸린다 */
 export const QA_EXTRACT_TIMEOUT_MS = 30 * 60_000;
 
-const DROIDLENS_PLANNER_TOOLS = ['qa_plan_get', 'qa_source_read', 'qa_plan_save', 'qa_case_update', 'design_guide_save'].map(
+/** TC 뽑기에 주는 DroidLens 도구. graph_get 은 저장된 화면 지도 파일만 읽는다(기기 조작 없음, #128) */
+const DROIDLENS_PLANNER_TOOLS = ['qa_plan_get', 'qa_source_read', 'qa_plan_save', 'qa_case_update', 'design_guide_save', 'graph_get'].map(
   (n) => `mcp__droidlens__${n}`,
 );
 

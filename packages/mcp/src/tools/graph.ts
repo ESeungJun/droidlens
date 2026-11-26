@@ -71,10 +71,15 @@ export function register(server: McpServer): void {
   server.registerTool(
     'graph_get',
     {
-      description: '앱 화면 그래프 조회 (format: summary | mermaid | json). from/to를 주면 두 화면 사이 최단 경로',
+      description:
+        '앱 화면 그래프 조회 (format: summary | labels | mermaid | json). from/to를 주면 두 화면 사이 최단 경로. ' +
+        'labels 는 화면별 버튼 글자와 첫 화면에서 가는 길만 준다: TC 문구를 실제 화면 글자와 맞출 때 쓴다',
       inputSchema: {
         ...appArg,
-        format: z.enum(['summary', 'mermaid', 'json']).optional().describe('summary(기본): 화면별 한 줄과 나가는 연결. mermaid: 흐름도. json: 요소 key 까지 든 전체 (크다)'),
+        format: z
+          .enum(['summary', 'labels', 'mermaid', 'json'])
+          .optional()
+          .describe('summary(기본): 화면별 한 줄과 나가는 연결. labels: 화면별 버튼 글자와 가는 길. mermaid: 흐름도. json: 요소 key 까지 든 전체 (크다)'),
         from: z.string().optional().describe('경로를 찾을 출발 화면 id'),
         to: z.string().optional().describe('경로를 찾을 도착 화면 id'),
       },
@@ -86,6 +91,7 @@ export function register(server: McpServer): void {
         const p = g.path(from, to);
         return text(p ? p.map((e) => `${e.from} --[${dl.actionLabel(e.action)}]--> ${e.to}`).join('\n') : '경로 없음');
       }
+      if (format === 'labels') return text(g.nodes.size ? dl.formatScreenLabels(dl.screenLabels(g.toJSON())) : '이 앱의 화면 지도가 없습니다');
       if (format === 'mermaid') return text(g.toMermaid());
       if (format === 'json') return json(g.toJSON());
       const lines = [...g.nodes.values()].map((n) => {
