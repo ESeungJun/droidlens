@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { api, type QaCase, type QaPlanSummary, type QaPlanView, type QaRunView } from '../api';
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { api, type QaCase, type QaPlanSummary, type QaPlanDeleteInfo, type QaPlanView, type QaRunView } from '../api';
 import { AuthHelp } from '../AuthHelp';
 import { useApp } from '../App';
 import { useI18n, useT } from '../i18n';
@@ -139,6 +139,28 @@ export function QaTab() {
     setPlans((await run(api.qaPlans())) ?? []);
   };
 
+  // 계획 지우기 확인 (#133). 기록·스크립트는 기본으로 남긴다
+  const [deleting, setDeleting] = useState<QaPlanDeleteInfo | null>(null);
+  const [withRecords, setWithRecords] = useState(false);
+  const askDelete = async (id: string) => {
+    const info = await run(api.qaPlanDeleteInfo(id));
+    if (!info) return;
+    setWithRecords(false);
+    setDeleting(info);
+  };
+  // 다른 계획을 고르면 확인 창을 닫는다
+  useEffect(() => setDeleting(null), [sel]);
+  const doDelete = async () => {
+    const d = deleting;
+    if (!d) return;
+    setDeleting(null); // 먼저 닫아 두 번 누르지 않게
+    const r = await run(api.qaPlanDelete(d.id, withRecords));
+    if (!r) return;
+    toast(t('"{name}" 계획을 지웠습니다', { name: d.name }));
+    if (sel === r.id) setSel(null);
+    setPlans((await run(api.qaPlans())) ?? []);
+  };
+
   const busy = qa.job !== null;
   const plan = view?.plan;
   const byApp = useMemo(() => {
@@ -185,8 +207,8 @@ export function QaTab() {
               <span className="n">{items.length}</span>
             </div>
             {items.map((p) => (
+              <Fragment key={p.id}>
               <div
-                key={p.id}
                 className={`scen-item ${sel === p.id && !showNew ? 'sel' : ''}`}
                 onClick={() => {
                   setCreating(false);
@@ -199,8 +221,46 @@ export function QaTab() {
                     {t('문서 {s}개 · TC {c}개 (고름 {k})', { s: p.sources, c: p.cases, k: p.selected })}
                     {qa.job?.plan === p.id && <span className="qa-live"> · {qa.job.kind === 'extract' ? t('뽑는 중') : t('실행 중')}</span>}
                   </div>
+                  {sel === p.id && !showNew && !deleting && (
+                    <button
+                      className="btn sm danger"
+                      style={{ marginTop: 6 }}
+                      disabled={qa.job?.plan === p.id}
+                      title={qa.job?.plan === p.id ? t('작업이 돌고 있어 지울 수 없습니다') : undefined}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        void askDelete(p.id);
+                      }}
+                    >
+                      {t('계획 지우기')}
+                    </button>
+                  )}
                 </div>
               </div>
+              {deleting?.id === p.id && (
+                <div className="qa-ask" style={{ margin: '0 10px 10px' }}>
+                  <b>{t('"{name}" 계획을 지울까요?', { name: deleting.name })}</b>
+                  <div className="faint" style={{ marginTop: 4 }}>
+                    {t('문서와 회차 {n}개의 결과가 함께 지워집니다. 되돌릴 수 없습니다.', { n: deleting.runs })}
+                  </div>
+                  {deleting.records + deleting.scripts > 0 && (
+                    <label style={{ display: 'flex', gap: 6, marginTop: 8 }}>
+                      <input type="checkbox" checked={withRecords} onChange={(e) => setWithRecords(e.target.checked)} />
+                      <span>{t('TC 기록 {r}개와 스크립트 {s}개도 지우기', { r: deleting.records, s: deleting.scripts })}</span>
+                    </label>
+                  )}
+                  {deleting.running && <div className="v-blocked" style={{ marginTop: 6 }}>{t('이 계획의 회차가 돌고 있어 지울 수 없습니다')}</div>}
+                  <div className="qa-row" style={{ marginTop: 8 }}>
+                    <button className="btn sm danger" disabled={deleting.running} onClick={() => void doDelete()}>
+                      {t('삭제')}
+                    </button>
+                    <button className="btn sm" onClick={() => setDeleting(null)}>
+                      {t('취소')}
+                    </button>
+                  </div>
+                </div>
+              )}
+              </Fragment>
             ))}
           </div>
         ))}

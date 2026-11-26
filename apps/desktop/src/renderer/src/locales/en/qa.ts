@@ -2,6 +2,15 @@
 export const qa: Record<string, string> = {
   'QA 계획': 'QA plans',
   '+ 새 계획': '+ New plan',
+  // #133 계획 지우기
+  '삭제': 'Delete',
+  '계획 지우기': 'Delete plan',
+  '작업이 돌고 있어 지울 수 없습니다': "Can't delete while a job is running",
+  '"{name}" 계획을 지울까요?': 'Delete the plan "{name}"?',
+  '문서와 회차 {n}개의 결과가 함께 지워집니다. 되돌릴 수 없습니다.': "Its documents and the results of {n} runs will be deleted. This can't be undone.",
+  'TC 기록 {r}개와 스크립트 {s}개도 지우기': 'Also delete {r} TC records and {s} scripts',
+  '이 계획의 회차가 돌고 있어 지울 수 없습니다': "A run of this plan is in progress, so it can't be deleted",
+  '"{name}" 계획을 지웠습니다': 'Deleted the plan "{name}"',
   '문서 {s}개 · TC {c}개 (고름 {k})': '{s} docs · {c} TCs ({k} selected)',
   '뽑는 중': 'extracting',
   '실행 중': 'running',
