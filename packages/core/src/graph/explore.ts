@@ -45,6 +45,8 @@ export interface ExploreResult {
   errors: string[];
   /** 이번 탐색에서 지나간 화면과 연결 (결과 강조용) */
   touched: { nodes: string[]; edges: string[] };
+  /** 이번 탐색에서 처음 지도에 오른 화면 (관련 기록·검증하지 않은 화면 표시용, #131) */
+  added: string[];
 }
 
 /** 한 화면에서 해 볼 행동 하나 */
@@ -95,6 +97,7 @@ class Exploration {
   private readonly skipped: ExploreResult['skipped'] = [];
   private readonly errors: string[] = [];
   private readonly touched = { nodes: new Set<string>(), edges: new Set<string>() };
+  private readonly added = new Set<string>();
   // 이번 실행에서 이미 들어가 본 화면. 저장된 그래프의 방문 수를 쓰면 다시 탐색할 때 깊이가 무시된다
   private readonly entered = new Set<string>();
   /** 현재 화면부터 시작한 탐색은 앱을 다시 실행해 돌아오지 않는다 (사용자가 열어 둔 상태를 지우지 않게) */
@@ -131,6 +134,7 @@ class Exploration {
     }
     this.root = await graph.addSnapshot(this.snap, dev);
     this.touched.nodes.add(this.root.id);
+    if (this.root.visits === 1) this.added.add(this.root.id);
     this.log(`시작 화면: ${this.root.label}`, this.root.id);
   }
 
@@ -143,6 +147,7 @@ class Exploration {
       skipped: this.skipped,
       errors: this.errors,
       touched: { nodes: [...this.touched.nodes], edges: [...this.touched.edges] },
+      added: [...this.added],
     };
   }
 
@@ -233,6 +238,7 @@ class Exploration {
         return;
       }
       const to = await this.graph.addSnapshot(after, this.dev);
+      if (to.visits === 1) this.added.add(to.id);
       if (to.id === hereId) {
         if (move.explicit) this.log(`${name} → 같은 화면 (화면이 바뀌지 않음)`, hereId);
         this.snap = after;

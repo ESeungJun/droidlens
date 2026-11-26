@@ -24,6 +24,8 @@ export interface ScenarioStep {
   detail?: string;
   screenshot?: string;
   screen?: string;
+  /** 화면 지도의 화면 id (Activity@시그니처). 지도와 같은 값이라 단계가 어느 화면이었는지 바로 찾는다 (#131) */
+  screenId?: string;
   /** 스크린샷을 찍은 순간 앞 화면이 대상 앱이 아니었으면 그 패키지 (시스템 대화상자·다른 앱이 가린 경우) */
   foreign?: string;
   /** 직전 단계 이후 이 단계까지 한 조작 */

@@ -16,7 +16,7 @@ import {
 } from '@xyflow/react';
 import { Graph, layout as dagreLayout } from '@dagrejs/dagre';
 import { actionKey, shortestPath, startScreenOf as startOf, triedKeys } from '@droidlens/core/graph-model';
-import { api, type GraphAction, type GraphData, type Interaction, type ScreenNode } from '../api';
+import { api, type GraphAction, type GraphData, type Interaction, type ScreenCheck, type ScreenNode } from '../api';
 import { NeedPkg, useApp } from '../App';
 import { useT } from '../i18n';
 import { useTheme } from '../theme';
@@ -58,7 +58,7 @@ function useShot(pkg: string, file?: string) {
   return cacheGet(key) ?? (loaded?.key === key ? loaded.src : undefined);
 }
 
-type SNodeData = { screen: ScreenNode; pkg: string; selected: boolean; start: boolean; dim: boolean; done: number };
+type SNodeData = { screen: ScreenNode; pkg: string; selected: boolean; start: boolean; dim: boolean; done: number; unverified: boolean };
 
 const ScreenCard = memo(({ data }: NodeProps<Node<SNodeData>>) => {
   const src = useShot(data.pkg, data.screen.screenshot);
@@ -80,6 +80,11 @@ const ScreenCard = memo(({ data }: NodeProps<Node<SNodeData>>) => {
           </span>
         ) : null}
       </div>
+      {data.unverified && (
+        <div className="s unverified" title={t('이 화면을 지난 시나리오 기록·TC 가 없습니다')}>
+          {t('검증하지 않은 화면')}
+        </div>
+      )}
       <Handle type="source" position={Position.Right} />
       {/* 되돌아가는 연결은 카드 아래로 나가고 들어와 앞으로 가는 연결과 겹치지 않는다 */}
       <Handle type="source" id="back-out" position={Position.Bottom} />
@@ -176,6 +181,8 @@ export function FlowTab() {
   const t = useT();
   const { theme } = useTheme();
   const [g, setG] = useState<GraphData | null>(null);
+  // 화면마다 지난 기록·TC (#131). 아직 못 읽었으면 null (그동안은 검증 표시를 하지 않는다)
+  const [checks, setChecks] = useState<Record<string, ScreenCheck> | null>(null);
   const [sel, setSel] = useState<string | null>(null);
   const [exploring, setExploring] = useState(false);
   const [tapCount, setTapCount] = useState(0);
@@ -265,11 +272,12 @@ export function FlowTab() {
             start: s.id === start,
             dim: o?.data.dim ?? false,
             done: triedKeys(g.edges, s).size,
+            unverified: !!checks && !checks[s.id]?.verified,
           },
         };
       });
     });
-  }, [g, pkg]);
+  }, [g, pkg, checks]);
 
   // 강조가 바뀐 카드만 data 를 바꾼다
   useEffect(() => {
@@ -296,14 +304,21 @@ export function FlowTab() {
   const reload = useCallback(async () => {
     if (pkg) setG((await run(api.graphGet(pkg))) ?? null);
   }, [pkg, run]);
+  // 화면별 검증은 시나리오 기록을 모두 읽으므로 지도와 따로, 탐색 한 걸음마다가 아니라 지도를 새로 열거나 작업이 끝났을 때만 읽는다.
+  // 기록을 못 읽어도 지도는 보이게 조용히 넘긴다
+  const reloadChecks = useCallback(async () => {
+    setChecks(pkg ? await api.graphChecks(pkg).catch(() => null) : null);
+  }, [pkg]);
 
   useEffect(() => {
     setSel(null);
     setFocus(null);
     moved.current = false; // 다른 앱으로 바뀌면 직접 옮긴 배치는 의미가 없다
     history.current = { undo: [], redo: [] };
+    setChecks(null);
     reload();
-  }, [reload]);
+    reloadChecks();
+  }, [reload, reloadChecks]);
 
   useEffect(
     () =>
@@ -322,7 +337,8 @@ export function FlowTab() {
     return g.edges
       .filter((e) => e.from !== e.to)
       .map((e) => {
-        const name = actionName(e.action);
+        // 이 연결을 지난 TC 가 있으면 수를 붙인다 (#131)
+        const name = actionName(e.action) + (e.tcs?.length ? ` · TC ${e.tcs.length}` : '');
         // 시작 화면 쪽으로 되돌아가는 연결은 앞으로 가는 연결과 겹치지 않게 아래로 돌아가는 점선으로
         const back = (level.get(e.to) ?? Infinity) <= (level.get(e.from) ?? Infinity);
         const focused = focus?.edges.has(e.id);
@@ -360,6 +376,7 @@ export function FlowTab() {
     const r = await run(api.explore(serial, pkg, { maxDepth: depth, fromCurrent }));
     setExploring(false);
     await reload();
+    await reloadChecks();
     if (r) {
       const danger = r.skipped.filter((s) => s.reason === '확인 필수 라벨').length;
       const missing = r.skipped.length - danger;
@@ -383,6 +400,7 @@ export function FlowTab() {
     const r = await run(api.explore(serial, pkg, { maxDepth: depth, startAt: screen.id, only, allowDanger }));
     setExploring(false);
     await reload();
+    await reloadChecks();
     if (!r) return;
     setFocus({ title: t('{s}에서 지정한 동작의 흐름', { s: screen.label }), nodes: new Set(r.touched.nodes), edges: new Set(r.touched.edges) });
     // 시작 화면에서 건너뛴 것 = 지정했지만 실행하지 못한 동작 (화면에서 못 찾았거나 확인 필수 버튼을 허용하지 않음)
@@ -423,6 +441,7 @@ export function FlowTab() {
     const r = await run(api.graphImport(pkg));
     if (!r) return;
     await reload();
+    await reloadChecks();
     toast(
       t('지도를 합쳤습니다: 새 화면 {n}개, 새 연결 {e}개', { n: r.nodes, e: r.edges }) +
         (r.dropped ? t(' (형식이 맞지 않아 버린 항목 {n}개)', { n: r.dropped }) : ''),
@@ -439,6 +458,7 @@ export function FlowTab() {
       for (const k of [...imgCache.keys()]) if (k.startsWith(pkg)) imgCache.delete(k);
       setProgress([]);
       await reload();
+      await reloadChecks();
       toast(t('화면 그래프를 초기화했습니다'));
     }
   };
@@ -459,7 +479,7 @@ export function FlowTab() {
         </label>
         {exploring && <span className="muted">{t('버튼 {n}번 누름', { n: tapCount })}</span>}
         <button className="btn" onClick={async () => serial && (await run(api.graphRecordHere(serial, pkg))) && reload()}>{t('＋ 현재 화면 추가')}</button>
-        <button className="btn" onClick={reload}>↻</button>
+        <button className="btn" onClick={() => (reload(), reloadChecks())}>↻</button>
         <button className="btn" disabled={!g?.nodes.length} onClick={arrange} title={t('화면 카드를 자동으로 다시 배치하고 전체가 보이게 맞춥니다')}>{t('⊞ 정리')}</button>
         <button className="btn" disabled={!g?.nodes.length} onClick={exportMap} title={t('스크린샷을 포함한 지도 파일로 저장합니다. 다른 사람이 가져오면 그 사람 지도에 합쳐집니다. 화면 스크린샷(계정·메시지 등)이 그대로 들어갑니다')}>{t('내보내기')}</button>
         <button className="btn" disabled={exploring} onClick={importMap} title={t('내보낸 지도 파일을 지금 지도에 합칩니다 (같은 화면은 하나로 합침)')}>{t('가져오기')}</button>
@@ -473,6 +493,11 @@ export function FlowTab() {
           <button className="btn" disabled={exploring || !g?.nodes.length} onClick={() => setConfirmReset(true)}>{t('그래프 초기화')}</button>
         )}
         <span className="muted">{t('화면 {n} · 전이 {e}', { n: g?.nodes.length ?? 0, e: g?.edges.length ?? 0 })}</span>
+        {checks && g && g.nodes.some((n) => !checks[n.id]?.verified) && (
+          <span className="muted warn-text" title={t('이 화면을 지난 시나리오 기록·TC 가 없습니다')}>
+            ({t('검증하지 않은 화면 {n}개', { n: g.nodes.filter((n) => !checks[n.id]?.verified).length })})
+          </span>
+        )}
         <span
           className="faint"
           style={{ fontSize: 11, cursor: 'help' }}
@@ -526,6 +551,7 @@ export function FlowTab() {
                 pkg={pkg}
                 busy={exploring || navigating}
                 depth={depth}
+                check={checks?.[selNode.id]}
                 onExplore={(only, allowDanger) => exploreFrom(selNode, only, allowDanger)}
                 onNavigate={() => navigate(selNode)}
                 onPath={() => showPath(selNode)}
@@ -557,6 +583,7 @@ const sameMove = (a: Interaction, b: Interaction) =>
 function ScreenDetail({
   g,
   n,
+  check,
   pkg,
   busy,
   depth,
@@ -566,6 +593,7 @@ function ScreenDetail({
 }: {
   g: GraphData;
   n: ScreenNode;
+  check?: ScreenCheck;
   pkg: string;
   busy: boolean;
   depth: number;
@@ -621,6 +649,7 @@ function ScreenDetail({
         <button className="btn sm" disabled={busy} onClick={onNavigate} title={t('지도에 기록된 경로를 따라 기기를 이 화면으로 옮깁니다')}>{t('이 화면으로 이동')}</button>
         <button className="btn sm" onClick={onPath} title={t('앱 첫 화면에서 이 화면까지 가는 경로만 강조합니다')}>{t('첫 화면에서 경로')}</button>
       </div>
+      {check && <ScreenChecks check={check} />}
 
       <h4 className="faint" style={{ margin: '12px 0 4px', fontSize: 11 }}>{t('동작 지정해서 흐름 그리기')}</h4>
       {targets.length ? (
@@ -693,15 +722,61 @@ function ScreenDetail({
       {ins.length > 0 && (
         <>
           <h4 className="faint" style={{ margin: '10px 0 4px', fontSize: 11 }}>{t('들어오는 경로')}</h4>
-          {ins.map((e) => <div key={e.id} className="mono" style={{ fontSize: 11 }}>{name(e.from)} → {actionName(e.action)}</div>)}
+          {ins.map((e) => <div key={e.id} className="mono" style={{ fontSize: 11 }}>{name(e.from)} → {actionName(e.action)}<EdgeTcs e={e} /></div>)}
         </>
       )}
       {outs.length > 0 && (
         <>
           <h4 className="faint" style={{ margin: '10px 0 4px', fontSize: 11 }}>{t('나가는 경로')}</h4>
-          {outs.map((e) => <div key={e.id} className="mono" style={{ fontSize: 11 }}>{actionName(e.action)} → {name(e.to)}</div>)}
+          {outs.map((e) => <div key={e.id} className="mono" style={{ fontSize: 11 }}>{actionName(e.action)} → {name(e.to)}<EdgeTcs e={e} /></div>)}
         </>
       )}
+    </div>
+  );
+}
+
+const VERDICT_CLASS: Record<string, string> = { pass: 'v-pass', fail: 'v-fail', blocked: 'v-blocked' };
+const VERDICT_LABEL: Record<string, string> = { pass: '통과', fail: '실패', blocked: '막힘' };
+
+/** 이 화면을 지난 검증 (#131): TC 와 기록 수, 없으면 검증하지 않은 화면 */
+function ScreenChecks({ check }: { check: ScreenCheck }) {
+  const t = useT();
+  return (
+    <div className="screen-checks">
+      <h4 className="faint" style={{ margin: '12px 0 4px', fontSize: 11 }}>{t('이 화면을 지난 검증')}</h4>
+      {check.verified ? (
+        <>
+          {check.tcs.length > 0 && (
+            <div className="tc-chips">
+              {check.tcs.map((c) => (
+                <span key={`${c.plan}/${c.case}`} className="pill" title={c.plan}>
+                  <span className="mono">{c.case}</span>
+                  {c.verdict && VERDICT_LABEL[c.verdict] && <span className={VERDICT_CLASS[c.verdict]}> {t(VERDICT_LABEL[c.verdict])}</span>}
+                </span>
+              ))}
+            </div>
+          )}
+          <div className="faint" style={{ fontSize: 11, marginTop: 4 }}>{t('시나리오 기록 {n}개', { n: check.records.length })}</div>
+        </>
+      ) : (
+        <div className="warn-text" style={{ fontSize: 11 }}>{t('검증하지 않은 화면이에요. 이 화면을 지나는 TC 를 더 만들 후보예요.')}</div>
+      )}
+    </div>
+  );
+}
+
+/** 이 연결을 지난 TC (#131). 경로 줄 아래에 따로 두고, TC 하나(번호·판정)는 줄을 나누지 않는다 */
+function EdgeTcs({ e }: { e: GraphData['edges'][number] }) {
+  const t = useT();
+  if (!e.tcs?.length) return null;
+  return (
+    <div className="faint" style={{ paddingLeft: 12, display: 'flex', flexWrap: 'wrap', gap: '0 8px' }} title={t('이 경로를 지난 TC')}>
+      {e.tcs.map((c) => (
+        <span key={`${c.plan}/${c.case}`} style={{ whiteSpace: 'nowrap' }}>
+          {c.case}
+          <span className={VERDICT_CLASS[c.verdict]}> {t(VERDICT_LABEL[c.verdict] ?? c.verdict)}</span>
+        </span>
+      ))}
     </div>
   );
 }

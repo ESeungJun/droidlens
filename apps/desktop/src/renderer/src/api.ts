@@ -22,6 +22,7 @@ import type {
   QaRunIndexItem,
   DesignRunSummary,
   ScenarioData,
+  ScreenCheck,
   StartupResult,
   hierarchyStats,
   qaCoverage,
@@ -208,6 +209,8 @@ export const api = {
   logcatStart: (s: string, pkg: string | undefined, id: number) => call<number | null>('logcatStart', s, pkg, id),
   logcatStop: (id?: number) => call<void>('logcatStop', id),
   graphGet: (pkg: string) => call<GraphData>('graphGet', pkg),
+  /** 화면 id → 그 화면을 지난 기록·TC (#131) */
+  graphChecks: (pkg: string) => call<Record<string, ScreenCheck>>('graphChecks', pkg),
   graphImage: (pkg: string, file: string) => call<string>('graphImage', pkg, file),
   graphRecord: (s: string, pkg: string, action: GraphAction) =>
     call<{ recorded: false; skipped?: boolean } | { recorded: true; from: string; to: string; isNew: boolean }>('graphRecord', s, pkg, action),
@@ -305,6 +308,6 @@ export const api = {
   onQaEvent: (fn: (e: QaEvent) => void) => window.dl.on('qa:event', (p) => fn(p as QaEvent)),
 };
 
-export type { ApkAnalysis, AppInfo, CurrentScreen, DeviceInfo, DeviceSummary, GraphAction, GraphData, Hierarchy, Interaction, LogLine, PackageSummary, ScenarioData };
+export type { ApkAnalysis, AppInfo, CurrentScreen, DeviceInfo, DeviceSummary, GraphAction, GraphData, Hierarchy, Interaction, LogLine, PackageSummary, ScenarioData, ScreenCheck };
 export type { QaCase, QaPlan, QaPlanSummary, QaPlanDeleteInfo, QaRun, QaRunSummary, QaRunIndexItem, DesignRunSummary };
 export type { ViewNode, ScreenNode, NetworkEntry, NetworkDetail, MockRule, PrefsFile, DbInfo, QueryResult, SdkEvent, SdkInfo, PerfSample, StartupResult } from '@droidlens/core';

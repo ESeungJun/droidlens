@@ -408,3 +408,7 @@ label.chk { display: inline-flex; gap: 6px; align-items: center; color: var(--fg
 .qa-colpick .chk { justify-content: space-between; }
 .qa-colpick-k { min-width: 64px; }
 .qa-colpick select { flex: 1; min-width: 0; }
+/* 화면 흐름: 검증하지 않은 화면·지난 TC (#131) */
+.screen-node .s.unverified { color: var(--warn); }
+.screen-checks { word-break: keep-all; }
+.tc-chips { display: flex; flex-wrap: wrap; gap: 4px; }
