@@ -96,6 +96,43 @@ test('qa: 만들기 → 문서 넣기 → 읽기(데이터로 감쌈) → 저장
   assert.match((await s.call('qa_plan_list')).text, new RegExp(`${id}: 로그인 QA · com\\.example\\.app · 문서 3 · 요구사항 2 · TC 2 \\(고름 1\\)`));
 });
 
+test('qa: TC 표는 넣는 순간 원문 그대로 들어오고, 저장 응답이 TC 문서가 덮은 요구사항과 추가 제안을 알린다 (#129)', async () => {
+  const id = await newPlan(s, 'TC 표 QA');
+  const csv = put('tc.csv', 'TC ID,테스트 항목,테스트 절차,기대 결과\nA-1,정상 로그인,"1. 이메일 입력\n2. 다음",홈이 보인다\n');
+  const add = await s.call('qa_source_add', { plan: id, input: csv });
+  assert.equal(add.isError, false, add.text);
+  assert.match(add.text, /TC 1개를 원문 그대로 가져왔습니다 \(TC 문서 갈래/);
+  assert.match(add.text, /옮겨 적거나 다시 만들지 마세요/);
+  const saved = await s.call('qa_plan_save', {
+    plan: id,
+    requirements: noSourceReqs,
+    cases: [
+      { id: 'TC-001', requirements: ['R-01'] },
+      { id: 'TC-002', title: '계정 삭제 취소', requirements: ['R-02'], priority: 'P1', kind: 'exception', steps: ['취소'], expected: ['그대로'] },
+    ],
+  });
+  assert.equal(saved.isError, false, saved.text);
+  assert.match(saved.text, /갈래: 기획 흐름 1, TC 문서 1/);
+  assert.match(saved.text, /TC 문서가 이미 덮은 요구사항: R-01 — 기획서 갈래에서 같은 내용의 TC 를 또 만들지 마세요/);
+  assert.match(saved.text, /추가 제안 1개\(TC-002\)/);
+  assert.doesNotMatch(saved.text, /R-01\(예외 없음\)/, 'TC 문서가 덮은 요구사항은 정상·예외가 빠졌다고 하지 않는다');
+  const view = await s.call('qa_plan_get', { plan: id });
+  assert.match(view.text, /✓ TC-001 \[TC 문서 · 정상 P1\] 정상 로그인 ← R-01/);
+  assert.match(view.text, /· 추가 제안 TC-002/);
+  const edit = await s.call('qa_case_update', { plan: id, case: 'TC-001', patch: { title: '바꿈' } });
+  assert.equal(edit.isError, true);
+  assert.match(edit.text, /원문/);
+  // 에이전트는 추가 제안 TC 를 고를 수 없다
+  const pick = await s.call('qa_case_update', { plan: id, case: 'TC-002', patch: { selected: true } });
+  assert.equal(pick.isError, true);
+  assert.match(pick.text, /추가 제안/);
+  // TC 문서 TC 번호에 다른 내용을 보내면 반영하지 않았다고 알린다
+  const over = await s.call('qa_plan_save', { plan: id, requirements: noSourceReqs, cases: [{ id: 'TC-001', title: '다른 내용', requirements: ['R-01'] }] });
+  assert.equal(over.isError, false, over.text);
+  assert.match(over.text, /TC-001 는 TC 문서 TC 라 요구사항·확인 필수 표시만 반영했어요/);
+});
+
+const noSourceReqs = requirements.map(({ source, ...r }) => r);
 const noSource = requirements.map(({ source, ...r }) => r);
 
 test('qa_case_update: 허용·스크립트는 못 바꾸고 확인 필수 TC 는 고르지 못한다. qa_case_allow 는 물을 수 없으면 하지 않는다', async () => {
