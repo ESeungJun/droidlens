@@ -15,6 +15,8 @@ import type {
   QaCase,
   QaPlan,
   QaPlanSummary,
+  QaPlanDeleteInfo,
+  QaPlanDeleteResult,
   QaRun,
   QaRunSummary,
   QaRunIndexItem,
@@ -274,6 +276,9 @@ export const api = {
   qaPlanCreate: (name: string, app?: string) => call<QaPlan>('qaPlanCreate', name, app),
   qaPlanGet: (id: string) => call<QaPlanView>('qaPlanGet', id),
   qaPlanRename: (id: string, name: string, app?: string) => call<QaPlan>('qaPlanRename', id, name, app),
+  qaPlanDeleteInfo: (id: string) => call<QaPlanDeleteInfo>('qaPlanDeleteInfo', id),
+  /** 계획 폴더를 지운다. withRecords 면 이 계획의 TC 기록·스크립트도 (#133) */
+  qaPlanDelete: (id: string, withRecords: boolean) => call<QaPlanDeleteResult>('qaPlanDelete', id, withRecords),
   /** 파일 대화상자를 띄워 고른 문서를 넣는다 (취소하면 빈 목록) */
   qaSourcePick: (id: string) => call<QaSourceAdded[]>('qaSourcePick', id),
   qaSourceLink: (id: string, url: string) => call<QaSourceAdded>('qaSourceLink', id, url),
@@ -295,5 +300,5 @@ export const api = {
 };
 
 export type { ApkAnalysis, AppInfo, CurrentScreen, DeviceInfo, DeviceSummary, GraphAction, GraphData, Hierarchy, Interaction, LogLine, PackageSummary, ScenarioData };
-export type { QaCase, QaPlan, QaPlanSummary, QaRun, QaRunSummary, QaRunIndexItem, DesignRunSummary };
+export type { QaCase, QaPlan, QaPlanSummary, QaPlanDeleteInfo, QaRun, QaRunSummary, QaRunIndexItem, DesignRunSummary };
 export type { ViewNode, ScreenNode, NetworkEntry, NetworkDetail, MockRule, PrefsFile, DbInfo, QueryResult, SdkEvent, SdkInfo, PerfSample, StartupResult } from '@droidlens/core';

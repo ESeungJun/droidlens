@@ -23,6 +23,12 @@ export function register(handle: Handle): void {
     const plan = await dl.loadQaPlan(id);
     return { plan, coverage: dl.qaCoverage(plan), review: dl.qaReviewList(plan), runs: await dl.listQaRunIds(id) };
   });
+  // 지우기 (#133): 사람이 확인한 뒤에만. 이 계획의 작업(TC 뽑기·회차)이 돌고 있으면 막는다
+  handle('qaPlanDeleteInfo', async (id: string) => dl.qaPlanDeleteInfo(id));
+  handle('qaPlanDelete', async (id: string, withRecords?: boolean) => {
+    if (qaJob()?.plan === id) throw new Error('이 계획의 작업이 돌고 있어 지울 수 없습니다. 멈추거나 끝난 뒤에 지워 주세요');
+    return dl.deleteQaPlan(id, { withRecords: withRecords === true });
+  });
   handle('qaPlanRename', async (id: string, name: string, app?: string) => {
     const plan = await dl.loadQaPlan(id);
     return dl.saveQaPlan({ ...plan, name: String(name ?? '').trim(), app: app || undefined });
