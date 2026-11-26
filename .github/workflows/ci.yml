@@ -4,6 +4,10 @@ on:
     branches: [master, develop]
   pull_request:
 
+# 빌드·시험·하네스 검사는 저장소를 읽기만 한다. PR 코드가 도는 작업에 쓰기 권한을 주지 않는다
+permissions:
+  contents: read
+
 jobs:
   build:
     runs-on: ubuntu-latest

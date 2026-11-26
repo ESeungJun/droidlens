@@ -12,13 +12,14 @@ scan() { # <폴더> <정규식> <규칙 설명>
   while IFS= read -r line; do
     code="${line#*:*:}"
     case "$(printf '%s' "$code" | sed 's/^[[:space:]]*//')" in //* | \**) continue ;; esac
-    hit "${line%%:${code}}" "$3"
+    # 위치는 앞의 두 칸(파일:줄)만. 코드 글을 패턴으로 쓰지 않는다(글롭 문자가 있으면 안 잘림)
+    hit "$(printf '%s' "$line" | cut -d: -f1,2)" "$3"
   done < <(grep -rnE --include='*.ts' --include='*.tsx' --include='*.mts' --include='*.js' --include='*.mjs' "$2" "$1" 2>/dev/null)
 }
 
-scan packages/core/src "(from|import\(|require\()[[:space:]]*['\"](@droidlens/(mcp|desktop)|[./]*apps/desktop|[./]*packages/mcp)" \
+scan packages/core/src "(from|import|import\(|require\()[[:space:]]*['\"](@droidlens/(mcp|desktop)|[./]*apps/desktop|[./]*packages/mcp)" \
   "S1: core 가 데스크톱·MCP 를 import 함. Fix: 공통 로직을 core 로 옮기고 앱이 core 를 부르게 하세요"
-scan apps/desktop/src/renderer "(from|import\(|require\()[[:space:]]*['\"](electron|node:[a-z_/]+|fs|fs/promises|child_process|path|os|net)['\"]" \
+scan apps/desktop/src/renderer "(from|import|import\(|require\()[[:space:]]*['\"](electron|node:[a-z_/]+|fs|fs/promises|child_process|path|os|net)['\"]" \
   "S2: 렌더러가 Node·electron 을 직접 씀. Fix: main 에 IPC 를 두고 api.ts(window.dl) 로 부르세요"
 scan apps/desktop/src "(spawn|execFile|execFileSync|spawnSync|exec|execSync)\([[:space:]]*['\"]adb['\"]" \
   "S3: 데스크톱이 adb 를 직접 띄움. Fix: @droidlens/core 의 Adb·DeviceAdb 를 쓰세요"

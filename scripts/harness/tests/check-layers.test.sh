@@ -46,5 +46,15 @@ check "S3: MCP 가 adb 를 직접 띄우면 실패" '! run >/dev/null'
 reset; ok_tree; put apps/desktop/src/main/f.ts "// spawn('adb') 는 쓰지 않는다\nconst m = /x/.exec(s);\n"
 check "주석과 정규식 exec 는 안 잡음" 'run >/dev/null'
 
+reset; ok_tree; put apps/desktop/src/renderer/src/bad.tsx "import 'node:fs';\n"
+check "S2: 렌더러의 가져오기만 하는 import 도 실패" '! run >/dev/null'
+
+reset; ok_tree; put packages/core/src/bad3.ts "export { r } from '@droidlens/mcp';\n"
+check "S1: core 가 MCP 를 다시 내보내도 실패" '! run >/dev/null'
+
+reset; ok_tree; put packages/core/src/bad4.ts "import { r } from '@droidlens/mcp'; // [메모] *\n"
+out=$(run)
+check "줄에 글롭 문자가 있어도 위치는 파일:줄만" 'printf "%s" "$out" | grep -q "packages/core/src/bad4.ts:1: S1"'
+
 echo "check-layers 시험: 통과 $pass · 실패 $fail"
 [ "$fail" -eq 0 ]
