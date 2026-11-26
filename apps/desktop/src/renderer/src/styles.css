@@ -284,6 +284,9 @@ label.chk { display: inline-flex; gap: 6px; align-items: center; color: var(--fg
 .scen-group .n { color: var(--fg-faint); font-weight: 400; }
 .scen-item { display: flex; gap: 8px; align-items: flex-start; }
 .scen-item .scen-body { flex: 1; min-width: 0; }
+.scen-item.nested { padding-left: 34px; background: color-mix(in srgb, var(--panel-2) 50%, transparent); }
+.scen-item.nested.sel { background: var(--accent-dim); }
+.scen-fold { border: 0; background: none; color: var(--fg-faint); cursor: pointer; padding: 0 2px; font-size: 12px; line-height: 20px; }
 .step pre { white-space: pre-wrap; font-family: var(--mono); font-size: 11px; color: var(--fg-dim); margin: 6px 0 0; }
 .badge { font-size: 10px; font-weight: 700; padding: 1px 7px; border-radius: 5px; color: var(--on-accent); margin-right: 6px; }
 .b-pass { background: var(--accent); } .b-fail { background: var(--err); } .b-info { background: var(--info); } .b-skip { background: var(--fg-faint); }

@@ -16,6 +16,7 @@ import type {
   QaPlanSummary,
   QaRun,
   QaRunSummary,
+  QaRunIndexItem,
   DesignRunSummary,
   ScenarioData,
   StartupResult,
@@ -277,9 +278,12 @@ export const api = {
   qaConfirm: (id: string, approve: boolean) => call<boolean>('qaConfirm', id, approve),
   qaRunGet: (id: string, runId: string) => call<QaRunView>('qaRunGet', id, runId),
   qaReport: (id: string, runId: string) => call<{ html: string; csv: string; junit: string }>('qaReport', id, runId),
+  qaRunIndex: () => call<QaRunIndexItem[]>('qaRunIndex'),
+  qaRunExport: (id: string, runId: string, kind: 'xlsx' | 'html') => call<{ path: string; bytes: number }>('qaRunExport', id, runId, kind),
+  qaRunPreview: (id: string, runId: string) => call<string>('qaRunPreview', id, runId),
   onQaEvent: (fn: (e: QaEvent) => void) => window.dl.on('qa:event', (p) => fn(p as QaEvent)),
 };
 
 export type { ApkAnalysis, AppInfo, CurrentScreen, DeviceInfo, DeviceSummary, GraphAction, GraphData, Hierarchy, Interaction, LogLine, PackageSummary, ScenarioData };
-export type { QaCase, QaPlan, QaPlanSummary, QaRun, QaRunSummary, DesignRunSummary };
+export type { QaCase, QaPlan, QaPlanSummary, QaRun, QaRunSummary, QaRunIndexItem, DesignRunSummary };
 export type { ViewNode, ScreenNode, NetworkEntry, NetworkDetail, MockRule, PrefsFile, DbInfo, QueryResult, SdkEvent, SdkInfo, PerfSample, StartupResult } from '@droidlens/core';

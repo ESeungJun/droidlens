@@ -13,6 +13,7 @@
 apps/desktop/src/renderer/src/styles.css      # 토큰 원본 + 기준선 #94 (44곳 중 변수 정의 38줄)
 packages/core/src/scenario.ts                 # 시나리오 리포트 HTML 자체 토큰 + 기준선 #94
 packages/core/src/qa/report.ts                # QA 결과표 HTML 자체 토큰 + 기준선 #94
+packages/core/src/qa/export.ts                # 단계별 HTML 단독 파일의 자체 :root 토큰 (#98)
 packages/core/src/design/report.ts            # 디자인 비교 리포트 HTML 자체 토큰 + 기준선 #94
 
 # 영구 예외: 색이 화면 스타일이 아니라 데이터·입력이다

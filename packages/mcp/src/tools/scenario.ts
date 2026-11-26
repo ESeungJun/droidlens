@@ -131,7 +131,7 @@ export function register(server: McpServer): void {
       scenario = await dl.Scenario.start(name, {
         goal: goal ?? tcCase?.title,
         packageName,
-        ...(tc ? { tc: { plan: tc.plan, case: tc.case } } : {}),
+        ...(tc ? { tc: { plan: tc.plan, case: tc.case, ...(tc.run ? { run: tc.run } : {}) } } : {}),
         device: info ? `${info.manufacturer} ${info.model} (Android ${info.androidVersion})` : dev.serial,
       });
       // 검사가 비교하는 시각(네트워크·이벤트·크래시)은 기기 시계 기준이다

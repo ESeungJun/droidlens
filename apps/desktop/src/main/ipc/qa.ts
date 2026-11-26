@@ -1,4 +1,4 @@
-import { dialog } from 'electron';
+import { BrowserWindow, dialog, shell } from 'electron';
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import * as dl from '@droidlens/core';
@@ -100,4 +100,43 @@ export function register(handle: Handle): void {
     const f = await dl.writeQaReport(await dl.loadQaPlan(id), await dl.loadQaRun(id, runId));
     return { html: f.html, csv: f.csv, junit: f.junit };
   });
+  // #98 검증 기록에서 회차로 묶기·내보내기
+  handle('qaRunIndex', async () => dl.qaRunIndex());
+  handle('qaRunExport', async (id: string, runId: string, kind: 'xlsx' | 'html') => {
+    if (kind !== 'xlsx' && kind !== 'html') throw new Error('잘못된 형식입니다');
+    return dl.writeQaRunExport(id, runId, kind);
+  });
+  handle('qaRunPreview', async (id: string, runId: string) => {
+    const { path } = await dl.writeQaRunExport(id, runId, 'html');
+    openPreview(path);
+    return path;
+  });
+}
+
+/**
+ * 단계별 리포트를 앱 안 창으로 연다 (#98). 우리가 만든 파일만 띄우고, 노드·preload 없는 sandbox 창이다.
+ * 다른 페이지로 가거나 새 창을 열려 하면 막고, http(s) 링크만 기본 브라우저로 넘긴다.
+ */
+function openPreview(file: string): void {
+  const parent = getWindow() ?? undefined;
+  const win = new BrowserWindow({
+    width: 1100,
+    height: 900,
+    parent,
+    title: 'DroidLens',
+    backgroundColor: parent?.getBackgroundColor(),
+    webPreferences: { sandbox: true, contextIsolation: true, nodeIntegration: false },
+  });
+  const external = (url: string) => {
+    if (/^https?:\/\//i.test(url)) void shell.openExternal(url);
+  };
+  win.webContents.setWindowOpenHandler(({ url }) => {
+    external(url);
+    return { action: 'deny' };
+  });
+  win.webContents.on('will-navigate', (e, url) => {
+    e.preventDefault();
+    external(url);
+  });
+  void win.loadFile(file);
 }
