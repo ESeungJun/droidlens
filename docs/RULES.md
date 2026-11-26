@@ -17,7 +17,7 @@
 |---|---|---|---|---|---|
 | 1 | main 의 파일 IPC 는 DroidLens 데이터 폴더 안 경로만 연다 | 설계서 S4 | 글 | | `apps/desktop/src/main/ipc/files.ts` 의 `insideHome` 을 거친다. 시험이 생기면 장치로 옮긴다 |
 | 2 | 색은 디자인 토큰으로만 쓴다(하드코딩 금지) | design-system 4절 | `scripts/harness/check-tokens.sh` | `scripts/harness/tests/check-tokens.test.sh` | 토큰 원본·기준선은 `scripts/harness/tokens.allow`. 2026-11-26 기준선: 데스크톱 CSS·리포트 HTML 3곳, 이슈 #94 |
-| 3 | 기능 지도의 코드·확인 스크립트·시나리오가 실제로 있다 | qa-check | `scripts/harness/check-map.sh` | `scripts/harness/tests/check-map.test.sh` | 지도는 `docs/기능지도.md`, 확인 스크립트는 `scripts/verify/` |
+| 3 | 기능 지도의 코드·확인 스크립트·시나리오가 실제로 있다 | qa-check | `scripts/harness/check-map.sh` | `scripts/harness/tests/check-map.test.sh` | 지도는 `docs/기능지도.md`, 확인 스크립트는 `scripts/verify/`(지도에 없는 `F<번호>-…` 스크립트도 실패), 시나리오는 `docs/시나리오.md` |
 | 4 | core 는 데스크톱·MCP 를 import 하지 않는다 | 설계서 S1 | `scripts/harness/check-layers.sh` | `scripts/harness/tests/check-layers.test.sh` | |
 | 5 | 렌더러는 Node·electron 모듈을 직접 쓰지 않는다(main 과는 `window.dl` 로만) | 설계서 S2 | `scripts/harness/check-layers.sh` | `scripts/harness/tests/check-layers.test.sh` | |
 | 6 | 데스크톱·MCP 는 adb 를 직접 띄우지 않는다 | 설계서 S3 | `scripts/harness/check-layers.sh` | `scripts/harness/tests/check-layers.test.sh` || `'adb'` 를 글자 그대로 넘긴 호출만 잡는다(변수로 넘기면 리뷰에서 본다) |

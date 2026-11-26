@@ -55,4 +55,6 @@ jobs:
       - run: bash scripts/harness/check-layers.sh
       - run: bash scripts/harness/check-tokens.sh
       - run: bash scripts/harness/check-map.sh
+      # 기기 확인 스크립트는 CI 에서 돌리지 못해 문법만 본다(scripts/verify, #91)
+      - run: for f in scripts/verify/*.sh; do bash -n "$f" || exit 1; done
       - run: for t in scripts/harness/tests/*.test.sh; do bash "$t" || exit 1; done
