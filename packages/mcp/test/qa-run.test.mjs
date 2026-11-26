@@ -103,7 +103,7 @@ test('첫 회차: 스크립트 없는 TC 는 우선순위 순으로 넘기고, �
   const r1 = runJson(id, run).results.find((x) => x.case === 'TC-001');
   assert.equal(r1.status, 'pass');
   assert.equal(r1.mode, 'agent');
-  assert.ok(r1.script?.startsWith('TC-001'));
+  assert.equal(r1.script, 'TC-001_다음');
   assert.ok(r1.report?.endsWith('.html'));
   const plan = JSON.parse((await s.call('qa_plan_get', { plan: id, full: true })).text);
   assert.match(plan.cases[0].scriptHash, /^[0-9a-f]{64}$/);
@@ -255,7 +255,8 @@ test('확인 필수 TC: 허용·같은 스크립트면 누르고, 파일이 바�
     await allow();
     s.setUi(ui({ cls: 'android.widget.Button', text: '계정 삭제', bounds: [0, 200, 600, 300], clickable: true }));
     const run = runOf((await s.call('qa_run_scripts', { plan: id })).text);
-    await s.call('scenario_start', { name: '삭제', tc: { plan: id, case: 'TC-003', run } });
+    // 에이전트처럼 시나리오 이름을 TC 번호만으로 지어도 스크립트 이름에 번호가 한 번만 붙는다 (#92)
+    await s.call('scenario_start', { name: 'TC-003', tc: { plan: id, case: 'TC-003', run } });
     assert.equal((await s.call('tap', { text: '계정 삭제', allowDanger: true })).isError, false);
     await s.call('scenario_step', { title: '버튼', assert: { visible: { text: '계정 삭제' } }, screenshot: false });
     assert.match((await s.call('scenario_finish', { verdict: 'pass', summary: 'ok' })).text, /TC-003 에 스크립트를 이었습니다/);
@@ -271,6 +272,7 @@ test('확인 필수 TC: 허용·같은 스크립트면 누르고, 파일이 바�
 
     // 파일을 고치면 확인 필수 버튼은 누르지 않는다
     const script = (await loadQaPlan(id)).cases.find((x) => x.id === 'TC-003').script;
+    assert.equal(script, 'TC-003');
     const file = join(s.dir, 'home', 'scripts', `${script}.yaml`);
     writeFileSync(file, readFileSync(file, 'utf8') + '# 바뀜\n');
     s.clearLog();
