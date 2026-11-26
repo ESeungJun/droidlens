@@ -20,6 +20,10 @@
     "./qa-note": {
       "types": "./dist/qa-note.d.ts",
       "default": "./dist/qa-note.js"
+    },
+    "./claude-auth": {
+      "types": "./dist/claude-auth.d.ts",
+      "default": "./dist/claude-auth.js"
     }
   },
   "scripts": {

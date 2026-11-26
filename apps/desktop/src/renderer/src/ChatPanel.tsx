@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { api, type ChatMessage } from './api';
+import { AuthHelp } from './AuthHelp';
 import { useApp } from './App';
 import { useT, type Vars } from './i18n';
 
@@ -52,8 +53,10 @@ export function ChatPanel({ onClose }: { onClose(): void }) {
   // 에이전트가 요청한 되돌릴 수 없는 조작. 사용자가 승인·거부를 누를 때까지 떠 있다 (여러 개면 온 순서대로 하나씩)
   const [asks, setAsks] = useState<Ask[]>([]);
 
-  useEffect(() => {
+  const checkClaude = () =>
     api.chatStatus().then((c) => setClaude({ version: c.version })).catch((e) => setClaude({ error: (e as Error).message }));
+  useEffect(() => {
+    checkClaude();
     // 패널을 닫으면 보이지 않는 곳에서 에이전트가 기기를 계속 조작하지 않게 진행 중인 실행을 멈춘다
     return () => {
       if (busyRef.current) api.chatStop().catch(() => undefined);
@@ -184,6 +187,7 @@ export function ChatPanel({ onClose }: { onClose(): void }) {
         {claude?.error && (
           <div className="chat-note error">
             {t(claude.error)}
+            <AuthHelp text={claude.error} onRetry={checkClaude} />
             <div className="faint" style={{ marginTop: 6 }}>{t('대화창은 이 컴퓨터의 Claude Code 로그인을 사용합니다.')}</div>
           </div>
         )}
@@ -212,7 +216,10 @@ export function ChatPanel({ onClose }: { onClose(): void }) {
               {it.result !== undefined && <pre>{it.result.slice(0, 3000)}</pre>}
             </details>
           ) : (
-            <div key={i} className={`chat-note ${it.error ? 'error' : ''}`}>{t(it.text, it.vars)}</div>
+            <div key={i} className={`chat-note ${it.error ? 'error' : ''}`}>
+              {t(it.text, it.vars)}
+              {it.error && <AuthHelp text={it.text} />}
+            </div>
           ),
         )}
         {busy && <div className="chat-note">{t('작업 중…')}</div>}

@@ -13,7 +13,7 @@ const INVOKE = new Set([
   'qaCaseAllow', 'qaCaseUpdate', 'qaConfirm', 'qaExtract', 'qaJob', 'qaPlanCreate', 'qaPlanGet', 'qaPlanRename', 'qaPlans', 'qaReport', 'qaRun', 'qaRunExport', 'qaRunGet', 'qaRunIndex', 'qaRunPreview',
   'qaSelect', 'qaSourceLink', 'qaSourcePick', 'qaStop', 'perfSample', 'perfStartup', 'platform', 'recordStart', 'recordStatus', 'recordStop', 'registerMcp', 'reveal',
   'saveScreenshot', 'scenarioDelete', 'scenarioImage', 'scenarios', 'screenshot', 'screenshotPng', 'scriptDelete', 'scriptRead',
-  'scriptRun', 'scriptsList', 'scriptStop', 'scriptWrite', 'sdk', 'sdkApps', 'setAdbPath', 'setTheme', 'snapshot', 'stop', 'swipe', 'tap',
+  'scriptRun', 'scriptsList', 'scriptStop', 'scriptWrite', 'sdk', 'sdkApps', 'setAdbPath', 'setClaudeConfigDir', 'setTheme', 'snapshot', 'stop', 'swipe', 'tap',
   'typeText', 'updateCheck', 'updateInstall',
 ]);
 /** 메인이 보내는 이벤트 채널 */

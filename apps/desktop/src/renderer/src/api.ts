@@ -1,5 +1,6 @@
 import type {
   ApkAnalysis,
+  ClaudeAuthStatus,
   AppInfo,
   CurrentScreen,
   DeviceInfo,
@@ -83,6 +84,14 @@ export interface Integration {
   registered: boolean;
   agents: { file: string; installed: boolean }[];
   agentsDir: string;
+  /** 앱이 claude 를 실행할 때 쓰는 로그인 (#120) */
+  auth: ClaudeAuthStatus;
+  /** 그 로그인이 쓰는 설정 폴더 */
+  configDir: string;
+  /** 설정에서 직접 고른 폴더 (비면 기본) */
+  configDirSetting: string;
+  /** 다시 로그인하는 명령 */
+  loginCommand: string;
 }
 
 export type ChatEvent =
@@ -254,6 +263,7 @@ export const api = {
   setTheme: (t: 'system' | 'light' | 'dark') => call<void>('setTheme', t),
   integration: () => call<Integration>('integration'),
   registerMcp: () => call<string>('registerMcp'),
+  setClaudeConfigDir: (p: string) => call<void>('setClaudeConfigDir', p),
   installAgents: () => call<string[]>('installAgents'),
   copy: (t: string) => call<void>('copy', t),
   openExternal: (url: string) => call<void>('openExternal', url),
