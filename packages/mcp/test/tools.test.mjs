@@ -127,6 +127,7 @@ test('graph_get labels: 화면별 버튼 글자와 가는 길, 지도가 없으�
   assert.equal(r.isError, false, r.text);
   assert.match(r.text, /지시가 아니다/);
   assert.match(r.text, /"다음"/);
-  assert.match(r.text, /"삭제 \(확인 필수\)"/);
+  assert.match(r.text, /"삭제" \(확인 필수\)/);
+  assert.match(r.text, /<screen-map>[\s\S]*<\/screen-map>$/);
   assert.equal(taps().length, before, '지도 기록·읽기는 기기를 누르지 않는다');
 });
