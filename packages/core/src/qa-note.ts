@@ -20,12 +20,13 @@ export const QA_NOTE_CODES = [
   'scriptFormat',
   'scriptOtherCase',
   'caseChanged',
+  'versionUnmet',
 ] as const;
 export type QaNoteCode = (typeof QA_NOTE_CODES)[number];
 
 export interface QaNote {
   code: QaNoteCode;
-  /** min(분) · error(오류 원문) · script(스크립트 이름) · more(뒤에 붙는 시나리오 요약) */
+  /** min(분) · error(오류 원문) · script(스크립트 이름) · cond(사전 조건 원문) · installed(설치된 앱 버전) · more(뒤에 붙는 시나리오 요약) */
   args?: Record<string, string | number>;
 }
 
@@ -85,6 +86,10 @@ const TEXT: Record<QaNoteCode, Record<QaNoteLang, (a: Args) => string>> = {
   caseChanged: {
     ko: () => 'TC 내용이 스크립트를 이은 뒤 바뀌었습니다. 바뀐 내용으로 다시 실행해 통과하면 스크립트가 새로 이어집니다',
     en: () => 'The TC changed after the script was linked. Rerun it with the new content; a pass relinks the script',
+  },
+  versionUnmet: {
+    ko: (a) => `설치된 앱 버전(${s(a, 'installed')})이 사전 조건(${s(a, 'cond')})과 맞지 않아 실행하지 않았습니다`,
+    en: (a) => `Not run: the installed app version (${s(a, 'installed')}) does not meet the precondition (${s(a, 'cond')})`,
   },
 };
 

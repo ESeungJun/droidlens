@@ -12,6 +12,7 @@ import { waitScreenSettled, type StepOutput } from './common.js';
 import { describeSetup, describeStep, stepReport } from './describe.js';
 import { collectScripts, loadScript, type Script } from './schema.js';
 import { runStep, type StepContext } from './steps.js';
+import { scriptSetupChangesData } from '../qa/continuity.js';
 
 /** 스크립트 실행 흐름: 준비(앱 실행·Prefs·목) → 단계 반복 → 정리(목 지우기) → 리포트. 단계 하나의 실행은 steps.ts */
 
@@ -30,6 +31,11 @@ export interface ScriptRunOptions {
   guardDanger?: boolean;
   /** QA 회차에서 돌리면 그 회차 id. 기록의 tc.run 에 적어 검증 기록이 회차로 묶인다 (#105) */
   qaRun?: string;
+  /**
+   * 앱을 강제 종료하지 않고 첫 화면부터 시작한다 (프로세스는 그대로, 화면 스택만 비움).
+   * QA 회차에서 앞 TC 가 통과해 이어 갈 때 쓴다 (#130). 준비가 데이터를 바꾸면(clearData·prefs·mocks) 무시하고 재시작한다
+   */
+  keepProcess?: boolean;
 }
 
 export interface RunResult {
@@ -40,6 +46,8 @@ export interface RunResult {
   durationMs: number;
   report: string;
   scenario: ScenarioData;
+  /** 준비 단계에서 앱을 강제 종료하고 새로 띄웠는지 */
+  restarted: boolean;
 }
 
 /** 지금 앞 화면이 대상 앱이 아니면 그 패키지 이름 (런처로 나간 경우 포함). 같거나 모르면 undefined */
@@ -56,6 +64,8 @@ class ScriptRun {
   private passed = 0;
   private failed = 0;
   private skipped = 0;
+  /** 준비 단계에서 앱을 강제 종료하고 새로 띄웠는지 (기록·회차 재시작 횟수) */
+  private restarted = false;
   private stopped = false;
   /** 단계가 직접 만든 이미지 (스크린샷 비교의 차이 이미지). 있으면 새로 찍지 않고 이것을 남긴다 */
   private readonly out: StepOutput = {};
@@ -137,7 +147,7 @@ class ScriptRun {
   }
 
   private result(verdict: RunResult['verdict'], report: string, failed = this.failed): RunResult {
-    return { verdict, passed: this.passed, failed, skipped: this.skipped, durationMs: Date.now() - this.t0, report, scenario: this.scenario.data };
+    return { verdict, passed: this.passed, failed, skipped: this.skipped, durationMs: Date.now() - this.t0, report, scenario: this.scenario.data, restarted: this.restarted };
   }
 
   /** 준비 단계. 실패하면 blocked 결과를 돌려준다 (단계는 돌리지 않는다) */
@@ -155,11 +165,16 @@ class ScriptRun {
           if (saved.id) this.addedMocks.push(saved.id);
         }
       }
-      if (script.setup?.restart !== false) await launchAndSettle(dev, app, { restart: true });
+      if (script.setup?.restart !== false) {
+        this.restarted = !this.opts.keepProcess || scriptSetupChangesData(script.setup);
+        await launchAndSettle(dev, app, { restart: this.restarted });
+      }
       // 버벅인 프레임 비율 assert 가 준비 단계를 빼고 스크립트 단계만 보게 한다
       await resetFrameStats(dev, app).catch(() => undefined);
       const seen = await this.flow?.observe();
-      await this.record('준비: 앱 실행', 'info', describeSetup(script.setup), script.screenshots === 'all', seen?.screen);
+      const kept = script.setup?.restart !== false && !this.restarted ? '앞 TC 에 이어 앱을 끄지 않고 첫 화면부터 시작' : undefined;
+      const setupText = [describeSetup(kept ? { ...script.setup, restart: false } : script.setup), kept].filter(Boolean).join('\n') || undefined;
+      await this.record('준비: 앱 실행', 'info', setupText, script.screenshots === 'all', seen?.screen);
       return undefined;
     } catch (e) {
       await this.record('준비 실패', 'fail', (e as Error).message, true);
