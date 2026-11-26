@@ -136,6 +136,8 @@ Claude Code를 재시작한 뒤 이렇게 요청하세요.
 
 MCP 서버 환경 변수 `DROIDLENS_TOOLS=core,graph` (`core`·`perf`·`graph`·`sdk`·`scenario`·`qa` 중 골라 쉼표로, 기본은 전부)로 등록할 도구 묶음을 고르면 도구 목록이 줄어듭니다. 예: 앱에 DroidLens SDK 가 없으면 `sdk` 를 뺍니다.
 
+MCP 서버 환경 변수에 `FIGMA_TOKEN`(파일 읽기 권한이 있는 Figma 개인 토큰)을 넣으면 디자인 가이드를 저장할 때 Figma 프레임 이미지도 함께 받아 둡니다. 디자인 비교 보고서에서 차이마다 Figma 조각과 화면 조각이 나란히 나옵니다. 토큰은 `api.figma.com` 에만 보냅니다.
+
 앱 없이 MCP만 쓰려면 Releases의 `droidlens-mcp.mjs`(Node 20+)를 받아 `claude mcp add --scope user droidlens -- node /path/to/droidlens-mcp.mjs`로 등록하세요. 같은 릴리스의 `droidlens-agent.apk` 를 `droidlens-mcp.mjs` 와 같은 폴더에 두면 온디바이스 에이전트가 설치되어 한글 입력과 빠른 뷰 계층 조회(0.1~0.3초)가 됩니다. 없어도 동작하지만 뷰 계층 조회가 `uiautomator dump`(1.5~3초)로 돌고 영문·숫자만 입력할 수 있습니다.
 
 ## 문서로 QA 돌리기
@@ -212,7 +214,7 @@ steps:
 | `graphs/<패키지>/` | 앱 화면 지도 `graph.json`, `graph.mmd`(mermaid), 화면별 스크린샷. 화면 흐름 탭의 '내보내기'는 스크린샷을 담은 `*.droidlens-map.json` 한 파일로 저장 |
 | `scenarios/<id>/` | 시나리오 검증 `report.html`, `scenario.json`, 녹화된 `script.yaml`, 단계별 스크린샷 |
 | `scripts/` | 회귀 테스트 스크립트 (YAML) |
-| `qa/<계획>/` | QA 계획 `plan.json`, 넣은 문서 사본. `runs/<회차>/` 결과표(`report.html`, `results.csv`, `junit.xml`)와 검증 기록에서 내보낸 파일(`results.xlsx`, `steps.html`). `design/<TC>/guide.json` 디자인 TC 의 Figma 가이드, 비교 결과 `diff.json`·`report.html`·표시한 화면은 `runs/<회차>/design/<TC>/`(회차 밖이면 `design/<TC>/last/`) |
+| `qa/<계획>/` | QA 계획 `plan.json`, 넣은 문서 사본. `runs/<회차>/` 결과표(`report.html`, `results.csv`, `junit.xml`)와 검증 기록에서 내보낸 파일(`results.xlsx`, `steps.html`). `design/<TC>/guide.json` 디자인 TC 의 Figma 가이드(`FIGMA_TOKEN` 이 있으면 `figma.png` 도), 비교 결과 `diff.json`·`report.html`·표시한 화면은 `runs/<회차>/design/<TC>/`(회차 밖이면 `design/<TC>/last/`) |
 | `apks/<패키지>/` | 분석용 APK |
 
 ## 버전 호환 (다음 릴리스부터)

@@ -5,4 +5,5 @@ export * from './match.js';
 export * from './compare.js';
 export * from './report.js';
 export * from './store.js';
+export * from './figma-image.js';
 export * from './run.js';

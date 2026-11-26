@@ -4,15 +4,18 @@ import type { Bounds } from '../hierarchy.js';
 import { writeFileAtomic, writeJson } from '../workspace.js';
 import { DESIGN_REPORT_TOKENS } from '../report-tokens.js';
 import { DIFF_PROP_LABEL, SEVERITY_LABEL, type DesignCompareResult, type Severity } from './compare.js';
+import type { DesignGuide, GuideElement } from './guide.js';
 import type { Raster } from './measure.js';
 import { rasterToJpeg } from '../image.js';
 import { htmlEscape as esc } from '../qa/report.js';
 
 /**
- * 디자인 비교 결과 (#77):
+ * 디자인 비교 결과 (#77, #89):
  *   diff.json    차이 목록 (에이전트·데스크톱 앱이 읽음)
  *   screen.jpg   차이 자리에 심각도 색 상자를 그린 화면
  *   crop-N.jpg   항목별로 잘라 낸 화면
+ *   figma.jpg    가이드의 Figma 프레임 이미지 (가이드에 이미지가 있을 때)
+ *   figma-N.jpg  항목의 가이드 요소 자리를 Figma 이미지에서 잘라 낸 것 (화면 조각과 나란히)
  *   report.html  사람이 보는 표
  */
 
@@ -60,17 +63,26 @@ function crop(img: Raster, [l, t, r, b]: Bounds): Raster {
 
 const toJpeg = (img: Raster, maxEdge: number) => rasterToJpeg(img, maxEdge, 75).data;
 
-export function designReportHtml(r: DesignCompareResult, title: string, crops: Map<number, string>): string {
+export function designReportHtml(
+  r: DesignCompareResult,
+  title: string,
+  crops: Map<number, string>,
+  figmaCrops: Map<number, string> = new Map(),
+  figma = false,
+): string {
   const pills = (['high', 'medium', 'low'] as const)
     .map((k) => `<span class="pill ${k}">${SEVERITY_LABEL[k]} ${r.counts[k]}</span>`)
     .join(' ');
   const rows = r.items
     .map((it, i) => {
       const img = crops.get(i);
+      const fig = figmaCrops.get(i);
+      const pic = (src: string | undefined, alt: string) =>
+        src ? `<a href="${esc(src)}" target="_blank" rel="noopener"><img src="${esc(src)}" alt="${alt}"></a>` : '';
       const val = (v?: string) => (v ? esc(v) : '');
       const swatch = (v?: string) => (v && /^#[0-9a-f]{6}$/i.test(v) ? `<i class="sw" style="background:${v}"></i>` : '');
       const delta = it.delta === undefined ? '' : `${it.delta}${it.unit ?? ''}`;
-      return `<tr><td class="id">${i + 1}</td><td><span class="pill ${it.severity}">${SEVERITY_LABEL[it.severity]}</span></td><td>${esc(DIFF_PROP_LABEL[it.prop])}${it.accuracy === 'estimated' ? ' <span class="pill">추정</span>' : ''}</td><td>${esc(it.element)}</td><td>${swatch(it.expected)}${val(it.expected)}</td><td>${swatch(it.actual)}${val(it.actual)}</td><td>${esc(delta)}</td><td>${val(it.note)}</td><td>${img ? `<img src="${esc(img)}" alt="">` : ''}</td></tr>`;
+      return `<tr><td class="id">${i + 1}</td><td><span class="pill ${it.severity}">${SEVERITY_LABEL[it.severity]}</span></td><td>${esc(DIFF_PROP_LABEL[it.prop])}${it.accuracy === 'estimated' ? ' <span class="pill">추정</span>' : ''}</td><td>${esc(it.element)}</td><td>${swatch(it.expected)}${val(it.expected)}</td><td>${swatch(it.actual)}${val(it.actual)}</td><td>${esc(delta)}</td><td>${val(it.note)}</td>${figma ? `<td>${pic(fig, 'Figma')}</td>` : ''}<td>${pic(img, '화면')}</td></tr>`;
     })
     .join('');
   const warn = r.warnings.map((w) => `<li>${esc(w)}</li>`).join('');
@@ -92,13 +104,18 @@ th{font-size:12px;color:var(--mute);font-weight:600;white-space:nowrap}tr:last-c
 .pill.high{background:var(--high-bg);color:var(--high)}.pill.medium{background:var(--medium-bg);color:var(--medium)}.pill.low{background:var(--low-bg);color:var(--low)}
 .sw{display:inline-block;width:12px;height:12px;border-radius:3px;border:1px solid var(--line);margin-right:6px;vertical-align:-1px}
 aside img{width:100%;border:1px solid var(--line);border-radius:10px}
+aside .pair{display:grid;grid-template-columns:1fr 1fr;gap:8px}aside figure{margin:0}aside figcaption{font-size:12px;color:var(--mute);margin-bottom:4px}
 </style></head><body><main><section>
 <h1>${esc(title)} — 디자인 비교</h1>
 <p class="sub">Figma 프레임 ${esc(r.frame.name || r.frame.id)} (${r.frame.width}×${r.frame.height}, 배율 ${r.scale}) · 화면 ${r.screen.width}×${r.screen.height}dp · 글자 크기 배율 ${r.screen.fontScale}</p>
 <p>${pills} <span class="sub">가이드 글자 ${r.guideTexts}개 중 ${r.matched.exact + r.matched.normalized + r.matched.similar + r.matched.position}개를 화면에서 찾음</span></p>
 ${warn ? `<ul class="sub">${warn}</ul>` : ''}${off}
-<div class="wrap"><table><thead><tr><th>#</th><th>심각도</th><th>항목</th><th>요소</th><th>가이드</th><th>화면</th><th>차이</th><th>메모</th><th>화면 조각</th></tr></thead><tbody>${rows || '<tr><td colspan="9">허용치를 넘는 차이가 없습니다</td></tr>'}</tbody></table></div>
-</section><aside><img src="screen.jpg" alt="차이 자리에 상자를 그린 화면"></aside></main></body></html>`;
+<div class="wrap"><table><thead><tr><th>#</th><th>심각도</th><th>항목</th><th>요소</th><th>가이드</th><th>화면</th><th>차이</th><th>메모</th>${figma ? '<th>Figma</th>' : ''}<th>화면 조각</th></tr></thead><tbody>${rows || `<tr><td colspan="${figma ? 10 : 9}">허용치를 넘는 차이가 없습니다</td></tr>`}</tbody></table></div>
+</section><aside>${
+    figma
+      ? `<div class="pair"><figure><figcaption>Figma</figcaption><a href="figma.jpg" target="_blank" rel="noopener"><img src="figma.jpg" alt="Figma 프레임"></a></figure><figure><figcaption>화면</figcaption><a href="screen.jpg" target="_blank" rel="noopener"><img src="screen.jpg" alt="차이 자리에 상자를 그린 화면"></a></figure></div>`
+      : '<img src="screen.jpg" alt="차이 자리에 상자를 그린 화면">'
+  }${figma ? '' : '<p class="sub">Figma 이미지가 없습니다. FIGMA_TOKEN 을 설정하고 가이드를 다시 저장하면 나란히 놓습니다</p>'}</aside></main></body></html>`;
 }
 
 export interface DesignReportFiles {
@@ -108,25 +125,62 @@ export interface DesignReportFiles {
   screen: string;
 }
 
-/** 결과 폴더에 diff.json·screen.jpg·crop-N.jpg·report.html 을 쓴다 */
-export async function writeDesignReport(dir: string, r: DesignCompareResult, img: Raster, title: string): Promise<DesignReportFiles> {
+/** 가이드 요소가 Figma 이미지에서 차지하는 자리 (이미지 px). 위치를 모르면(인스턴스 안) 위치를 아는 가장 가까운 조상의 자리 */
+function figmaArea(guide: DesignGuide, id: string): Bounds | undefined {
+  const byId = new Map<string, GuideElement>(guide.elements.map((e) => [e.id, e]));
+  const k = guide.image?.scale ?? 1;
+  const seen = new Set<string>();
+  for (let p = byId.get(id); p && !seen.has(p.id); p = p.parent ? byId.get(p.parent) : undefined) {
+    seen.add(p.id);
+    if (p.rect) return [p.rect.x * k, p.rect.y * k, (p.rect.x + p.rect.w) * k, (p.rect.y + p.rect.h) * k];
+  }
+  return undefined;
+}
+
+export interface DesignReportFigma {
+  guide: DesignGuide;
+  /** guide.image 의 PNG 를 푼 것 */
+  image: Raster;
+}
+
+/** 결과 폴더에 diff.json·screen.jpg·crop-N.jpg·report.html (Figma 이미지가 있으면 figma.jpg·figma-N.jpg) 을 쓴다 */
+export async function writeDesignReport(
+  dir: string,
+  r: DesignCompareResult,
+  img: Raster,
+  title: string,
+  figma?: DesignReportFigma,
+): Promise<DesignReportFiles> {
   await mkdir(dir, { recursive: true });
   const marked = copy(img);
   const line = Math.max(2, Math.round(img.width / 360));
   const crops = new Map<number, string>();
+  const figmaCrops = new Map<number, string>();
   // 한 요소에 차이가 여럿이면 가장 높은 심각도 색이 남게 낮은 것부터 그린다
   for (const it of [...r.items].reverse()) if (it.bounds) strokeRect(marked, it.bounds, SEV_RGB[it.severity], line);
+  // Figma 조각의 여백: 화면 조각과 같은 dp 만큼 (화면 12dp ≒ Figma 12px ÷ 배율)
+  const figPad = figma ? Math.round((12 / (r.scale || 1)) * (figma.guide.image?.scale ?? 1)) : 0;
   for (const [i, it] of r.items.entries()) {
-    if (!it.bounds || crops.size >= MAX_CROPS) continue;
-    const pad = 12 * line;
-    const name = `crop-${i + 1}.jpg`;
-    const [l, t, rr, b] = it.bounds;
-    await writeFileAtomic(join(dir, name), toJpeg(crop(img, [l - pad, t - pad, rr + pad, b + pad]), 480));
-    crops.set(i, name);
+    if (crops.size >= MAX_CROPS) break;
+    if (it.bounds) {
+      const pad = 12 * line;
+      const name = `crop-${i + 1}.jpg`;
+      const [l, t, rr, b] = it.bounds;
+      await writeFileAtomic(join(dir, name), toJpeg(crop(img, [l - pad, t - pad, rr + pad, b + pad]), 480));
+      crops.set(i, name);
+    }
+    const area = figma && it.guideId ? figmaArea(figma.guide, it.guideId) : undefined;
+    if (figma && area) {
+      const name = `figma-${i + 1}.jpg`;
+      const [l, t, rr, b] = area;
+      await writeFileAtomic(join(dir, name), toJpeg(crop(figma.image, [l - figPad, t - figPad, rr + figPad, b + figPad]), 480));
+      figmaCrops.set(i, name);
+    }
   }
   const files = { dir, diff: join(dir, 'diff.json'), html: join(dir, 'report.html'), screen: join(dir, 'screen.jpg') };
   await writeFileAtomic(files.screen, toJpeg(marked, 1200));
+  if (figma) await writeFileAtomic(join(dir, 'figma.jpg'), toJpeg(figma.image, 1200));
   await writeJson(files.diff, r);
-  await writeFileAtomic(files.html, designReportHtml(r, title, crops));
+  await writeFileAtomic(files.html, designReportHtml(r, title, crops, figmaCrops, !!figma));
   return files;
 }

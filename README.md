@@ -136,6 +136,8 @@ Restart Claude Code, then ask:
 
 Set `DROIDLENS_TOOLS=core,graph` (any of `core`, `perf`, `graph`, `sdk`, `scenario`, `qa`; default all) in the MCP server's environment to register only those tool groups and shrink the tool list — e.g. drop `sdk` when the app has no DroidLens SDK.
 
+Set `FIGMA_TOKEN` (a Figma personal access token with file read access) in the MCP server's environment to also save the Figma frame image with each design guide; design comparison reports then show the Figma crop next to the screen crop for every difference. The token is only sent to `api.figma.com`.
+
 To use only the MCP server without the app, download `droidlens-mcp.mjs` (Node 20+) from Releases and register it with `claude mcp add --scope user droidlens -- node /path/to/droidlens-mcp.mjs`. Put `droidlens-agent.apk` from the same release next to `droidlens-mcp.mjs` to get the on-device agent (Unicode text input and fast view-hierarchy dumps, 0.1–0.3 s). Without it everything still works, but dumps fall back to `uiautomator dump` (1.5–3 s) and only ASCII text can be typed.
 
 ## QA from spec documents
@@ -212,7 +214,7 @@ Everything is saved under `~/.droidlens/` (override with `DROIDLENS_HOME`).
 | `graphs/<package>/` | App screen map `graph.json`, `graph.mmd` (mermaid), per-screen screenshots. 'Export' in the Screen flow tab saves a single `*.droidlens-map.json` with screenshots |
 | `scenarios/<id>/` | Scenario verification `report.html`, `scenario.json`, recorded `script.yaml`, per-step screenshots |
 | `scripts/` | Regression test scripts (YAML) |
-| `qa/<plan>/` | QA plan `plan.json` and source copies; `runs/<run>/` results table (`report.html`, `results.csv`, `junit.xml`) and exports from Records (`results.xlsx`, `steps.html`); `design/<TC>/guide.json` Figma guide for a design case, with each comparison's `diff.json`, `report.html` and marked screenshot under `runs/<run>/design/<TC>/` (or `design/<TC>/last/` outside a run) |
+| `qa/<plan>/` | QA plan `plan.json` and source copies; `runs/<run>/` results table (`report.html`, `results.csv`, `junit.xml`) and exports from Records (`results.xlsx`, `steps.html`); `design/<TC>/guide.json` Figma guide for a design case (plus `figma.png` when `FIGMA_TOKEN` is set), with each comparison's `diff.json`, `report.html` and marked screenshot under `runs/<run>/design/<TC>/` (or `design/<TC>/last/` outside a run) |
 | `apks/<package>/` | APKs pulled for analysis |
 
 ## Version compatibility (from the next release)

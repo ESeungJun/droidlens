@@ -33,6 +33,7 @@ export function register(server: McpServer): void {
       description:
         '디자인 TC 의 Figma 가이드를 저장한다. TC 의 design.figma 프레임을 Figma 커넥터로 읽고(get_metadata, get_design_context) 응답 원문을 고치지 말고 그대로 넘긴다. ' +
         '값을 옮겨 적거나 요약하지 않는다(core 가 노드 id·클래스를 파싱한다). 큰 프레임은 get_design_context 를 섹션 노드마다 불러 code 에 여러 개로 넣는다. ' +
+        'MCP 서버에 FIGMA_TOKEN(Figma 개인 토큰)이 있으면 프레임 이미지를 Figma REST API 로 받아 함께 저장하고, 비교 보고서에 화면 조각과 나란히 놓는다. ' +
         '같은 TC 에 다시 저장하면 덮어쓴다',
       inputSchema: {
         plan: z.string().describe('QA 계획 id'),
@@ -61,10 +62,13 @@ export function register(server: McpServer): void {
       return text(
         [
           `${caseId} 가이드를 저장했습니다: 프레임 "${one(g.frame.name, 80)}" ${g.frame.width}×${g.frame.height} · 배율 ${g.scale}dp/px`,
-          `요소 ${g.elements.length}개 (글자 ${texts.length} · 크기 아는 글자 ${texts.filter((e) => e.font?.size).length} · 색 아는 글자 ${texts.filter((e) => e.color).length} · 예시값 ${texts.filter((e) => e.example).length})`,
+          `요소 ${g.elements.length}개 (글자 ${texts.length} · 크기 아는 글자 ${texts.filter((e) => e.font?.size).length} · 색 아는 글자 ${texts.filter((e) => e.color).length} · 예시값 ${texts.filter((e) => e.example).length} · 배경 있는 상자 ${g.elements.filter((e) => e.kind === 'box' && e.background).length})`,
+          g.image ? `Figma 이미지: ${g.image.width}×${g.image.height} (@${g.image.scale}x) 저장` : '',
           ...r.notes.map((n) => `- ${one(n, 200)}`),
           `다음: 그 화면까지 이동해 화면이 멈추면 design_compare(plan: "${plan}", case: "${caseId}")`,
-        ].join('\n'),
+        ]
+          .filter(Boolean)
+          .join('\n'),
       );
     },
   );
@@ -73,8 +77,9 @@ export function register(server: McpServer): void {
     'design_compare',
     {
       description:
-        '지금 기기 화면을 디자인 TC 의 Figma 가이드와 비교한다: 문구, 글자 크기, 글자·배경 색, 가로 여백, 위 요소와의 간격, 빠진 글자·더 있는 글자. ' +
-        '허용치(글자 0.5sp, 간격 2dp, 색 ΔE 3)를 넘는 것만 심각도(높음·중간·낮음)와 함께 돌려주고 결과(diff.json·report.html·표시한 화면)를 저장한다. ' +
+        '지금 기기 화면을 디자인 TC 의 Figma 가이드와 비교한다: 문구, 글자 크기, 글자·배경 색, 가로 여백, 위 요소와의 간격, 빠진 글자·더 있는 글자, ' +
+        '배경 있는 상자의 크기, 그리고 화면 화소로 어림한 글자 굵기·줄 높이·모서리(추정, 낮음). ' +
+        '허용치(글자 0.5sp, 간격·크기 2dp, 색 ΔE 3)를 넘는 것만 심각도(높음·중간·낮음)와 함께 돌려주고 결과(diff.json·report.html·표시한 화면, 가이드에 Figma 이미지가 있으면 나란히 놓은 조각)를 저장한다. ' +
         'scenario_start(tc) 로 그 TC 를 실행하는 중이면 plan·case·run 을 생략해도 된다. 화면이 다 그려지고 멈춘 뒤 부른다',
       inputSchema: {
         ...serialArg,
@@ -101,7 +106,7 @@ export function register(server: McpServer): void {
       const found = result.matched.exact + result.matched.normalized + result.matched.similar + result.matched.position;
       const lines = [
         `${c} 디자인 비교: 차이 ${n}건 · 높음 ${result.counts.high} · 중간 ${result.counts.medium} · 낮음 ${result.counts.low}`,
-        `가이드 글자 ${result.guideTexts}개 중 ${found}개를 화면에서 찾음 · 화면 ${result.screen.width}×${result.screen.height}dp · 글자 크기 ${result.rendering ? '렌더링 정보' : '높이로 추정'}`,
+        `가이드 글자 ${result.guideTexts}개 중 ${found}개를 화면에서 찾음 · 상자 ${result.boxes ?? 0}개 비교 · 화면 ${result.screen.width}×${result.screen.height}dp · 글자 크기 ${result.rendering ? '렌더링 정보' : '높이로 추정'}`,
         ...result.warnings.map((w) => `⚠ ${w}`),
         result.offscreen.length
           ? `화면 밖이라 비교하지 않음 ${result.offscreen.length}개 (스크롤한 뒤 다시 부르면 비교): ${result.offscreen
