@@ -339,7 +339,9 @@ export function runQaPlan(planId: string, opts: QaRunOptions, dev: dl.DeviceAdb,
         })
         .catch(() => undefined);
     }
-    const queue = [...scripted.pending.filter((x) => x.automatable !== 'manual'), ...recheck.map((id) => byId.get(id)!).filter(Boolean)];
+    // pending 에는 스크립트가 이은 뒤 바뀐 TC 도 들어온다(#140). 실패 다시 보기와 겹치면 한 번만 돌린다
+    const first = scripted.pending.filter((x) => x.automatable !== 'manual');
+    const queue = [...first, ...recheck.filter((id) => !first.some((x) => x.id === id)).map((id) => byId.get(id)!).filter(Boolean)];
     // 사전 조건의 앱 버전은 에이전트를 띄우기 전에 설치된 버전과 맞춰 본다. 모르면 검사하지 않는다 (#130)
     const installed =
       scripted.installed ?? (queue.length && plan.app ? (await dl.appInfo(dev, plan.app).catch(() => undefined))?.versionName : undefined);

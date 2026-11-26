@@ -116,6 +116,7 @@ export function register(server: McpServer): void {
         // 새 시나리오 시작이 실패해도 앞 TC 의 녹화·허용 상태가 남지 않게 먼저 비운다
         recorder.active = false;
         recorder.tc = undefined;
+        recorder.relink = undefined;
         const html = await prev.finish('blocked', '끝내지 않은 채 다음 시나리오를 시작해 중단됨', recorder.actions).catch(() => undefined);
         if (prevTc?.run)
           await dl
@@ -136,6 +137,7 @@ export function register(server: McpServer): void {
       recorder.steps = [];
       recorder.mocks = new Map();
       recorder.actions = [];
+      recorder.relink = undefined;
       recorder.tc = tc && tcCase ? { plan: tc.plan, case: tc.case, fingerprint: dl.dangerFingerprint(tcCase), ...(tc.run ? { run: tc.run } : {}) } : undefined;
       // 온디바이스 에이전트를 지금 띄워 둔다. 단계 도중에 처음 설치되면 Play 프로텍트 창이 앱을 가린 채 스크린샷에 찍힌다
       await dl.ensureAgent(dev).catch(() => undefined);
@@ -295,6 +297,7 @@ export function register(server: McpServer): void {
             const linked = await dl.linkQaCaseScript(tc.plan, tc.case, basename(p, '.yaml'), { hash, fingerprint: tc.fingerprint }).then(
               () => {
                 savedScript = basename(p, '.yaml');
+                recorder.relink = { plan: tc.plan, case: tc.case, script: savedScript, fingerprint: tc.fingerprint };
                 return `${tc.case} 에 스크립트를 이었습니다`;
               },
               (e) => `${tc.case} 에 스크립트를 잇지 못했습니다: ${(e as Error).message.split('\n')[0]}`,
@@ -393,7 +396,9 @@ export function register(server: McpServer): void {
       const allowAll = await dangerAllowed(allowDanger, true, 'script_run');
       const dev = await device(serial);
       const p = await scriptPath(script, true);
-      const loaded = await dl.loadScript(p);
+      // 다시 이을 때 돌린 내용과 같은 바이트로 해시를 만든다 (돌리는 사이에 파일이 바뀌어도 그 내용을 잇지 않게)
+      const bytes = await readFile(p);
+      const loaded = dl.parseScript(bytes.toString('utf8'));
       // TC 에 이은 스크립트의 확인 필수 동작은 사람 허용과 스크립트 해시를 보는 qa_run_scripts 로만 누른다
       if (allowAll && loaded.tc)
         throw new Error(`${loaded.tc.case} 의 스크립트입니다. 확인 필수 동작까지 돌리려면 qa_run_scripts(plan: "${loaded.tc.plan}") 를 쓰세요 (사람이 그 TC 에 허용했을 때만 누른다)`);
@@ -406,6 +411,18 @@ export function register(server: McpServer): void {
           if (e.status !== 'running') lines.push(`${e.index + 1}/${e.total} ${e.status.toUpperCase()} ${e.title}${e.detail && e.status === 'fail' ? `\n    ${e.detail.replace(/\n/g, '\n    ')}` : ''}`);
         },
       });
+      // 방금 끝낸 TC 의 스크립트를 같은 TC 안에서 고쳐 통과하면 다시 잇는다 (#140). 다른 TC·시나리오 중이면 잇지 않는다
+      const rl = recorder.relink;
+      if (
+        r.verdict === 'pass' && rl && !recorder.active && loaded.tc?.plan === rl.plan && loaded.tc.case === rl.case &&
+        p === (await scriptPath(rl.script, true)) // 같은 이름의 다른 폴더 파일이 아니라 스크립트 폴더의 그 파일
+      )
+        lines.push(
+          await dl.linkQaCaseScript(rl.plan, rl.case, rl.script, { hash: dl.sha256(bytes), fingerprint: rl.fingerprint }).then(
+            () => `${rl.case} 에 고친 스크립트를 다시 이었습니다`,
+            (e) => `${rl.case} 에 고친 스크립트를 다시 잇지 못했습니다: ${(e as Error).message.split('\n')[0]}`,
+          ),
+        );
       return text([`판정: ${r.verdict.toUpperCase()} (${r.passed} 통과 · ${r.failed} 실패 · ${r.skipped} 건너뜀, ${(r.durationMs / 1000).toFixed(1)}초)`, ...lines, `리포트: ${r.report}`].join('\n'));
     },
   );

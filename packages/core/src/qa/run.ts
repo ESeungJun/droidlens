@@ -215,7 +215,7 @@ export interface QaScriptRunResult {
   run: QaRun;
   /** 이번에 스크립트로 돌린 TC 결과 */
   ran: QaCaseResult[];
-  /** 스크립트가 없어 에이전트가 돌려야 할 TC (우선순위 순) */
+  /** 스크립트가 없거나, 이은 스크립트가 이은 뒤 바뀌어(scriptChanged) 에이전트가 돌려야 할 TC (우선순위 순) */
   pending: QaCase[];
   /** 다시 보기 표시가 있어 돌리지 않고 막힘으로 적은 TC (사람이 확인해야 함) */
   needsReview: QaCase[];
@@ -250,6 +250,8 @@ export async function runQaScripts(
   const ordered = selected.filter((c) => !c.review?.length);
   const scripted = ordered.filter((c) => c.script);
   const pending = ordered.filter((c) => !c.script);
+  // 이은 뒤 바뀐 스크립트의 TC. 돌리지 않고 막힘으로 적은 뒤 에이전트가 다시 확인하게 pending 뒤에 붙인다 (#140)
+  const changed: QaCase[] = [];
   for (const c of needsReview) {
     run = await recordQaResult(planId, run.id, {
       case: c.id,
@@ -276,6 +278,11 @@ export async function runQaScripts(
       result = { case: c.id, status: 'blocked', mode: 'script', script: c.script, note: { code: 'versionUnmet', args: { cond: unmet.text.slice(0, 200), installed: installed! } } };
     } else if (!s || 'error' in s) {
       result = { case: c.id, status: 'blocked', mode: 'script', script: c.script, note: s?.note ?? { code: 'scriptNone' } };
+    } else if (s.changed && c.scriptCase) {
+      // 이은 순간의 해시와 다르다: 누가(에이전트가 다른 TC 를 돌리다가 포함) 고쳤는지 모르므로 통과를 믿지 않는다 (#140).
+      // 같은 TC 안에서 고쳐 통과한 것은 MCP script_run 이 해시를 다시 잇는다. 해시를 모르는 옛 연결은 아래처럼 돌리되 누르지 않는다
+      result = { case: c.id, status: 'blocked', mode: 'script', script: c.script, note: { code: 'scriptChanged' } };
+      changed.push(c);
     } else {
       const t0 = Date.now();
       const guardDanger = !(c.allowDanger && !s.changed);
@@ -324,7 +331,7 @@ export async function runQaScripts(
     run = await recordQaResult(planId, run.id, result);
     ran.push(run.results.find((x) => x.case === c.id)!);
   }
-  return { run, ran, pending, needsReview, remaining: scripted.slice(i), restarts, installed };
+  return { run, ran, pending: [...pending, ...changed], needsReview, remaining: scripted.slice(i), restarts, installed };
 }
 
 export interface QaRunRow {

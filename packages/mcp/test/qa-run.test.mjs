@@ -182,6 +182,45 @@ test('두 번째 회차: 이은 스크립트로 돌고, 스크립트가 바뀌�
   assert.match(moved.text, /TC-001 막힘 — 스크립트 .* 가 이 TC 의 것이 아닙니다/);
 });
 
+test('이은 스크립트를 다른 TC 에서 고치면 다음 회차에 돌리지 않고 에이전트로 넘기고, 같은 TC 안에서 고쳐 통과하면 다시 잇는다 (#140)', async () => {
+  const id = await newPlan();
+  s.setUi(screen());
+  const run = runOf((await s.call('qa_run_scripts', { plan: id })).text);
+  await s.call('scenario_start', { name: '다음', tc: { plan: id, case: 'TC-001', run } });
+  await s.call('tap', { text: '다음' });
+  await s.call('scenario_step', { title: '다음 버튼이 보임', assert: { visible: { text: '다음' } }, screenshot: false });
+  assert.match((await s.call('scenario_finish', { verdict: 'pass', summary: 'ok' })).text, /TC-001 에 스크립트를 이었습니다/);
+  const script = JSON.parse((await s.call('qa_plan_get', { plan: id, full: true })).text).cases[0].script;
+  const yaml = (await s.call('script_read', { script })).text;
+  const body = yaml.slice(yaml.indexOf('name:'));
+
+  // 같은 TC 를 끝낸 바로 뒤: 고친 스크립트가 script_run 으로 통과하면 그 TC 에 다시 잇는다 (verifier 61줄 흐름)
+  assert.equal((await s.call('script_write', { yaml: body + '# 고침\n', name: script })).isError, false);
+  const rerun = await s.call('script_run', { script });
+  assert.equal(rerun.isError, false, rerun.text);
+  assert.match(rerun.text, /TC-001 에 고친 스크립트를 다시 이었습니다/, rerun.text);
+  s.clearLog();
+  const ok = await s.call('qa_run_scripts', { plan: id });
+  assert.match(ok.text, /TC-001 통과/, ok.text);
+
+  // 다른 TC 를 돌리는 중에 TC-001 의 스크립트를 덮어쓰면: 다시 잇지 않고, 다음 회차는 돌리지 않고 막힘 + 에이전트로 넘김
+  const run2 = runOf(ok.text);
+  await s.call('scenario_start', { name: '빈 화면', tc: { plan: id, case: 'TC-002', run: run2 } });
+  const fake = body.replace(/steps:[\s\S]*/, 'steps:\n  - wait: { text: "다음" }\n');
+  assert.equal((await s.call('script_write', { yaml: fake, name: script })).isError, false);
+  const sneaky = await s.call('script_run', { script });
+  assert.ok(!/다시 이었습니다/.test(sneaky.text), sneaky.text);
+  await s.call('scenario_finish', { verdict: 'blocked', summary: 'x', saveScript: false });
+  s.clearLog();
+  const next = await s.call('qa_run_scripts', { plan: id });
+  assert.match(next.text, /TC-001 막힘 — 스크립트 파일이 TC 에 이은 뒤 바뀌어/, next.text);
+  assert.match(next.text.slice(next.text.indexOf('스크립트가 없는 TC')), /TC-001/, '에이전트가 다시 확인할 TC 로 넘긴다');
+  assert.ok(!s.log().some((l) => l.includes('uiautomator dump') || l.includes('input ')), '바뀐 스크립트는 돌리지 않는다');
+  const r = runJson(id, runOf(next.text)).results.find((x) => x.case === 'TC-001');
+  assert.equal(r.status, 'blocked');
+  assert.equal(r.note?.code, 'scriptChanged');
+});
+
 test('core: 회차 집계·결과표 이스케이프·CSV 수식 막기', async () => {
   const dl = await import('@droidlens/core');
   assert.equal(dl.csvCell('=HYPERLINK("x")'), `"'=HYPERLINK(""x"")"`);
@@ -277,8 +316,9 @@ test('확인 필수 TC: 허용·같은 스크립트면 누르고, 파일이 바�
     writeFileSync(file, readFileSync(file, 'utf8') + '# 바뀜\n');
     s.clearLog();
     const changed = await s.call('qa_run_scripts', { plan: id });
-    assert.match(changed.text, /TC-003 실패 — 스크립트 파일이 TC 에 이은 뒤 바뀌어/, changed.text);
-    assert.ok(!s.log().some((l) => l.includes('input tap 300 250')), '바뀐 스크립트로는 누르지 않는다');
+    // 바뀐 스크립트는 돌리지 않고 막힘으로 적은 뒤 에이전트가 다시 확인할 TC 로 넘긴다 (#140)
+    assert.match(changed.text, /TC-003 막힘 — 스크립트 파일이 TC 에 이은 뒤 바뀌어/, changed.text);
+    assert.ok(!s.log().some((l) => l.includes('input tap')), '바뀐 스크립트는 돌리지 않는다');
 
     // TC 내용이 바뀌면 옛 흐름의 스크립트 연결이 풀리고, 다시 허용해도 옛 스크립트로 누르지 않는다
     await s.call('qa_case_update', { plan: id, case: 'TC-003', patch: { steps: ['장바구니 비우기 누르기'] } });
