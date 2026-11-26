@@ -241,7 +241,9 @@ test('explore: 첫 화면부터 깊이 우선으로 누르고 돌아오며 지�
   f.open('deep');
   const progress = [];
   const r = await explore(f.dev, { packageName: pkg, onProgress: (e) => progress.push([e.step, e.message, e.screen ?? null]) });
-  matchGolden('explore.result', { ...r, graph: stable(r.graph) });
+  // added(#131) 는 기준 파일 뒤에 생긴 칸이라 따로 본다: 빈 지도에서 시작했으니 지도의 모든 화면이 새 화면이다
+  matchGolden('explore.result', { ...r, added: undefined, graph: stable(r.graph) });
+  assert.deepEqual([...r.added].sort(), r.graph.nodes.map((n) => n.id).sort());
   matchGolden('explore.progress', progress);
   matchGolden('explore.commands', f.commands());
   // 사람이 읽는 확인 몇 가지 (기준 파일이 틀려도 잡히게)
@@ -274,7 +276,7 @@ test('explore: 지금 화면부터(relaunch:false) 지정한 인터랙션만, �
     ],
     onProgress: (e) => progress.push([e.step, e.message, e.screen ?? null]),
   });
-  matchGolden('exploreOnly.result', { ...r, graph: stable(r.graph) });
+  matchGolden('exploreOnly.result', { ...r, added: undefined, graph: stable(r.graph) });
   matchGolden('exploreOnly.progress', progress);
   matchGolden('exploreOnly.commands', f.commands());
   assert.deepEqual(
@@ -357,7 +359,9 @@ const branchApp = (pkg) => ({
 async function exploreGolden(key, f, opts) {
   const progress = [];
   const r = await explore(f.dev, { ...opts, onProgress: (e) => (progress.push([e.step, e.message, e.screen ?? null]), opts.onProgress?.(e)) });
-  matchGolden(`${key}.result`, { ...r, graph: stable(r.graph) });
+  matchGolden(`${key}.result`, { ...r, added: undefined, graph: stable(r.graph) });
+  const ids = new Set(r.graph.nodes.map((n) => n.id));
+  assert.ok(r.added.every((id) => ids.has(id)), '새 화면은 지도에 있는 화면이다 (#131)');
   matchGolden(`${key}.progress`, progress);
   matchGolden(`${key}.commands`, f.commands());
   return r;

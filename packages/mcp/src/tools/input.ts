@@ -1,7 +1,7 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import * as dl from '@droidlens/core';
-import { device, hasSelector, resolveNode, recordStep, logAction, nodeLabel, recorder, cleanSelector, text, serialArg, selectorShape, pickSelector, describeNode, readOnly, acts, allowDangerArg, guardRisky, PIXELS } from '../common.js';
+import { device, hasSelector, resolveNode, recordStep, logAction, nodeLabel, recorder, cleanSelector, pathSee, pathNote, text, serialArg, selectorShape, pickSelector, describeNode, readOnly, acts, allowDangerArg, guardRisky, PIXELS } from '../common.js';
 
 export function register(server: McpServer): void {
   // ---------- 조작 ----------
@@ -28,14 +28,18 @@ export function register(server: McpServer): void {
       const sel = pickSelector(a);
       let node: dl.ViewNode | undefined;
       let tree: dl.ViewNode | undefined;
+      let dumped: dl.Hierarchy | undefined;
       if (hasSelector(sel)) {
-        tree = (await dl.dumpHierarchy(dev)).root;
+        dumped = await dl.dumpHierarchy(dev);
+        tree = dumped.root;
         node = await resolveNode(dev, sel, tree);
         ({ x, y } = dl.center(node));
         what = describeNode(node);
       }
       if (x === undefined || y === undefined) throw new Error('셀렉터나 x/y 중 하나가 필요합니다');
       await guardRisky(a.allowDanger, dev, x, y, node, tree, 'tap');
+      // 누르기 전 화면을 지도에 올린다 (#131). 앞 탭의 도착 화면이기도 하다
+      await pathSee(dev, dumped);
       if (a.long) await dl.longPress(dev, x, y);
       else await dl.tap(dev, x, y);
       // 녹화: 셀렉터로 눌렀으면 셀렉터를, 아니면 좌표를 남긴다 (셀렉터 쪽이 해상도·레이아웃 변화에 강하다)
@@ -46,6 +50,7 @@ export function register(server: McpServer): void {
           : { tapAt: { x: Math.round(x), y: Math.round(y) } },
         `${a.long ? '길게 누름' : '탭'} ${node ? nodeLabel(node) : `좌표 (${Math.round(x)}, ${Math.round(y)})`}${a.allowDanger ? ' · 확인 필수 버튼 허용' : ''}`,
       );
+      pathNote({ type: a.long ? 'longpress' : 'tap', x, y });
       return text(`${a.long ? 'long-pressed' : 'tapped'}: ${what}`);
     },
   );
@@ -142,8 +147,11 @@ export function register(server: McpServer): void {
       annotations: acts,
     },
     async ({ serial, key }) => {
-      await dl.pressKey(await device(serial), key);
+      const dev = await device(serial);
+      await pathSee(dev);
+      await dl.pressKey(dev, key);
       recordStep({ key }, `키 ${key}`);
+      pathNote({ type: 'key', key });
       return text(`pressed ${key}`);
     },
   );

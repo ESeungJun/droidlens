@@ -50,13 +50,26 @@ export interface ScreenTarget {
   danger?: boolean;
 }
 
+/** 이 연결을 지난 QA TC 와 그 TC 의 판정 (#131). 같은 TC 는 최신 하나만 남는다 */
+export interface EdgeTc {
+  plan: string;
+  case: string;
+  verdict: 'pass' | 'fail' | 'blocked';
+  at: number;
+}
+
 export interface ScreenEdge {
   id: string;
   from: string;
   to: string;
   action: GraphAction;
   count: number;
+  /** QA 회차의 TC 가 이 연결을 지났으면 그 TC (최근 EDGE_TC_MAX 개). 지도 파일로 가져온 연결에는 없다 */
+  tcs?: EdgeTc[];
 }
+
+/** 한 연결에 남기는 TC 수 */
+export const EDGE_TC_MAX = 20;
 
 export interface GraphData {
   packageName: string;
@@ -189,7 +202,7 @@ const LABEL_MAX = 60;
  * 화면 글자는 남의 앱에서 온 믿을 수 없는 값이다. 제어 문자·줄바꿈(유니코드 줄 구분자 포함)을 공백으로 펴서
  * 요약 줄 형식을 깨지 못하게 하고, 길면 자른다
  */
-const clip = (raw: string) => {
+export const clipLabel = (raw: string) => {
   const s = raw.replace(/[\u0000-\u001f\u007f-\u009f\u2028\u2029\s]+/g, ' ').trim();
   return s.length > LABEL_MAX ? `${s.slice(0, LABEL_MAX - 1)}…` : s;
 };
@@ -201,7 +214,7 @@ export function screenLabels(g: Pick<GraphData, 'launchScreen' | 'nodes' | 'edge
     const seen = new Set<string>();
     const buttons: ScreenLabels['buttons'] = [];
     for (const raw of n.targets?.map((t) => t.label) ?? n.actions) {
-      const text = clip(String(raw));
+      const text = clipLabel(String(raw));
       if (!text || seen.has(text)) continue;
       seen.add(text);
       // 저장된 danger 표시는 가져온 지도 파일에서 지워져 있을 수 있어 글자로 다시 판정한다
@@ -210,10 +223,10 @@ export function screenLabels(g: Pick<GraphData, 'launchScreen' | 'nodes' | 'edge
     // 화면 이동(graph_navigate)이 따라갈 수 있는 연결만 쓴다: 확인 필수 버튼·딥링크를 지나는 길은 보여 주지 않는다
     const path = start && n.id !== start ? shortestPath(g.edges, start, n.id, (e) => isReplayable(e.action)) : undefined;
     return {
-      id: clip(n.id),
-      label: clip(n.label),
+      id: clipLabel(n.id),
+      label: clipLabel(n.label),
       start: n.id === start,
-      route: n.id === start ? [] : path?.map((e) => clip(actionLabel(e.action))),
+      route: n.id === start ? [] : path?.map((e) => clipLabel(actionLabel(e.action))),
       buttons,
     };
   });

@@ -31,6 +31,8 @@ interface ExploreRequest {
 
 export function register(handle: Handle): void {
   handle('graphGet', async (pkg: string) => (await dl.ScreenGraph.open(pkg)).toJSON());
+  // 화면마다 그 화면을 지난 기록·TC, 없으면 검증하지 않은 화면 (#131)
+  handle('graphChecks', async (pkg: string) => dl.screenChecks((await dl.ScreenGraph.open(pkg)).toJSON(), await dl.loadScreenRecords(pkg)));
   handle('graphImage', async (pkg: string, file: string) => {
     const g = await dl.ScreenGraph.open(pkg);
     return `data:image/png;base64,${(await readFile(join(g.dir, basename(file)))).toString('base64')}`;

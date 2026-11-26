@@ -257,11 +257,40 @@ export const recorder: {
    * 다른 TC 를 돌리는 중에 고친 스크립트는 다시 잇지 않아서, 다음 회차가 돌리지 않고 에이전트로 넘긴다
    */
   relink?: { plan: string; case: string; script: string; fingerprint: string };
-} = { active: false, steps: [], mocks: new Map(), actions: [] };
+  /**
+   * 시나리오가 tap 으로 지난 화면 이동을 앱 지도에 남기는 경로 (#131). 온디바이스 에이전트가 있고 앱을 아는 시나리오에서만 만든다
+   * (화면 확인이 느리면 조작마다 1~2초씩 늦어지므로)
+   */
+  path?: dl.TcPath;
+  /** 조작 번호. 조작 로그를 남길 때마다 하나씩 는다. 탭과 다음 화면 확인 사이에 다른 조작이 끼었는지 이것으로 안다 */
+  seq: number;
+} = { active: false, steps: [], mocks: new Map(), actions: [], seq: 0 };
 
 /** 시나리오 진행 중이면 조작 로그를 남긴다 (스크립트로 녹화되지 않는 조작도 포함: 좌표 스와이프·앱 종료·목·Prefs 변경 등) */
 export function logAction(text: string): void {
+  recorder.seq++;
   if (recorder.active) recorder.actions.push({ at: Date.now(), text });
+}
+
+/**
+ * TC 경로 (#131): 조작 전에 지금 화면을 지도에 올린다. 직전 탭 뒤 다른 조작이 없었으면 그 탭의 도착 화면으로 잇는다.
+ * hierarchy 를 이미 읽었으면 넘겨 같은 조회를 다시 하지 않는다. 지도 기록이 실패해도 원래 조작은 막지 않는다
+ */
+export async function pathSee(dev?: dl.DeviceAdb, hierarchy?: dl.Hierarchy, screen?: dl.CurrentScreen): Promise<dl.ScreenNode | undefined> {
+  const p = recorder.path;
+  if (!p) return undefined;
+  try {
+    if (!hierarchy || !dev) return await p.look(recorder.seq);
+    return await p.see({ screen: screen ?? (await dl.currentScreen(dev)), hierarchy, signature: '' }, recorder.seq);
+  } catch {
+    p.forget();
+    return undefined;
+  }
+}
+
+/** TC 경로 (#131): 방금 한 행동을 적어 둔다. 조작 로그를 남긴 뒤에 부른다 */
+export function pathNote(action: dl.TcPathAction): void {
+  recorder.path?.note(action, recorder.seq);
 }
 
 /** 스크립트 단계로 녹화하고 조작 로그도 남긴다. label 이 없으면 단계 설명을 쓴다 */
