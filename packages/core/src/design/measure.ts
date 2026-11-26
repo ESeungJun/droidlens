@@ -105,14 +105,41 @@ export function textNodes(root: ViewNode, screen: { width: number; height: numbe
   return [...texts, ...onlyDesc];
 }
 
-/** 노드가 가장 가까운 스크롤 영역이나 화면의 위·아래 끝에 닿았나 (반쯤 걸친 노드는 bounds 가 잘려 온다) */
-function clippedOf(n: ViewNode, byId: Map<string, ViewNode>, screen: { height: number }): boolean {
-  const [, t, , b] = n.bounds;
-  if (t <= 0 || b >= screen.height) return true;
+/** 스크롤 영역이 가로로 넘기나: 이름(HorizontalScrollView·ViewPager)이나, 바로 아래 자식 둘 이상이 옆으로 나란하면 가로 */
+function horizontalScroll(p: ViewNode): boolean {
+  if (/Horizontal|ViewPager/.test(p.className)) return true;
+  // ScrollView 는 보통 자식 하나(LinearLayout)를 두고 그 안에 늘어놓는다
+  const k = p.children.length === 1 ? p.children[0].children : p.children;
+  for (let i = 0; i + 1 < k.length; i++) {
+    const [a, b] = [k[i].bounds, k[i + 1].bounds];
+    const overlapY = Math.min(a[3], b[3]) - Math.max(a[1], b[1]);
+    if (overlapY > Math.min(a[3] - a[1], b[3] - b[1]) * 0.5 && (a[2] <= b[0] || b[2] <= a[0])) return true;
+  }
+  return false;
+}
+
+/**
+ * 노드가 화면이나 가장 가까운 스크롤 영역의 끝에서 잘렸나 (반쯤 걸친 노드는 bounds 가 잘려 온다).
+ * 세로 스크롤은 위·아래 끝, 가로 스크롤은 왼·오른 끝을 본다. 세로 끝에 닿아도 글자 획이 그 끝에서 떨어져 있으면(gap, 기기 px)
+ * 다 보이는 글자다(패딩 없는 스크롤의 첫 글자)
+ */
+function clippedOf(
+  n: ViewNode,
+  byId: Map<string, ViewNode>,
+  screen: { height: number },
+  gap?: { top: number; bottom: number },
+): boolean {
+  const [l, t, r, b] = n.bounds;
+  // sampleText 는 가장자리 2px 띠를 배경으로 보고 그 안쪽만 획으로 센다. 획이 그 바로 안쪽부터 있으면 끝에서 잘린 것
+  const cutTop = gap === undefined || gap.top <= 2;
+  const cutBottom = gap === undefined || gap.bottom <= 2;
+  if ((t <= 0 && cutTop) || (b >= screen.height && cutBottom)) return true;
   for (let id = n.id; id.includes('.'); ) {
     id = id.slice(0, id.lastIndexOf('.'));
     const p = byId.get(id);
-    if (p?.scrollable) return Math.abs(t - p.bounds[1]) <= 1 || Math.abs(b - p.bounds[3]) <= 1;
+    if (!p?.scrollable) continue;
+    if (horizontalScroll(p)) return Math.abs(l - p.bounds[0]) <= 1 || Math.abs(r - p.bounds[2]) <= 1;
+    return (Math.abs(t - p.bounds[1]) <= 1 && cutTop) || (Math.abs(b - p.bounds[3]) <= 1 && cutBottom);
   }
   return false;
 }
@@ -169,6 +196,8 @@ export interface InkSample {
   inks?: MeasuredText['inks'];
   stroke?: number;
   lines?: MeasuredText['lines'];
+  /** 노드 위·아래 끝에서 첫·마지막 글자 획까지 (기기 px). 잘림 판정에만 쓰고 결과에는 넣지 않는다 */
+  gap?: { top: number; bottom: number };
 }
 
 interface Far {
@@ -187,6 +216,9 @@ function coreColor(m: Far[]): { rgb: Rgb; n: number } {
   return { rgb: [sum[0] / c.length, sum[1] / c.length, sum[2] / c.length], n: c.length };
 }
 
+/** sampleText 가 색 무리를 나눌 때 보는 화소 수 상한 */
+const MAX_FAR_SAMPLES = 200_000;
+
 /** 노드 영역의 배경·글자 색과 획 폭·줄 간격. 배경이 고르지 않거나(그라데이션·이미지 위) 다른 색이 섞이면 measured=false */
 export function sampleText(img: Raster, [l0, t0, r0, b0]: Bounds): InkSample {
   const l = Math.max(0, Math.floor(l0));
@@ -203,13 +235,18 @@ export function sampleText(img: Raster, [l0, t0, r0, b0]: Bounds): InkSample {
   const uniform = top.n / top.total >= 0.6;
   const background = { hex: rgbToHex(bg), measured: uniform };
 
+  // 색 무리는 비율로만 보므로, 큰 노드(히어로 문구·이미지 위 글자)는 일정 간격으로 표본을 뽑아 화소 객체 수를 묶는다
   const far: Far[] = [];
-  for (let y = t + 2; y < b - 2; y++)
-    for (let x = l + 2; x < r - 2; x++) {
-      const c = pixel(img, x, y);
-      const d = dist(c, bg);
-      if (d > 48) far.push({ x, y, d, c });
-    }
+  const iw = r - l - 4;
+  const area = iw * (b - t - 4);
+  const step = Math.max(1, Math.ceil(area / MAX_FAR_SAMPLES));
+  for (let i = 0; i < area; i += step) {
+    const x = l + 2 + (i % iw);
+    const y = t + 2 + Math.floor(i / iw);
+    const c = pixel(img, x, y);
+    const d = dist(c, bg);
+    if (d > 48) far.push({ x, y, d, c });
+  }
   if (far.length < 8) return { background };
 
   // 색 무리: 배경에서 먼 절반 화소 중 가장 많은 색 묶음(획 가운데 색)을 씨앗으로, 배경 → 씨앗 선 위의 화소
@@ -298,6 +335,7 @@ export function sampleText(img: Raster, [l0, t0, r0, b0]: Bounds): InkSample {
     ...(clusters.length > 1 ? { inks } : {}),
     ...(stroke !== undefined ? { stroke } : {}),
     ...(lines ? { lines } : {}),
+    ...(n ? { gap: { top: blocks[0].top, bottom: h - blocks[n - 1].bottom } } : {}),
   };
 }
 
@@ -312,6 +350,7 @@ export function measureTexts(root: ViewNode, img: Raster, screen: ScreenMetrics,
   return textNodes(root, screen, packageName).map((n) => {
     const description = !n.text.trim();
     const fontSize = description ? undefined : fontSizeOf(n, screen);
+    const { gap, ...ink } = description ? ({} as InkSample) : sampleText(img, n.bounds);
     return {
       nodeId: n.id,
       text: description ? n.contentDesc : n.text,
@@ -319,8 +358,8 @@ export function measureTexts(root: ViewNode, img: Raster, screen: ScreenMetrics,
       bounds: n.bounds,
       rect: toDpRect(n.bounds, screen.density),
       ...(fontSize ? { fontSize } : {}),
-      ...(description ? { description: true } : sampleText(img, n.bounds)),
-      ...(clippedOf(n, byId, screen) ? { clipped: true } : {}),
+      ...(description ? { description: true } : ink),
+      ...(clippedOf(n, byId, screen, gap) ? { clipped: true } : {}),
     };
   });
 }
@@ -362,6 +401,11 @@ function spanOf(vals: ArrayLike<number>, center: number): [number, number] | und
  * 있어야 할 자리(expected, 기기 px)에서 margin 만큼 넓힌 범위 안의 상자를 찾는다.
  * 상자 색은 자리 안쪽 가운데의 가장 많은 색, 바깥 색은 찾는 범위 테두리의 가장 많은 색. 둘이 비슷하면(상자가 없음) undefined
  */
+/** 찾는 범위 끝까지 이어졌나. 화면 가장자리에 닿은 쪽은 그 방향으로 더 클 수 없으니 세지 않는다 */
+function edgeHit([bl, bt, br, bb]: Bounds, [l, t, r, b]: Bounds, img: Raster): boolean {
+  return (bl <= l && l > 0) || (bt <= t && t > 0) || (br >= r && r < img.width) || (bb >= b && b < img.height);
+}
+
 export function measureBox(img: Raster, expected: Bounds, margin: number): MeasuredBox | undefined {
   const [el, et, er, eb] = expected;
   const l = Math.max(0, Math.floor(el - margin));
@@ -384,12 +428,16 @@ export function measureBox(img: Raster, expected: Bounds, margin: number): Measu
   const h = b - t;
   const mask = new Uint8Array(w * h);
   const rows = new Uint32Array(h);
+  // 상자 화소: 상자 색에 가깝고(30 안) 바깥 색보다 상자 색 쪽이 더 가까운 화소. 두 색이 24~30 만큼만 떨어져 있어도 바깥이 번지지 않게
   for (let y = 0; y < h; y++)
-    for (let x = 0; x < w; x++)
-      if (dist(pixel(img, l + x, t + y), boxC) < 30) {
+    for (let x = 0; x < w; x++) {
+      const c = pixel(img, l + x, t + y);
+      const dc = dist(c, boxC);
+      if (dc < 30 && dc < dist(c, out)) {
         mask[y * w + x] = 1;
         rows[y]++;
       }
+    }
   const ys = spanOf(rows, Math.round((et + eb) / 2) - t);
   if (!ys) return undefined;
   const cols = new Uint32Array(w);
@@ -416,5 +464,5 @@ export function measureBox(img: Raster, expected: Bounds, margin: number): Measu
     (a, c) => a - c,
   );
   const radius = Math.min((rs[1] + rs[2]) / 2, Math.min(bw, bh) / 2);
-  return { bounds, color: rgbToHex(boxC), radius: round(radius), edge: bl <= l || bt <= t || br >= r || bb >= b };
+  return { bounds, color: rgbToHex(boxC), radius: round(radius), edge: edgeHit(bounds, [l, t, r, b], img) };
 }

@@ -74,7 +74,7 @@ const W = 360 * K;
 const H = 640 * K;
 
 /**
- * texts: [{ text, x, y, w, h (dp), size (sp), color, bold?, lines?: [줄 수, 줄 높이 dp], icon?: { color, w (dp) }, desc?, scrollable? }]
+ * texts: [{ text, x, y, w, h (dp), size (sp), color, bold?, lines?: [줄 수, 줄 높이 dp], icon?: { color, w (dp) }, desc?, scrollable?, clip?: [본래 y, 본래 h] }]
  * boxes: [{ x, y, w, h, color, radius? (dp) }]
  * 글자 획은 세로 막대로 흉내 낸다: 막대 폭은 글자 크기의 0.09배(보통)·0.14배(굵게)
  */
@@ -121,10 +121,12 @@ function makeScreen(texts, boxes = [], opt = {}) {
       fill(x0, tp + 4, x0 + t.icon.w * K, bt - 4, t.icon.color);
       x0 += t.icon.w * K + 12;
     }
-    const rows = t.lines ? Array.from({ length: t.lines[0] }, (_, i) => [tp + i * t.lines[1] * K, tp + (i + 1) * t.lines[1] * K]) : [[tp, bt]];
+    // clip: [y, h] (dp) 본래 글자 자리. 노드가 스크롤 끝에서 잘려 bounds 보다 크게 그려졌던 글자는 bounds 안만 보인다
+    const [ta, tb] = t.clip ? [t.clip[0] * K, (t.clip[0] + t.clip[1]) * K] : [tp, bt];
+    const rows = t.lines ? Array.from({ length: t.lines[0] }, (_, i) => [ta + i * t.lines[1] * K, ta + (i + 1) * t.lines[1] * K]) : [[ta, tb]];
     for (const [a, b] of rows) {
       const pad = t.lines ? (b - a) * 0.15 : 4;
-      for (let x = x0; x + stroke < r - 4; x += stroke + 3) fill(x, a + pad, x + stroke, b - pad, t.color);
+      for (let x = x0; x + stroke < r - 4; x += stroke + 3) fill(x, Math.max(tp, a + pad), x + stroke, Math.min(bt, b - pad), t.color);
     }
   }
   const nodes = texts
@@ -499,9 +501,9 @@ function figmaPng(scale = 2) {
   return PNG.sync.write(p);
 }
 
-function fakeFetch(calls, { status = 200, imageUrl = 'https://figma-alpha-api.s3.us-west-2.amazonaws.com/images/abc', png = figmaPng() } = {}) {
+function fakeFetch(calls, { status = 200, imageUrl = 'https://figma-alpha-api.s3.us-west-2.amazonaws.com/images/abc', png = figmaPng(), chunks } = {}) {
   return async (url, init) => {
-    calls.push({ url, headers: init?.headers });
+    calls.push({ url, headers: init?.headers, redirect: init?.redirect });
     const res = (body, st = 200) => ({
       ok: st >= 200 && st < 300,
       status: st,
@@ -510,6 +512,19 @@ function fakeFetch(calls, { status = 200, imageUrl = 'https://figma-alpha-api.s3
       arrayBuffer: async () => body.buffer.slice(body.byteOffset, body.byteOffset + body.length),
     });
     if (url.startsWith('https://api.figma.com/')) return res({ err: null, images: { '1:2': imageUrl } }, status);
+    // chunks: content-length 없이 조각으로 오는 몸통 (몇 조각까지 읽었는지 chunks.read 에 센다)
+    if (chunks)
+      return {
+        ...res(Buffer.alloc(0)),
+        headers: { get: () => null },
+        arrayBuffer: async () => assert.fail('스트림이 있으면 통째로 읽지 않는다'),
+        body: (async function* () {
+          for (let i = 0; i < chunks.count; i++) {
+            chunks.read = i + 1;
+            yield new Uint8Array(chunks.size);
+          }
+        })(),
+      };
     return res(png);
   };
 }
@@ -598,7 +613,7 @@ test('한계: 스크롤 경계에 반쯤 걸친 노드는 높이로 재는 값(�
   // 목록(100~600dp)을 스크롤해 '상품 하나'(본래 80~120)는 위가 잘려 100~120 만 보인다
   const texts = [
     { text: '제목', x: 20, y: 40, w: 60, h: 20, color: '#191919' },
-    { text: '상품 하나', x: 20, y: 100, w: 120, h: 20, color: '#191919' },
+    { text: '상품 하나', x: 20, y: 100, w: 120, h: 20, color: '#191919', clip: [80, 40] },
     { text: '상품 둘', x: 20, y: 140, w: 120, h: 40, color: '#191919' },
     { text: '상품 셋', x: 20, y: 200, w: 120, h: 40, color: '#191919' },
   ];
@@ -685,4 +700,126 @@ test('디자인 코드: 짝이 안 맞는 긴 입력도 제곱 시간이 걸리�
   // 뒤에서 짝을 못 찾아도 그 앞의 태그는 읽는다
   const nodes = d.parseFigmaCode(`<p className="text-[14px]" data-node-id="1:1">가</p><a b={ ${'x'.repeat(10)}`);
   assert.equal(nodes[0].text, '가');
+});
+
+// ---------- PR #110 리뷰 지적 (2026-11-26) ----------
+
+/** 가이드에 상자를 더해 화면과 비교한다 (width: 기기 폭 dp) */
+function compareBoxes(extra, texts, boxes, width = 360) {
+  const g = guideOf();
+  const guide = { ...g, elements: [...g.elements, ...extra] };
+  const scr = { ...screen, width: width * K };
+  const { png, xml } = makeScreen(texts, boxes, { width: width * K });
+  const img = d.decodePng(png);
+  const m = d.measureTexts(parseHierarchyXml(xml).root, img, scr, 'com.example.app');
+  return d.compareDesign(guide, m, scr, true, img);
+}
+const widen = (width) => SAME.map((t) => (t.x > 200 ? { ...t, x: t.x + (width - 360) } : t.x > 100 && t.x < 200 ? { ...t, x: t.x + (width - 360) / 2 } : t));
+
+test('리뷰: flex-1 상자는 부모 폭을 채우는 것으로 보지 않고, 폭은 빼고 높이만 견준다', () => {
+  assert.equal(d.parseClasses(['flex-1']).fill, undefined);
+  assert.equal(d.parseClasses(['flex-1']).grow, true);
+  assert.equal(d.parseClasses(['flex-[1_0_0]']).grow, true);
+  assert.equal(d.parseClasses(['w-full']).fill, true);
+  const cards = (h) => [
+    { id: '9:1', kind: 'box', name: 'a', rect: { x: 20, y: 200, w: 156, h: 80 }, background: '#dddddd', grow: true },
+    { id: '9:2', kind: 'box', name: 'b', rect: { x: 184, y: 200, w: 156, h: h }, background: '#dddddd', grow: true },
+  ];
+  // 412dp 기기에서 나란한 카드 둘이 182 씩 맞게 그려짐
+  const drawn = [
+    { x: 20, y: 200, w: 182, h: 80, color: '#dddddd' },
+    { x: 210, y: 200, w: 182, h: 80, color: '#dddddd' },
+  ];
+  const ok = compareBoxes(cards(80), widen(412), drawn, 412);
+  assert.deepEqual(ok.items.filter((i) => i.prop === 'size'), [], JSON.stringify(ok.items, null, 1));
+  // 높이가 다르면 높이 차이는 낸다
+  const bad = compareBoxes(cards(64), widen(412), drawn, 412);
+  const size = bad.items.find((i) => i.prop === 'size' && i.element === 'b');
+  assert.equal(size?.expected, '?×64dp', JSON.stringify(bad.items, null, 1));
+  assert.equal(size?.actual, '182×80dp');
+});
+
+test('리뷰: 흰 바탕 위 연한 회색(#eeeeee) 카드는 바깥으로 번지지 않는다', () => {
+  for (const color of ['#eeeeee', '#f0f0f0', '#dddddd']) {
+    const r = compareBoxes(
+      [{ id: '9:9', kind: 'box', name: 'card', rect: { x: 20, y: 200, w: 320, h: 120 }, background: color, radius: 12 }],
+      SAME,
+      [{ x: 20, y: 200, w: 320, h: 120, color, radius: 12 }],
+    );
+    assert.deepEqual(r.items.filter((i) => ['size', 'radius'].includes(i.prop)), [], `${color}: ${JSON.stringify(r.items, null, 1)}`);
+  }
+});
+
+test('리뷰: 화면 가장자리에 닿은 상자는 그 쪽 때문에 추정으로 내리지 않는다', () => {
+  const r = compareBoxes(
+    [{ id: '9:9', kind: 'box', name: '배너', rect: { x: 0, y: 200, w: 360, h: 80 }, background: '#2255aa', fill: true }],
+    SAME,
+    [{ x: 0, y: 200, w: 360, h: 96, color: '#2255aa' }],
+  );
+  const size = r.items.find((i) => i.prop === 'size' && i.element === '배너');
+  assert.equal(size?.actual, '360×96dp', JSON.stringify(r.items, null, 1));
+  assert.equal(size.accuracy, 'measured');
+  assert.equal(size.severity, 'high');
+});
+
+test('리뷰: 같은 문구의 아이콘 설명이 진짜 글자의 짝을 빼앗지 않는다', () => {
+  const moved = [{ ...SAME[0], y: 60 }, ...SAME.slice(1)];
+  const base = run(moved).result.items.map((i) => `${i.prop} ${i.element}`);
+  const { result } = run([...moved, { text: '설정', x: 320, y: 56, w: 24, h: 24, desc: true }]);
+  assert.deepEqual(result.items.map((i) => `${i.prop} ${i.element}`), base);
+  assert.ok(base.some((i) => i.startsWith('gap')), '제목이 글자 노드와 짝지어져 아래 요소 간격을 잰다');
+});
+
+test('리뷰: 짝 없는 { 하나가 뒤의 정상 속성까지 버리게 하지 않는다', () => {
+  const body = `<div className="bg-white" data-node-id="1:2"><img src={imgA} data-node-id="1:3" /><p className="text-[14px]" style={{ color: "#111" }} data-node-id="1:4">가</p></div>`;
+  const ids = (code) => d.parseFigmaCode(code).map((n) => n.id);
+  const want = ids(`export default function F() { return (${body}); }`);
+  assert.deepEqual(want, ['1:2', '1:3', '1:4']);
+  assert.deepEqual(ids(`// TODO: <Badge { 를 넣을지\nexport default function F() { return (${body}); }`), want);
+});
+
+test('리뷰: 패딩 없는 스크롤의 첫 글자는 잘림이 아니고, 가로 스크롤은 왼·오른 끝을 본다', () => {
+  const { png, xml } = makeScreen(SAME, BUTTON, { scroll: [56, 640] });
+  const m = d.measureTexts(parseHierarchyXml(xml).root, d.decodePng(png), screen, 'com.example.app');
+  assert.deepEqual(m.filter((t) => t.clipped).map((t) => t.text), []);
+  // 가로 칩 목록: 위끝이 목록과 같아도 잘림이 아니고, 오른 끝에 걸친 칩은 잘림
+  const chips = [
+    { text: '전체', x: 0, y: 100, w: 60, h: 32, size: 14, color: '#191919' },
+    { text: '인기', x: 70, y: 100, w: 60, h: 32, size: 14, color: '#191919' },
+    { text: '새로', x: 320, y: 100, w: 40, h: 32, size: 14, color: '#191919' },
+  ];
+  const h = makeScreen(chips, [], { scroll: [100, 132] });
+  const hm = d.measureTexts(parseHierarchyXml(h.xml).root, d.decodePng(h.png), screen, 'com.example.app');
+  assert.deepEqual(hm.filter((t) => t.clipped).map((t) => t.text), ['전체', '새로']);
+});
+
+test('리뷰: 큰 글자 노드도 화소 표본을 묶어 빨리 잰다', () => {
+  const { png, xml } = makeScreen([{ text: 'X', x: 0, y: 30, w: 360, h: 600, size: 14, color: '#333333', lines: [30, 20] }]);
+  const img = d.decodePng(png);
+  for (let i = 0; i < img.data.length; i += 4) {
+    const y = Math.floor(i / 4 / img.width);
+    if (y > 200 && y < 1800 && (i / 4) % 7 < 5) img.data[i] = img.data[i + 1] = img.data[i + 2] = 40;
+  }
+  const t0 = performance.now();
+  const [m] = d.measureTexts(parseHierarchyXml(xml).root, img, screen, 'com.example.app');
+  assert.ok(performance.now() - t0 < 300, `${Math.round(performance.now() - t0)}ms`);
+  assert.ok(m.color, '글자 색은 잰다');
+});
+
+test('리뷰: 이미지 요청은 리다이렉트를 따라가지 않고, 길이를 모르는 몸통은 상한에서 끊고, 머리 크기 상한은 요청 배율에 맞춘다', async () => {
+  const guide = guideOf();
+  const calls = [];
+  const img = await d.fetchFigmaImage(guide, { token: 't', fetch: fakeFetch(calls) });
+  assert.equal(calls[1].redirect, 'error');
+  assert.deepEqual([img.width, img.height, img.scale], [720, 1280, 2]);
+  const chunks = { count: 100, size: 1024 * 1024 };
+  await assert.rejects(d.fetchFigmaImage(guide, { token: 't', fetch: fakeFetch([], { chunks }) }), /너무 큽니다/);
+  assert.ok(chunks.read <= 26, `${chunks.read} 조각에서 끊음`);
+  const big = Buffer.alloc(33);
+  Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]).copy(big, 0);
+  big.writeUInt32BE(13, 8);
+  big.write('IHDR', 12, 'latin1');
+  big.writeUInt32BE(6000, 16);
+  big.writeUInt32BE(6000, 20);
+  await assert.rejects(d.fetchFigmaImage(guide, { token: 't', fetch: fakeFetch([], { png: big }) }), /너무 큽니다 \(6000×6000\)/);
 });

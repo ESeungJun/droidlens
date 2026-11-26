@@ -48,8 +48,10 @@ export const guideElementSchema = z
     parent: z.string().max(200).regex(FIGMA_NODE_ID).optional(),
     /** 가격·날짜·닉네임처럼 시안에 예시로 넣은 문구: 문구 비교에서 뺀다 */
     example: z.boolean().optional(),
-    /** 폭이 부모를 채운다(w-full·self-stretch·flex-1) true, 고정 폭(w-[320px]) false, 모르면 없음 (#89 상자 크기) */
+    /** 폭이 부모를 채운다(w-full·self-stretch) true, 고정 폭(w-[320px]) false, 모르면 없음 (#89 상자 크기) */
     fill: z.boolean().optional(),
+    /** 부모 주축으로 늘어난다(flex-1·grow): 형제와 폭을 나누므로 폭은 모른다. 크기 비교에서 폭을 뺀다 */
+    grow: z.boolean().optional(),
   })
   .strict();
 
@@ -242,33 +244,42 @@ interface JsxTag {
 
 /**
  * 짝이 안 맞는 긴 입력에서 제곱 시간이 되지 않게 (#89): 괄호 하나를 훑는 글자 수에 상한을 두고,
- * 한 번 끝(또는 상한)까지 짝을 못 찾으면 그 뒤의 { } 속성은 훑지 않고 태그가 아닌 것으로 본다.
+ * 끝(또는 상한)까지 짝을 못 찾은 훑기는 그 구간 안 모든 { 의 짝을 한 번에 적어 둔다(스택). 그 구간 안의 { 는 다시 훑지 않고
+ * 적어 둔 짝을 쓴다. 짝 없는 { 하나 때문에 뒤의 정상 속성까지 버리지 않는다.
  * 따옴표 속성도 한 번 짝을 못 찾으면 그 위치 뒤로는 같은 따옴표를 다시 찾지 않는다
  */
 const MAX_BRACE_SCAN = 100_000;
 interface ScanState {
-  /** 이 위치부터는 { } 짝을 찾지 않는다 (앞에서 끝까지 못 찾음) */
-  braceDeadFrom: number;
+  /** 짝을 못 찾은 훑기가 지나간 구간 [from, to). 이 안의 { 는 brace 에서 짝을 찾는다(없으면 짝 없음) */
+  scanned: { from: number; to: number } | null;
+  /** { 위치 → 짝이 맞는 닫는 괄호 다음 위치 */
+  brace: Map<number, number>;
   /** 따옴표별로, 이 위치 뒤에는 그 따옴표가 없다 */
   noQuoteAfter: Record<string, number>;
 }
-const newScanState = (): ScanState => ({ braceDeadFrom: Infinity, noQuoteAfter: {} });
+const newScanState = (): ScanState => ({ scanned: null, brace: new Map(), noQuoteAfter: {} });
 
 /** i 가 여는 괄호({)일 때 짝이 맞는 닫는 괄호 다음 위치. 문자열·템플릿 안의 괄호는 세지 않는다 */
 function skipBraces(code: string, i: number, st: ScanState): number {
-  if (i >= st.braceDeadFrom) return -1;
+  if (st.scanned && i >= st.scanned.from && i < st.scanned.to) return st.brace.get(i) ?? -1;
   const start = i;
   const end = Math.min(code.length, i + MAX_BRACE_SCAN);
-  let depth = 0;
+  const open: number[] = [];
+  const found = new Map<number, number>();
   for (; i < end; i++) {
     const c = code[i];
     if (c === '"' || c === "'" || c === '`') {
       const q = c;
       for (i++; i < end && code[i] !== q; i++) if (code[i] === '\\') i++;
-    } else if (c === '{') depth++;
-    else if (c === '}' && --depth === 0) return i + 1;
+    } else if (c === '{') open.push(i);
+    else if (c === '}' && open.length) {
+      const o = open.pop()!;
+      if (o === start) return i + 1;
+      found.set(o, i + 1);
+    }
   }
-  st.braceDeadFrom = start;
+  st.scanned = { from: start, to: end };
+  st.brace = found;
   return -1;
 }
 
@@ -447,8 +458,10 @@ interface Style {
   radius?: number;
   padding: [number?, number?, number?, number?];
   gap?: number;
-  /** 폭이 부모를 채우나 (w-full·self-stretch·flex-1 → true, w-[320px] → false) */
+  /** 폭이 부모를 채우나 (w-full·self-stretch → true, w-[320px] → false) */
   fill?: boolean;
+  /** flex-1·grow: 부모 주축으로 형제와 나눠 늘어난다. 폭을 알 수 없다 */
+  grow?: boolean;
 }
 
 export function parseClasses(classes: string[]): Style {
@@ -488,7 +501,8 @@ export function parseClasses(classes: string[]): Style {
     } else if ((v = arb(c, 'gap')) !== undefined) {
       const px = cssPx(v);
       if (px !== undefined) st.gap = px;
-    } else if (/^(w-full|self-stretch|flex-1|grow|flex-grow|flex-\[1_.*\]|inset-x-0)$/.test(c)) st.fill = true;
+    } else if (/^(w-full|self-stretch|inset-x-0)$/.test(c)) st.fill = true;
+    else if (/^(flex-1|grow|flex-grow|flex-\[1_.*\])$/.test(c)) st.grow = true;
     else if ((v = arb(c, 'w')) !== undefined) {
       if (cssPx(v) !== undefined && st.fill === undefined) st.fill = false;
     } else {
@@ -589,6 +603,7 @@ export function buildDesignGuide(input: FigmaGuideInput): ParsedGuide {
     if (st.radius !== undefined) el.radius = st.radius;
     if (st.gap !== undefined) el.gap = st.gap;
     if (st.fill !== undefined) el.fill = st.fill;
+    if (st.grow && st.fill === undefined) el.grow = true;
     if (st.padding.some((p) => p !== undefined))
       el.padding = [0, 1, 2, 3].map((i) => st.padding[i] ?? 0) as [number, number, number, number];
     if (!el.parent && c.parent) el.parent = c.parent;

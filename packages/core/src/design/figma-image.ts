@@ -1,4 +1,3 @@
-import { PNG } from 'pngjs';
 import { parseFigmaLink, type DesignGuide } from './guide.js';
 
 /**
@@ -14,6 +13,8 @@ export const FIGMA_API = 'https://api.figma.com';
 const MAX_BYTES = 25 * 1024 * 1024;
 /** 긴 변이 이보다 크지 않게 배율을 낮춘다 */
 const MAX_EDGE = 4096;
+/** 받은 PNG 머리 크기 상한: 요청 배율은 긴 변 MAX_EDGE 안이고, 배율 반올림 여유만 더한다 */
+const MAX_HEAD_EDGE = MAX_EDGE + 104;
 
 export type FetchLike = (
   url: string,
@@ -24,6 +25,8 @@ export type FetchLike = (
   headers: { get(name: string): string | null };
   json(): Promise<unknown>;
   arrayBuffer(): Promise<ArrayBuffer>;
+  /** 있으면 스트림으로 읽으며 크기 상한을 본다 (content-length 가 없는 응답) */
+  body?: AsyncIterable<Uint8Array> | null;
 }>;
 
 export function figmaToken(env: NodeJS.ProcessEnv = process.env): string | undefined {
@@ -49,11 +52,26 @@ function imageUrlOk(raw: string): boolean {
   }
 }
 
-async function readLimited(res: Awaited<ReturnType<FetchLike>>): Promise<Buffer> {
+async function readLimited(res: Awaited<ReturnType<FetchLike>>, abort: () => void): Promise<Buffer> {
+  const tooBig = (n: number) => new Error(`Figma 이미지가 너무 큽니다 (${Math.round(n / 1024 / 1024)}MB)`);
   const len = Number(res.headers.get('content-length') ?? 0);
-  if (len > MAX_BYTES) throw new Error(`Figma 이미지가 너무 큽니다 (${Math.round(len / 1024 / 1024)}MB)`);
+  if (len > MAX_BYTES) throw tooBig(len);
+  // 몸통을 끝까지 쌓기 전에 상한을 넘으면 끊는다 (content-length 가 없거나 거짓인 응답)
+  if (res.body) {
+    const parts: Buffer[] = [];
+    let n = 0;
+    for await (const chunk of res.body) {
+      n += chunk.length;
+      if (n > MAX_BYTES) {
+        abort();
+        throw tooBig(n);
+      }
+      parts.push(Buffer.from(chunk));
+    }
+    return Buffer.concat(parts, n);
+  }
   const buf = Buffer.from(await res.arrayBuffer());
-  if (buf.length > MAX_BYTES) throw new Error(`Figma 이미지가 너무 큽니다 (${Math.round(buf.length / 1024 / 1024)}MB)`);
+  if (buf.length > MAX_BYTES) throw tooBig(buf.length);
   return buf;
 }
 
@@ -94,21 +112,16 @@ export async function fetchFigmaImage(
     const url = body?.images?.[guide.frame.id];
     if (typeof url !== 'string' || !url) throw new Error(`Figma 가 이 프레임(${guide.frame.id})의 이미지를 만들지 못했습니다`);
     if (!imageUrlOk(url)) throw new Error('Figma 가 알 수 없는 주소의 이미지를 돌려줬습니다');
-    const img = await f(url, { signal: ctrl.signal });
+    // 이미지 주소도 리다이렉트를 따라가지 않는다 (허용한 호스트가 다른 곳으로 보내도 따라가지 않게)
+    const img = await f(url, { signal: ctrl.signal, redirect: 'error' });
     if (!img.ok) throw new Error(`Figma 이미지를 받지 못했습니다 (HTTP ${img.status})`);
-    const png = await readLimited(img);
-    // 풀기 전에 머리(IHDR)의 크기부터 본다: 작은 파일이 아주 큰 화면으로 풀리며 메모리를 다 쓰지 않게
+    const png = await readLimited(img, () => ctrl.abort());
+    // 크기는 머리(IHDR)에서 읽고 여기서는 풀지 않는다. 손상된 PNG 는 비교할 때 풀다가 경고로 남는다
     const head = pngHeaderSize(png);
-    if (!head) throw new Error('Figma 가 돌려준 파일이 PNG 가 아닙니다');
-    if (head.width > MAX_EDGE * 2 || head.height > MAX_EDGE * 2)
+    if (!head || !head.width || !head.height) throw new Error('Figma 가 돌려준 파일이 PNG 가 아닙니다');
+    if (head.width > MAX_HEAD_EDGE || head.height > MAX_HEAD_EDGE)
       throw new Error(`Figma 이미지가 너무 큽니다 (${head.width}×${head.height})`);
-    let width: number;
-    let height: number;
-    try {
-      ({ width, height } = PNG.sync.read(png));
-    } catch {
-      throw new Error('Figma 가 돌려준 파일이 PNG 가 아닙니다');
-    }
+    const { width, height } = head;
     return { png, width, height, scale: Math.round((width / guide.frame.width) * 1000) / 1000 };
   } catch (e) {
     if ((e as Error).name === 'AbortError') throw new Error('Figma 이미지 요청이 시간 안에 끝나지 않았습니다');

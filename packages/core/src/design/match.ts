@@ -143,43 +143,50 @@ export function matchTexts(guideAll: GuideElement[], screenAll: MeasuredText[], 
     for (const v of items) m.set(key(v), [...(m.get(key(v)) ?? []), v]);
     return m;
   };
-  // 1) 양쪽에 한 번씩만 나오는 문구
-  for (const [how, key] of keys) {
-    const gs = countBy(
-      guide.filter((g) => !usedG.has(g)),
-      (g) => key(g.text!),
-    );
-    const ns = countBy(
-      screen.filter((n) => !usedN.has(n)),
-      (n) => key(n.text),
-    );
-    for (const [k, [g, ...gMore]] of gs) {
-      const n = ns.get(k);
-      if (!gMore.length && n?.length === 1) pair(g, n[0], how);
-    }
-  }
-  // 2) 여러 번 나오는 문구: 있어야 할 자리와 가까운 짝부터 (기준 짝이 없으면 위에서부터 차례로)
-  for (const [how, key] of keys) {
-    const ns = countBy(
-      screen.filter((n) => !usedN.has(n)),
-      (n) => key(n.text),
-    );
-    const near: { g: GuideElement; n: MeasuredText; dy: number }[] = [];
-    for (const g of guide) {
-      const cands = usedG.has(g) ? undefined : ns.get(key(g.text!));
-      if (!cands?.length) continue;
-      const want = expectedPosition(g, pairs, ctx);
-      if (!want) {
-        const n = cands.find((c) => !usedN.has(c));
-        if (n) pair(g, n, how);
-        continue;
+  // 같은 문구로 짝짓기. pool 은 이번에 쓸 화면 노드(글자 노드 → 설명만 있는 노드 차례)
+  const sameText = (pool: MeasuredText[]) => {
+    // 1) 양쪽에 한 번씩만 나오는 문구
+    for (const [how, key] of keys) {
+      const gs = countBy(
+        guide.filter((g) => !usedG.has(g)),
+        (g) => key(g.text!),
+      );
+      const ns = countBy(
+        pool.filter((n) => !usedN.has(n)),
+        (n) => key(n.text),
+      );
+      for (const [k, [g, ...gMore]] of gs) {
+        const n = ns.get(k);
+        if (!gMore.length && n?.length === 1) pair(g, n[0], how);
       }
-      if (want.top + (g.rect?.h ?? 0) * ctx.scale < 0 || want.top > ctx.screenHeight) continue;
-      for (const n of cands) near.push({ g, n, dy: Math.abs(n.rect.y - want.top) });
     }
-    near.sort((a, b) => a.dy - b.dy);
-    for (const { g, n } of near) if (!usedG.has(g) && !usedN.has(n)) pair(g, n, how);
-  }
+    // 2) 여러 번 나오는 문구: 있어야 할 자리와 가까운 짝부터 (기준 짝이 없으면 위에서부터 차례로)
+    for (const [how, key] of keys) {
+      const ns = countBy(
+        pool.filter((n) => !usedN.has(n)),
+        (n) => key(n.text),
+      );
+      const near: { g: GuideElement; n: MeasuredText; dy: number }[] = [];
+      for (const g of guide) {
+        const cands = usedG.has(g) ? undefined : ns.get(key(g.text!));
+        if (!cands?.length) continue;
+        const want = expectedPosition(g, pairs, ctx);
+        if (!want) {
+          const n = cands.find((c) => !usedN.has(c));
+          if (n) pair(g, n, how);
+          continue;
+        }
+        if (want.top + (g.rect?.h ?? 0) * ctx.scale < 0 || want.top > ctx.screenHeight) continue;
+        for (const n of cands) near.push({ g, n, dy: Math.abs(n.rect.y - want.top) });
+      }
+      near.sort((a, b) => a.dy - b.dy);
+      for (const { g, n } of near) if (!usedG.has(g) && !usedN.has(n)) pair(g, n, how);
+    }
+  };
+  // 글자 노드로 먼저 모든 단계를 돌고, 남은 가이드 글자만 설명(contentDescription)만 있는 노드와 짝짓는다.
+  // 같은 문구의 아이콘 설명이 진짜 글자와 짝을 다투지 않게
+  const textNodes = screen.filter((n) => !n.description);
+  sameText(textNodes);
 
   // 3) 비슷한 문구: 있어야 할 자리 근처에서, 가장 비슷한 짝부터 (화면 밖에 있어야 할 요소는 짝짓지 않는다)
   const cands: { g: GuideElement; n: MeasuredText; s: number; dy: number }[] = [];
@@ -213,6 +220,8 @@ export function matchTexts(guideAll: GuideElement[], screenAll: MeasuredText[], 
     }
     if (best) pair(g, best.n, 'position');
   }
+
+  sameText(screen.filter((n) => n.description));
 
   return {
     pairs,

@@ -363,7 +363,8 @@ interface BoxContext {
   rtl: boolean;
 }
 
-/** 상자 크기·모서리 (#89). 폭이 부모를 채우는 상자(fill, 모르면 가운데 붙고 프레임 폭의 80% 이상)는 양쪽 여백을 뺀 폭과 견준다 */
+/** 상자 크기·모서리 (#89). 폭이 부모를 채우는 상자(fill, 모르면 가운데 붙고 프레임 폭의 80% 이상)는 양쪽 여백을 뺀 폭과 견준다.
+ * flex-1·grow 상자(grow)는 폭을 모르므로 높이만 견준다 */
 function boxItems(b: BoxContext): { items: DesignDiffItem[]; compared: number } {
   const { guide, ctx, img, screen } = b;
   const s = guide.scale;
@@ -375,7 +376,9 @@ function boxItems(b: BoxContext): { items: DesignDiffItem[]; compared: number } 
     const r = g.rect!;
     const want = expectedPosition(g, b.pairs, ctx);
     if (!want) continue;
-    const fill = g.fill ?? (want.anchor === 'center' && r.w >= guide.frame.width * 0.8);
+    // flex-1·grow 는 형제와 폭을 나누므로 폭을 모른다: 자리는 시안 폭으로 찾고 크기는 높이만 견준다
+    const grow = g.grow === true && g.fill === undefined;
+    const fill = !grow && (g.fill ?? (want.anchor === 'center' && r.w >= guide.frame.width * 0.8));
     const wDp = fill ? ctx.screenWidth - (guide.frame.width - r.w) * s : r.w * s;
     const hDp = r.h * s;
     let at = fill
@@ -390,17 +393,18 @@ function boxItems(b: BoxContext): { items: DesignDiffItem[]; compared: number } 
     compared++;
     const mw = (box.bounds[2] - box.bounds[0]) * k;
     const mh = (box.bounds[3] - box.bounds[1]) * k;
-    const d = Math.max(Math.abs(mw - wDp), Math.abs(mh - hDp));
+    const d = grow ? Math.abs(mh - hDp) : Math.max(Math.abs(mw - wDp), Math.abs(mh - hDp));
     const base = { element: label(g), guideId: g.id, bounds: box.bounds };
     if (d > DESIGN_TOLERANCE.spacing) {
       const notes = [
         fill ? '폭은 부모를 채우는 것으로 보고 양쪽 여백을 뺀 폭과 견줬습니다' : '',
+        grow ? '폭은 형제와 나눠 늘어나는 상자(flex-1)라 높이만 견줬습니다' : '',
         box.edge ? '찾는 범위 끝까지 이어져 실제로는 더 클 수 있습니다' : '',
       ].filter(Boolean);
       items.push({
         prop: 'size',
         ...base,
-        expected: `${r1(wDp)}×${r1(hDp)}dp`,
+        expected: grow ? `?×${r1(hDp)}dp` : `${r1(wDp)}×${r1(hDp)}dp`,
         actual: `${r1(mw)}×${r1(mh)}dp`,
         delta: r1(d),
         unit: 'dp',
@@ -410,7 +414,7 @@ function boxItems(b: BoxContext): { items: DesignDiffItem[]; compared: number } 
       });
     }
     // 모서리: 가이드에 반경이 없으면 0. 반경은 짧은 변의 절반을 넘지 않는다 (rounded-full)
-    const wantR = Math.min((g.radius ?? 0) * s, wDp / 2, hDp / 2);
+    const wantR = Math.min((g.radius ?? 0) * s, grow ? mw / 2 : wDp / 2, hDp / 2);
     const gotR = Math.min(box.radius * k, mw / 2, mh / 2);
     const dr = Math.abs(gotR - wantR);
     if (dr > DESIGN_TOLERANCE.spacing)
