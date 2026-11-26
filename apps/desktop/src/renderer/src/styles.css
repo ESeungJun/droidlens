@@ -371,6 +371,7 @@ label.chk { display: inline-flex; gap: 6px; align-items: center; color: var(--fg
 .qa-table td { padding: 5px 6px; border-bottom: 1px solid var(--line); vertical-align: top; }
 .qa-table tr.qa-bad td { background: color-mix(in srgb, var(--err) 8%, transparent); }
 .qa-table tr.qa-warn td { background: color-mix(in srgb, var(--warn) 8%, transparent); }
+.qa-table tr.qa-now td { background: color-mix(in srgb, var(--info) 10%, transparent); }
 .qa-case { cursor: pointer; }
 .qa-case:hover td { background: var(--panel-2); }
 .qa-case.open td { background: var(--accent-dim); }

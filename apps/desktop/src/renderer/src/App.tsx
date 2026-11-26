@@ -20,6 +20,8 @@ import { useT } from './i18n';
 
 interface Ctx {
   serial: string | null;
+  /** 연결된 기기 (맨 위 막대 목록과 같은 것) */
+  devices: DeviceSummary[];
   pkg: string | null;
   setPkg(p: string | null): void;
   /** 고른 기기의 앱 목록 (왼쪽 목록과 같은 것) */
@@ -282,8 +284,8 @@ export function App() {
     [pkgs, filter],
   );
   const ctx = useMemo<Ctx>(
-    () => ({ serial, pkg, setPkg, pkgs, selectApp, openTab, screen, toast, run }),
-    [serial, pkg, pkgs, selectApp, openTab, screen, toast, run],
+    () => ({ serial, devices, pkg, setPkg, pkgs, selectApp, openTab, screen, toast, run }),
+    [serial, devices, pkg, pkgs, selectApp, openTab, screen, toast, run],
   );
 
   return (
