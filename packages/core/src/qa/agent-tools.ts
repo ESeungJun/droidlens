@@ -35,6 +35,8 @@ export const QA_RUN_TOOLS: readonly string[] = [
   'find_nodes',
   'screenshot_compare',
   'a11y_audit',
+  // 웹뷰 페이지 읽기 (#132, 읽기만)
+  'webview_inspect',
   // 화면 지도
   'graph_record',
   'graph_get',

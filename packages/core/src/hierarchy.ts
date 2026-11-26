@@ -217,6 +217,11 @@ export interface Selector {
   clickable?: boolean;
   /** 여러 개 매칭될 때 n번째 (0부터) */
   index?: number;
+  /**
+   * true: WebView 와 그 안의 웹 페이지 노드만, false: WebView 밖(앱 제목 줄·네이티브 화면)만 (#132).
+   * 웹뷰 화면은 앱 제목 줄과 웹 페이지 제목이 같은 글자인 일이 많아, 본문을 확인할 때 앱 글자로 통과하지 않게 가른다
+   */
+  inWeb?: boolean;
 }
 
 export function matches(n: ViewNode, s: Selector): boolean {
@@ -231,8 +236,21 @@ export function matches(n: ViewNode, s: Selector): boolean {
 }
 
 export function findNodes(root: ViewNode, s: Selector): ViewNode[] {
-  const all = flatten(root).filter((n) => n.depth > 0 && matches(n, s));
+  const pool = s.inWeb === undefined ? flatten(root) : webSplit(root, s.inWeb);
+  const all = pool.filter((n) => n.depth > 0 && matches(n, s));
   return s.index !== undefined ? all.slice(s.index, s.index + 1) : all;
+}
+
+/** WebView(와 그 아래) 노드만, 또는 그 밖의 노드만 */
+function webSplit(root: ViewNode, inWeb: boolean): ViewNode[] {
+  const out: ViewNode[] = [];
+  const visit = (n: ViewNode, under: boolean) => {
+    const web = under || n.className.endsWith('WebView');
+    if (web === inWeb) out.push(n);
+    for (const c of n.children) visit(c, web);
+  };
+  visit(root, false);
+  return out;
 }
 
 export function center(n: ViewNode): { x: number; y: number } {

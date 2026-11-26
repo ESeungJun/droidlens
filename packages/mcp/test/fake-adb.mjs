@@ -58,5 +58,7 @@ if (mode === 'hang') {
   if (cmd.startsWith('dumpsys window displays')) process.stdout.write('  mDisplayId=0\n    cur=1080x2400\n');
   else if (cmd.startsWith('dumpsys window')) process.stdout.write('  mCurrentFocus=Window{a1 u0 com.example.app/com.example.app.MainActivity}\n');
   else if (cmd.startsWith('logcat') || cmd.includes('logcat')) process.stdout.write(read('logcat.txt'));
+  // 웹뷰 디버깅 소켓 찾기 (#132): unix.txt 에 '/proc/net/unix 줄들\n--\npidof 결과' 를 둔다
+  else if (cmd.includes('/proc/net/unix')) process.stdout.write(read('unix.txt') || '--\n');
   else if (cmd.startsWith('getprop')) process.stdout.write('Fake\nPhone\n14\n34\narm64-v8a\nPhysical size: 1080x2400\nPhysical density: 420\n');
 }
