@@ -54,6 +54,7 @@ class ScriptRun {
   private passed = 0;
   private failed = 0;
   private skipped = 0;
+  private stopped = false;
   /** 단계가 직접 만든 이미지 (스크린샷 비교의 차이 이미지). 있으면 새로 찍지 않고 이것을 남긴다 */
   private readonly out: StepOutput = {};
   /** 이 실행이 켠 목 규칙. 끝나면(실패·중단 포함) 지워 다음 실행이나 수동 사용에 남지 않게 한다 */
@@ -76,6 +77,7 @@ class ScriptRun {
       goal: script.description ?? (opts.sourcePath ? `스크립트 ${basename(opts.sourcePath)}` : undefined),
       packageName: script.app,
       device: dev.serial,
+      ...(script.tc ? { tc: script.tc } : {}),
     });
     await ensureAgent(dev);
     const flow = opts.collectFlow === false ? undefined : await FlowCollector.open(dev, script.app).catch(() => undefined);
@@ -170,13 +172,16 @@ class ScriptRun {
   async runSteps(): Promise<void> {
     const total = this.script.steps.length;
     for (let i = 0; i < total; i++) {
-      if (this.opts.signal?.aborted) {
-        this.skipped += total - i;
-        await this.record('중단됨', 'skip', `${total - i}단계 남음`);
-        return;
-      }
+      if (this.opts.signal?.aborted) return this.stop(total - i);
       if (!(await this.runOne(i, total))) return;
     }
+  }
+
+  /** 중단 신호로 멈춘다. 끝까지 돌지 않았으니 통과로 치지 않는다 */
+  private async stop(left: number): Promise<void> {
+    this.stopped = true;
+    this.skipped += left;
+    await this.record('중단됨', 'skip', `${left}단계 남음`);
   }
 
   /** 단계 하나를 돌리고 리포트에 남긴다. 다음 단계로 갈지 돌려준다 */
@@ -211,6 +216,12 @@ class ScriptRun {
       opts.onStep?.({ index: i, total, title, status: 'pass', detail });
       return true;
     } catch (e) {
+      // 단계 도중 중단 신호로 끊긴 것은 앱의 실패가 아니다
+      if (opts.signal?.aborted) {
+        opts.onStep?.({ index: i, total, title, status: 'skip' });
+        await this.stop(total - i);
+        return false;
+      }
       // 조작 도중 실패하면 화면 상태를 알 수 없으므로 다음 관찰부터 지도에 새로 이어 붙인다
       flow?.forget();
       this.failed++;
@@ -227,8 +238,8 @@ class ScriptRun {
   async finish(): Promise<RunResult> {
     const left = await this.removeMocks();
     await this.flow?.flush().catch(() => undefined);
-    const verdict = this.failed ? 'fail' : 'pass';
-    const summary = `${this.passed} 통과 · ${this.failed} 실패 · ${this.skipped} 건너뜀 (${((Date.now() - this.t0) / 1000).toFixed(1)}초)${leftover(left)}`;
+    const verdict = this.failed ? 'fail' : this.stopped ? 'blocked' : 'pass';
+    const summary = `${this.stopped ? '중단됨 · ' : ''}${this.passed} 통과 · ${this.failed} 실패 · ${this.skipped} 건너뜀 (${((Date.now() - this.t0) / 1000).toFixed(1)}초)${leftover(left)}`;
     const report = await this.scenario.finish(verdict, summary);
     return this.result(verdict, report);
   }

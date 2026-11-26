@@ -3,6 +3,8 @@ import { api, type ScenarioData } from '../api';
 import { useApp } from '../App';
 import { useT } from '../i18n';
 import { ScriptsPanel } from './ScriptsPanel';
+import { shortTime } from '../format';
+import { requestQaPlan, takeScenario } from '../nav';
 import { buildScenarioView, formatDuration, STATUS_LABEL, VERDICT_LABEL, type StepRow } from '@droidlens/core/scenario-view';
 
 function StepShot({ dir, file }: { dir: string; file: string }) {
@@ -62,7 +64,7 @@ function groupOf(s: ScenarioData, by: GroupBy, other: string): string {
 }
 
 function ReportsView() {
-  const { run, toast } = useApp();
+  const { run, toast, openTab } = useApp();
   const t = useT();
   const [list, setList] = useState<ScenarioData[]>([]);
   const [sel, setSel] = useState<ScenarioData | null>(null);
@@ -73,12 +75,21 @@ function ReportsView() {
   const [picking, setPicking] = useState(false);
   const [picked, setPicked] = useState<Set<string>>(new Set());
   const [confirm, setConfirm] = useState<{ ids: string[]; text: string } | null>(null);
+  // QA 결과표의 '기록 보기'로 왔으면 그 기록을 먼저 연다
+  const [want] = useState(takeScenario);
+  const [planNames, setPlanNames] = useState<Map<string, string>>(new Map());
+  useEffect(() => {
+    api
+      .qaPlans()
+      .then((p) => setPlanNames(new Map(p.map((x) => [x.id, x.name]))))
+      .catch(() => undefined);
+  }, []);
 
   const load = async () => {
     const l = (await run(api.scenarios())) ?? [];
     setList(l);
     setLoaded(true);
-    setSel((s) => (s ? l.find((x) => x.id === s.id) ?? null : l[0] ?? null));
+    setSel((s) => (s ? l.find((x) => x.id === s.id) ?? null : (want && l.find((x) => x.id === want)) || l[0] || null));
     setPicked((cur) => new Set([...cur].filter((id) => l.some((x) => x.id === id))));
   };
   useEffect(() => {
@@ -138,8 +149,21 @@ function ReportsView() {
           <span className={`v-${s.verdict ?? 'blocked'}`}>{s.verdict ? s.verdict.toUpperCase() : t('진행 중')}</span>
         </div>
         <div className="faint" style={{ fontSize: 11 }}>
-          {new Date(s.startedAt).toLocaleString()} · {listLine(s)}
+          {shortTime(s.startedAt)} · {listLine(s)}
         </div>
+        {s.tc && (
+          <button
+            className="scen-qa"
+            title={t('이 기록을 만든 QA 계획 열기')}
+            onClick={(e) => {
+              e.stopPropagation();
+              requestQaPlan(s.tc!.plan);
+              openTab('qa');
+            }}
+          >
+            QA · {planNames.get(s.tc.plan) ?? s.tc.plan} · {s.tc.case}
+          </button>
+        )}
       </div>
     </div>
   );
@@ -148,7 +172,7 @@ function ReportsView() {
     <div className="scen" style={{ height: 'calc(100% - 45px)' }}>
       <div className="scen-list">
         <div className="toolbar" style={{ flexWrap: 'wrap', gap: 6 }}>
-          <b>{t('시나리오 검증 기록')}</b>
+          <b>{t('검증 기록')}</b>
           <span className="faint">({list.length})</span>
           <div className="spacer" />
           <select className="input" value={groupBy} onChange={(e) => setGroupBy(e.target.value as GroupBy)} title={t('묶기')}>

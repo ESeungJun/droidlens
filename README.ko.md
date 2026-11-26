@@ -76,7 +76,8 @@ Linux    sudo apt install adb
 | **앱** | **앱 데이터** ¹ | SharedPreferences 조회·편집, SQLite/Room DB 브라우저와 SQL 실행, 커스텀 이벤트 |
 |  | **앱 정보** | 버전·SDK·권한·Activity, 실행/재시작/종료, 딥링크 |
 |  | **라이브러리** | APK의 DEX·네이티브 lib로 100여 개 라이브러리·프레임워크 탐지, 난독화 추정 |
-| **테스트** | **시나리오** | 검증 리포트(단계별 스크린샷·판정), **YAML 스크립트** 작성·실행·전체 회귀 실행, 스크린샷 비교 실패 시 지금 화면을 새 기준으로 받아들이기 |
+| **테스트** | **QA 계획** | QA 할 앱을 고르고 기획 문서(md·txt·PDF·CSV·엑셀·Confluence·Figma 링크) 넣기 → planner 에이전트가 요구사항·TC 추출 → 추적표로 검토(TC 편집·선택, 확인 필수 동작은 사람이 직접 허용) → 실행: 스크립트가 있는 TC 는 바로 돌리고 나머지는 TC 마다 새 verifier 실행(TC 하나에 10분 제한, 언제든 멈춤, 확인 필수 동작은 화면에서 물음) → 요구사항별·TC 별 결과표와 디자인 차이, HTML·CSV·JUnit 내보내기(이 컴퓨터의 Claude Code 로그인 사용) |
+|  | **검증 기록** | 검증 리포트(단계별 스크린샷·판정), **YAML 스크립트** 작성·실행·전체 회귀 실행, 스크린샷 비교 실패 시 지금 화면을 새 기준으로 받아들이기. QA 실행으로 생긴 기록에는 어느 계획·TC 인지 표시 |
 | **설정** | **설정·연동** | adb 경로, Claude Code MCP 원클릭 등록, 전용 에이전트 설치 |
 | | **💬 에이전트 대화** | 상단 버튼으로 여는 대화창. 미러링을 보면서 검증·분석 에이전트에게 바로 요청 (이 컴퓨터의 Claude Code 로그인 사용, API 키 불필요) |
 
@@ -172,7 +173,7 @@ steps:
 | 기타 | `key`, `tapAt`, `sleep`, `launch`, `deeplink`, `screenshot` |
 
 실행 방법:
-- 데스크톱 **시나리오 → 스크립트** 탭에서 편집·실행·전체 회귀 실행
+- 데스크톱 **테스트 → 검증 기록 → 스크립트** 탭에서 편집·실행·전체 회귀 실행
 - Claude Code: `script_run`, `suite_run`, `script_write`
 - CI/터미널: `node droidlens-mcp.mjs run <파일|폴더> [--serial <기기>] [--junit out.xml] [--summary out.md]` (실패 시 종료 코드 1). `--junit` 은 단계별 결과를 JUnit XML 로, `--summary` 는 PR 댓글에 붙일 Markdown 으로 씁니다. 에뮬레이터에서 돌리는 워크플로 예시는 [examples/ci/android-emulator.yml](examples/ci/android-emulator.yml)
 - QA 회귀: `node droidlens-mcp.mjs qa run <QA 계획 id> [--serial <기기>] [--junit out.xml] [--strict]` — 고른 TC 중 통과해 스크립트가 이어진 것을 우선순위 순으로 돌리고 `~/.droidlens/qa/<계획>/runs/<회차>/` 에 결과표(HTML·CSV·JUnit)를 씁니다. 돌린 TC 가 실패·막힘이면 종료 코드 1, `--strict` 면 스크립트가 없어 안 돌린 TC 가 있어도 1입니다

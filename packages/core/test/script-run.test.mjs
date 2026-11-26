@@ -420,7 +420,7 @@ steps:
   assert.equal(result.verdict, 'blocked');
 });
 
-test('runScript: 중단 신호가 오면 남은 단계를 건너뛴다', async () => {
+test('runScript: 중단 신호가 오면 남은 단계를 건너뛰고 통과로 치지 않는다', async () => {
   const { result } = await run(
     'abort',
     `name: 중단
@@ -433,6 +433,7 @@ steps:
     { abortAfter: 0 },
   );
   assert.equal(result.skipped, 2);
+  assert.equal(result.verdict, 'blocked');
 });
 
 test('runScript: guardDanger 면 확인 필수 버튼(셀렉터·좌표 모두)을 누르지 않는다', async () => {

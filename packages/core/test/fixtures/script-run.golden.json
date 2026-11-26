@@ -1265,11 +1265,11 @@
     "events": []
   },
   "abort": {
-    "verdict": "pass",
+    "verdict": "blocked",
     "passed": 1,
     "failed": 0,
     "skipped": 2,
-    "summary": "1 통과 · 0 실패 · 2 건너뜀 (N초)",
+    "summary": "중단됨 · 1 통과 · 0 실패 · 2 건너뜀 (N초)",
     "steps": [
       {
         "index": 1,

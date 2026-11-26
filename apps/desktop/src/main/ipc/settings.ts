@@ -6,7 +6,7 @@ import { homedir } from 'node:os';
 import { basename, isAbsolute, join } from 'node:path';
 import { promisify } from 'node:util';
 import * as dl from '@droidlens/core';
-import { resolveClaude } from '../chat';
+import { resolveClaude } from '../claude';
 import { adb, agentsSrc, dev, getWindow, mcpScript, resetAdb, send, updateConfig, windowBackground, type Handle } from '../context';
 import { checkForUpdate, currentVersion, installUpdate, type UpdateInfo } from '../updater';
 
