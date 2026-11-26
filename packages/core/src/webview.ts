@@ -56,6 +56,11 @@ export interface WebViewInspection {
   text?: string;
   /** 한도를 넘어 버린 개수 */
   dropped: { console: number; requests: number };
+  /**
+   * 소켓 주인 확인: /json/version 의 Android-Package 가 이 패키지와 같으면 true.
+   * 웹뷰가 그 항목을 알려 주지 않아 확인하지 못했으면 false (소켓 이름 속 pid 가 이 앱 프로세스인 것까지만 확인함)
+   */
+  ownerVerified: boolean;
 }
 
 export interface InspectWebViewOptions {
@@ -68,7 +73,7 @@ export interface InspectWebViewOptions {
   maxText?: number;
 }
 
-export type WebViewInspectCode = 'not-running' | 'debug-off' | 'no-page' | 'connect';
+export type WebViewInspectCode = 'not-running' | 'debug-off' | 'no-page' | 'connect' | 'not-owner';
 
 export class WebViewInspectError extends Error {
   constructor(
@@ -91,6 +96,14 @@ const LIST_BYTES_MAX = 1024 * 1024;
 const PAGE_ID = /^[A-Za-z0-9-]{1,64}$/;
 /** 한 번에 모으는 CDP 이벤트 상한 */
 const MAX_EVENTS = 2000;
+/** CDP 메시지 하나의 상한 (글자 수). 넘으면 해석하지 않고 버린다 */
+const MAX_FRAME = 1024 * 1024;
+/** 읽기 식 응답을 기다리는 한도 */
+const EVAL_WAIT_MS = 3000;
+/** 읽기 식이 돌려주는 URL 한 개의 길이 (data: URL 처럼 긴 것은 페이지 안에서 자른다) */
+const EVAL_URL_MAX = 600;
+/** 읽기 식 결과의 상한: 본문 + 요청 수 × (URL + 나머지 칸), JSON 이스케이프로 늘어날 몫까지 두 배 */
+const evalMax = (maxText: number | undefined) => 2 * ((maxText ?? 0) + MAX_REQUESTS * (EVAL_URL_MAX + 200)) + 2000;
 
 /** /proc/net/unix 에서 웹뷰 디버깅 소켓을 연 pid (나온 순서, 중복 없이) */
 export function parseWebViewSockets(procNetUnix: string): number[] {
@@ -139,12 +152,50 @@ async function findSocketPid(dev: DeviceAdb, pkg: string): Promise<number> {
   throw new WebViewInspectError('debug-off', HELP_DEBUG_OFF(pkg));
 }
 
+/** 127.0.0.1 의 JSON 하나를 상한까지만 읽는다 (Content-Length 를 먼저 보고, 흘려 받다가 넘으면 바로 끊는다) */
+async function getJson(port: number, path: string): Promise<unknown> {
+  const ctl = new AbortController();
+  const timer = setTimeout(() => ctl.abort(), 5000);
+  try {
+    const res = await fetch(`http://127.0.0.1:${port}${path}`, { signal: ctl.signal });
+    if (!res.ok) throw new Error(`${path} 응답 ${res.status}`);
+    if (Number(res.headers.get('content-length') ?? 0) > LIST_BYTES_MAX) throw new Error(`${path} 응답이 너무 커요`);
+    const reader = res.body?.getReader();
+    if (!reader) throw new Error(`${path} 응답이 비었어요`);
+    const parts: Uint8Array[] = [];
+    let size = 0;
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      size += value.byteLength;
+      if (size > LIST_BYTES_MAX) {
+        await reader.cancel().catch(() => undefined);
+        throw new Error(`${path} 응답이 너무 커요`);
+      }
+      parts.push(value);
+    }
+    return JSON.parse(Buffer.concat(parts).toString('utf8')) as unknown;
+  } finally {
+    clearTimeout(timer);
+    ctl.abort();
+  }
+}
+
+/**
+ * 소켓 주인 확인 (abstract 소켓 이름은 아무 앱이나 먼저 열 수 있다). 웹뷰는 /json/version 에 자기 앱 패키지를 알려 준다.
+ * 다른 패키지면 거부하고, 알려 주지 않으면 false
+ */
+async function checkOwner(port: number, pkg: string): Promise<boolean> {
+  const v = (await getJson(port, '/json/version')) as Record<string, unknown> | null;
+  const owner = v && typeof v === 'object' ? v['Android-Package'] : undefined;
+  if (typeof owner !== 'string' || !owner) return false;
+  if (owner !== pkg) throw new WebViewInspectError('not-owner', `웹뷰 디버깅 소켓을 연 앱이 ${clip(owner, 100)} 라서 ${pkg} 의 것으로 보지 않고 연결을 끊었어요.`);
+  return true;
+}
+
 /** 페이지 목록 (page 종류만). 호스트는 항상 127.0.0.1 */
 async function listPages(port: number): Promise<WebViewPage[]> {
-  const res = await fetch(`http://127.0.0.1:${port}/json/list`, { signal: AbortSignal.timeout(5000) });
-  const body = await res.text();
-  if (!res.ok || body.length > LIST_BYTES_MAX) throw new Error(`페이지 목록을 받지 못했어요 (${res.status})`);
-  const raw = JSON.parse(body) as unknown;
+  const raw = await getJson(port, '/json/list');
   if (!Array.isArray(raw)) throw new Error('페이지 목록 형식이 달라요');
   const pages: WebViewPage[] = [];
   for (const p of raw as Record<string, unknown>[]) {
@@ -175,7 +226,7 @@ function readExpression(maxText: number | undefined): string {
   return (
     '(() => { const e = performance.getEntriesByType("navigation").concat(performance.getEntriesByType("resource")).slice(-' +
     MAX_REQUESTS +
-    '); return JSON.stringify({ requests: e.map((x) => ({ url: x.name, type: x.initiatorType || x.entryType, status: x.responseStatus, ms: x.duration })), text: ' +
+    '); return JSON.stringify({ requests: e.map((x) => ({ url: String(x.name).slice(0, ' + EVAL_URL_MAX + '), type: x.initiatorType || x.entryType, status: x.responseStatus, ms: x.duration })), text: ' +
     text +
     ' }); })()'
   );
@@ -195,9 +246,11 @@ async function withCdp<T>(url: string, timeoutMs: number, run: (send: (method: s
   const broken = new Promise<never>((_, reject) => (failed = reject));
   broken.catch(() => {});
   ws.onmessage = (ev) => {
+    // 너무 큰 메시지는 해석하지 않고 버린다 (응답이었다면 그 명령은 시간 초과나 빈 결과로 끝난다)
+    if (typeof ev.data !== 'string' || ev.data.length > MAX_FRAME) return;
     let m: CdpMessage;
     try {
-      m = JSON.parse(String(ev.data)) as CdpMessage;
+      m = JSON.parse(ev.data) as CdpMessage;
     } catch {
       return;
     }
@@ -282,9 +335,12 @@ export async function inspectWebView(dev: DeviceAdb, pkg: string, opts: InspectW
   if (!Number.isInteger(port) || port <= 0) throw new WebViewInspectError('connect', '웹뷰 디버깅 소켓에 포트를 잇지 못했어요');
   try {
     let pages: WebViewPage[];
+    let ownerVerified: boolean;
     try {
+      ownerVerified = await checkOwner(port, pkg);
       pages = await listPages(port);
     } catch (e) {
+      if (e instanceof WebViewInspectError) throw e;
       throw new WebViewInspectError('connect', `웹뷰 디버깅 소켓에 붙지 못했어요: ${(e as Error).message}`);
     }
     const page = pickPage(pages, opts.page);
@@ -299,13 +355,26 @@ export async function inspectWebView(dev: DeviceAdb, pkg: string, opts: InspectW
       await send('Runtime.enable');
       await send('Log.enable');
       if (listenMs) await send('Network.enable');
-      const ev = await send('Runtime.evaluate', { expression: readExpression(maxText), returnByValue: true, silent: true });
+      // 응답이 프레임 상한을 넘어 버려지면 오지 않으므로 따로 기다림 한도를 둔다 (그때는 콘솔만 쓴다)
+      const ev = await Promise.race([
+        send('Runtime.evaluate', { expression: readExpression(maxText), returnByValue: true, silent: true }),
+        new Promise<CdpMessage>((res) => setTimeout(() => res({}), EVAL_WAIT_MS).unref?.()),
+      ]);
       if (listenMs) await new Promise((res) => setTimeout(res, listenMs));
       let read: { requests?: { url?: unknown; type?: unknown; status?: unknown; ms?: unknown }[]; text?: unknown } = {};
-      try {
-        read = JSON.parse(String(ev.result?.result?.value ?? '{}'));
-      } catch {
-        /* 페이지가 읽기 식을 막았으면 콘솔만 */
+      const value = ev.result?.result?.value;
+      // 페이지가 읽기 식을 바꿔 큰 값을 돌려줄 수 있어 해석 전에 길이를 본다. 넘거나 형식이 틀리면 콘솔만 쓴다
+      if (typeof value === 'string' && value.length <= evalMax(maxText)) {
+        try {
+          const v = JSON.parse(value) as typeof read;
+          if (v && typeof v === 'object')
+            read = {
+              requests: Array.isArray(v.requests) ? v.requests.slice(-MAX_REQUESTS) : [],
+              text: maxText && typeof v.text === 'string' ? v.text.slice(0, maxText) : undefined,
+            };
+        } catch {
+          /* 형식이 틀리면 버린다 */
+        }
       }
       return { read, events: [...events] };
     });
@@ -330,8 +399,9 @@ export async function inspectWebView(dev: DeviceAdb, pkg: string, opts: InspectW
       page,
       console: keepC,
       requests: keepR,
-      ...(maxText && typeof r.read.text === 'string' ? { text: maskText(String(r.read.text).replace(/[\u0000-\u0008\u000b-\u001f\u007f]+/g, ' ')).slice(0, maxText) } : {}),
+      ...(typeof r.read.text === 'string' ? { text: maskText(r.read.text.replace(/[\u0000-\u0008\u000b-\u001f\u007f]+/g, ' ')).slice(0, maxText) } : {}),
       dropped: { console: c.console.length - keepC.length, requests: requests.length - keepR.length },
+      ownerVerified,
     };
   } finally {
     await dev.text(['forward', '--remove', `tcp:${port}`]).catch(() => undefined);
