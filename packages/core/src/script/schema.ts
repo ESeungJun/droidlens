@@ -22,12 +22,15 @@ const selectorShape = {
   descContains: z.string().optional(),
   className: z.string().optional(),
   index: z.number().int().optional(),
+  inWeb: z.boolean().optional(),
 };
 const hasCondition = (s: Record<string, unknown>) =>
   ['id', 'text', 'textContains', 'desc', 'descContains', 'className'].some((k) => s[k] !== undefined);
 const NEED_COND = '셀렉터에 조건(id/text/textContains/desc/descContains/className)이 하나 이상 필요합니다';
 
 const selector = z.object(selectorShape).strict().refine(hasCondition, NEED_COND);
+/** 셀렉터 하나의 형식 (시험·다른 모듈에서 검사할 때) */
+export const selectorSchema = selector;
 /** 요소 대상 단계: timeout(ms) 동안 기다리고, optional이면 없을 때 건너뜀 */
 const targetSel = z
   .object({ ...selectorShape, timeout: z.number().int().optional(), optional: z.boolean().optional() })

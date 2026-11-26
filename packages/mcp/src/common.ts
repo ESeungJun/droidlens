@@ -72,6 +72,10 @@ export const selectorShape = {
   descContains: z.string().optional().describe('content-description 에 들어 있는 문자열 (대소문자 무시)'),
   className: z.string().optional().describe('예: Button, android.widget.EditText'),
   index: z.number().int().optional().describe('여러 개 매칭 시 n번째 (0부터)'),
+  inWeb: z
+    .boolean()
+    .optional()
+    .describe('true: WebView 안 웹 페이지 글자만, false: WebView 밖(앱 제목 줄 등)만. 웹뷰 본문을 확인할 때 앱 제목 줄의 같은 글자로 통과하지 않게 true 를 준다'),
 };
 export type SelectorArgs = { [K in keyof typeof selectorShape]?: z.infer<(typeof selectorShape)[K]> };
 export const pickSelector = (a: SelectorArgs): dl.Selector => ({
@@ -82,14 +86,16 @@ export const pickSelector = (a: SelectorArgs): dl.Selector => ({
   descContains: a.descContains,
   className: a.className,
   index: a.index,
+  inWeb: a.inWeb,
 });
 export const describeNode = (n: dl.ViewNode) =>
-  `[${n.id}] ${n.className.split('.').pop()} ${n.resourceId ? '#' + n.resourceId.split(':id/')[1] : ''} "${n.text}" (${n.contentDesc}) @${n.bounds.join(',')}${n.clickable ? ' click' : ''}`;
+  `[${n.id}] ${n.className.split('.').pop()} ${n.resourceId ? '#' + n.resourceId.split(':id/').pop() : ''} "${n.text}" (${n.contentDesc}) @${n.bounds.join(',')}${n.clickable ? ' click' : ''}`;
 
 export const readOnly = { readOnlyHint: true, destructiveHint: false, openWorldHint: false };
 export const acts = { readOnlyHint: false, destructiveHint: false, openWorldHint: false };
 
-export const hasSelector = (s: dl.Selector) => Object.values(s).some((v) => v !== undefined);
+/** 조건이 하나라도 있는지 (inWeb 는 범위만 좁히고 조건이 아니다) */
+export const hasSelector = (s: dl.Selector) => Object.entries(s).some(([k, v]) => v !== undefined && k !== 'inWeb');
 
 /**
  * 셀렉터로 노드 하나를 찾는다. 없거나 여러 개면(인덱스 미지정) 후보를 보여주는 에러.
@@ -309,8 +315,8 @@ export function nodeLabel(n: dl.ViewNode): string {
 }
 
 /** 셀렉터 인자에서 스크립트용 셀렉터만 추린다 (undefined 제거) */
-export function cleanSelector(sel: dl.Selector): Record<string, string | number> {
-  return Object.fromEntries(Object.entries(sel).filter(([, v]) => v !== undefined)) as Record<string, string | number>;
+export function cleanSelector(sel: dl.Selector): Record<string, string | number | boolean> {
+  return Object.fromEntries(Object.entries(sel).filter(([, v]) => v !== undefined)) as Record<string, string | number | boolean>;
 }
 
 // ---------- 경로 허용 범위 ----------

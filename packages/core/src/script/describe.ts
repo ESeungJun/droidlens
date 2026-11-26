@@ -13,6 +13,11 @@ export const selText = (s: Selector) =>
 
 /** 셀렉터를 사람이 읽는 짧은 말로: "상점정보/후기" · #login_button · [설정] */
 export function selectorLabel(s: Selector): string {
+  const label = baseLabel(s);
+  return s.inWeb === undefined ? label : `${label} (${s.inWeb ? '웹 페이지' : '웹뷰 밖'})`;
+}
+
+function baseLabel(s: Selector): string {
   if (s.text) return `"${s.text}"`;
   if (s.textContains) return `"…${s.textContains}…"`;
   if (s.desc) return `[${s.desc}]`;

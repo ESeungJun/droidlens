@@ -12,6 +12,10 @@ public final class DroidLens {
 
     public static void allowNonDebuggable() {}
 
+    public static boolean enableWebViewDebugging(Context context) {
+        return false;
+    }
+
     public static String version() {
         return "noop";
     }

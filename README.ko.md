@@ -187,7 +187,7 @@ steps:
 
 | 단계 | 설명 |
 | --- | --- |
-| `tap` / `longPress` | 셀렉터(id·text·textContains·desc·descContains·className·index) 요소를 기다렸다가 누름. `optional: true`면 없을 때 건너뜀 |
+| `tap` / `longPress` | 셀렉터(id·text·textContains·desc·descContains·className·index) 요소를 기다렸다가 누름. `inWeb: true` 면 WebView 안 웹 페이지 글자만, `false` 면 그 밖만 찾음. `optional: true`면 없을 때 건너뜀 |
 | `type` | 입력 (`into`로 입력창 지정, `clear`로 교체). 에이전트가 있으면 한글 가능 |
 | `swipe` | `up/down/left/right`, `until`이면 요소가 보일 때까지 스크롤 |
 | `wait` | 요소가 나타날 때까지 (`gone: true`면 사라질 때까지) |
@@ -250,7 +250,7 @@ SDK 는 앱이 디버그 빌드가 아니면 켜지지 않습니다. debuggable 
 
 - 네트워크·DB·SharedPreferences는 SDK를 넣은 debug 빌드에서만 (타사 앱은 불가)
 - 네트워크 인스펙터는 OkHttp(Retrofit 포함) 기반 요청만 기록
-- WebView·Flutter·게임 엔진 화면은 접근성 노드가 적어 분석이 제한적
+- Flutter·게임 엔진 화면은 접근성 노드가 적어 분석이 제한적. WebView 는 화면에 보이는 웹 글자를 읽고(`inWeb` 셀렉터), 웹뷰 디버깅이 켜진 앱(debug 빌드, 또는 `DroidLens.enableWebViewDebugging()`)이면 `webview_inspect` 로 콘솔 오류·요청·화면 밖 본문까지 봅니다
 - Appium 등 다른 UiAutomation 도구와 동시에 쓸 수 없음 (상단 바에서 에이전트를 끄면 됨)
 
 ## 개발
