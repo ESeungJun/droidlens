@@ -28,6 +28,8 @@ jobs:
       - run: pnpm build
       # 순수 모듈(비밀값 가리기·리포트 표시 모델) 단위 테스트. 빌드 결과(dist)를 시험한다
       - run: pnpm test
+      # 예시 기획서·TC 표(examples/qa)로 README 의 QA 절차가 검토 단계까지 되는지 본다. 기기가 필요한 실행은 scripts/verify 를 손으로(#79)
+      - run: node scripts/verify/F16-qa-example.mjs --no-device
       - name: Build on-device agent APK
         working-directory: android
         shell: bash
