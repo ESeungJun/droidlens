@@ -193,6 +193,8 @@ export function runQaPlan(planId: string, opts: QaRunOptions, dev: dl.DeviceAdb,
   const signal = j.abort.signal;
   const timeoutMs = Math.min(Math.max(opts.timeoutMs ?? QA_CASE_TIMEOUT_MS, 60_000), 60 * 60_000);
   let runId: string | undefined = opts.run;
+  // 이 실행이 띄운 기록만 정리한다. 같은 회차를 이어 적는 밖(다른 세션)의 기록은 두려고 (#113)
+  const startedAt = Date.now();
   void (async () => {
     const plan = await dl.loadQaPlan(planId);
     if (!dl.orderQaCases(plan).length) throw new Error('고른 TC 가 없습니다. 검토 단계에서 실행할 TC 를 고르세요');
@@ -256,7 +258,7 @@ export function runQaPlan(planId: string, opts: QaRunOptions, dev: dl.DeviceAdb,
       if (signal.aborted) break;
       // 에이전트가 scenario_finish 없이 끝났으면 열린 기록을 막힘으로 마무리한다 (MCP 서버도 같이 꺼져 기록이 '진행 중' 으로 남지 않게, #101)
       const closed = await dl
-        .closeOpenTcScenarios(planId, run.id, r.timedOut ? '시간 제한을 넘겨 멈춤' : '에이전트가 scenario_finish 없이 끝남', c.id)
+        .closeOpenTcScenarios(planId, run.id, r.timedOut ? '시간 제한을 넘겨 멈춤' : '에이전트가 scenario_finish 없이 끝남', { caseId: c.id, since: t0 })
         .catch(() => []);
       // 에이전트가 scenario_finish 로 결과를 적지 않고 끝났으면 막힘으로 남긴다 (실행해서 나온 앞 결과가 있으면 그대로 둔다)
       const after = await dl.loadQaRun(planId, run.id);
@@ -279,8 +281,11 @@ export function runQaPlan(planId: string, opts: QaRunOptions, dev: dl.DeviceAdb,
       // 중간에 멈추거나 기기가 끊겨도 그때까지 적힌 결과로 결과표를 쓴다
       let reportErr: Error | undefined;
       if (runId) {
-        // 멈춘 TC 의 열린 기록은 결과를 적지 않고(남은 TC 로 둔다) 기록만 막힘으로 마무리한다 (#101)
-        if (signal.aborted) await dl.closeOpenTcScenarios(planId, runId, '회차를 멈춰 끝나지 않음').catch(() => undefined);
+        // 멈추거나 오류로 끝난 TC 의 열린 기록은 결과를 적지 않고(남은 TC 로 둔다) 기록만 막힘으로 마무리한다 (#101, #113)
+        if (signal.aborted || err) {
+          const why = signal.aborted ? '회차를 멈춰 끝나지 않음' : '회차가 오류로 끝나 끝나지 않음';
+          await dl.closeOpenTcScenarios(planId, runId, why, { since: startedAt }).catch(() => undefined);
+        }
         try {
           await dl.writeQaReport(await dl.loadQaPlan(planId), await dl.loadQaRun(planId, runId));
         } catch (e) {

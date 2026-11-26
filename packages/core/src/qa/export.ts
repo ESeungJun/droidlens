@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import { existsSync } from 'node:fs';
-import { readdir, readFile, realpath, stat } from 'node:fs/promises';
-import { basename, dirname, extname, join, sep } from 'node:path';
+import { readdir, stat } from 'node:fs/promises';
+import { basename, dirname, extname, join } from 'node:path';
 import { strToU8, zipSync } from 'fflate';
 import { downscaleToJpeg } from '../image.js';
 import { readJson, droidlensHome, writeFileAtomic } from '../workspace.js';
@@ -10,6 +10,7 @@ import { loadQaPlan, qaPlanDir } from './store.js';
 import { listQaRunIds, loadQaRun, maskCaseData, QA_STATUS_LABEL, qaRunDir, qaRunSummary, type QaRun, type QaRunSummary } from './run.js';
 import { PLAN_ID, type QaPlan } from './plan.js';
 import { htmlEscape as esc } from './report.js';
+import { isJpeg, readRegularFile, scenarioDirReal } from './scenario-dir.js';
 
 /**
  * QA 회차 묶어 보기·내보내기 (#98).
@@ -33,15 +34,8 @@ export interface QaRunIndexItem {
   scenarios: string[];
 }
 
-/** 시나리오 폴더 바로 아래 폴더인지, 심볼릭 링크를 푼 실제 경로로 본다 (회차 기록이 바뀌어도 그 밖의 파일은 읽지 않는다) */
-async function scenarioDirOf(report: string | undefined): Promise<string | undefined> {
-  if (!report) return undefined;
-  const root = await realpath(join(droidlensHome(), 'scenarios')).catch(() => undefined);
-  const dir = await realpath(dirname(report)).catch(() => undefined);
-  if (!root || !dir) return undefined;
-  const base = root + sep;
-  return dir.startsWith(base) && !dir.slice(base.length).includes(sep) ? dir : undefined;
-}
+/** 회차 결과가 가리키는 리포트의 폴더가 시나리오 폴더 바로 아래인지 (회차 기록이 바뀌어도 그 밖의 파일은 읽지 않는다) */
+const scenarioDirOf = (report: string | undefined) => scenarioDirReal(report ? dirname(report) : undefined);
 
 const mtime = (p: string) => stat(p).then((x) => x.mtimeMs, () => -1);
 /** 회차 목록은 검증 기록 화면이 5초마다 부른다. plan.json·run.json 이 바뀐 회차만 다시 읽는다 */
@@ -327,38 +321,45 @@ export function qaRunXlsx(b: QaRunBundle, lang: ExportLang = 'ko'): Uint8Array {
 
 // ---------- 단계별 HTML ----------
 
+/** 축소본 크기·품질. 바꾸면 CACHE_TAG 도 바꿔 예전 축소본을 쓰지 않게 한다 */
+const SHOT_EDGE = 480;
+const SHOT_QUALITY = 70;
+const CACHE_TAG = `${SHOT_EDGE}q${SHOT_QUALITY}`;
+
 /**
  * 캡처를 긴 변 480px JPEG data URI 로. 못 읽으면 undefined.
- * 줄인 것은 같은 폴더에 <이름>.480.jpg 로 남겨 다음 내보내기에 다시 쓴다(원본이 더 새것이면 다시 만든다, #104).
+ * 줄인 것은 같은 폴더에 <이름>.480q70.jpg 로 남겨 다음 내보내기에 다시 쓴다(원본이 더 새것이면 다시 만든다, #104).
+ * 공유 파일에 실리므로 링크가 아닌 일반 파일이고 JPEG 표지가 맞을 때만 그대로 싣는다(#113). 아니면 원본 PNG 에서 다시 줄인다.
  * 줄이기는 동기 계산이라 캡처마다 이벤트 루프에 한 번 양보해 데스크톱 창이 굳지 않게 한다
  */
 async function shotUri(dir: string, file: string | undefined): Promise<string | undefined> {
   if (!file || file.includes('/') || file.includes('\\') || file.startsWith('.')) return undefined;
   const src = join(dir, file);
   const ext = extname(file).toLowerCase();
+  const uri = (b: Buffer) => `data:image/jpeg;base64,${b.toString('base64')}`;
   if (ext === '.jpg' || ext === '.jpeg') {
-    const buf = await readFile(src).catch(() => undefined);
-    return buf ? `data:image/jpeg;base64,${buf.toString('base64')}` : undefined;
+    const buf = await readRegularFile(src);
+    return isJpeg(buf) ? uri(buf) : undefined;
   }
   if (ext !== '.png') return undefined;
-  const cache = join(dir, `${basename(file, ext)}.480.jpg`);
+  const cache = join(dir, `${basename(file, ext)}.${CACHE_TAG}.jpg`);
   const [srcAt, cacheAt] = await Promise.all([mtime(src), mtime(cache)]);
   if (srcAt < 0) return undefined;
   if (cacheAt >= srcAt) {
-    const hit = await readFile(cache).catch(() => undefined);
-    if (hit) return `data:image/jpeg;base64,${hit.toString('base64')}`;
+    const hit = await readRegularFile(cache);
+    if (isJpeg(hit)) return uri(hit);
   }
-  const buf = await readFile(src).catch(() => undefined);
+  const buf = await readRegularFile(src);
   if (!buf) return undefined;
   await new Promise((r) => setImmediate(r));
   let jpg: Buffer;
   try {
-    jpg = downscaleToJpeg(buf, 480, 70);
+    jpg = downscaleToJpeg(buf, SHOT_EDGE, SHOT_QUALITY);
   } catch {
     return undefined;
   }
   await writeFileAtomic(cache, jpg).catch(() => undefined);
-  return `data:image/jpeg;base64,${jpg.toString('base64')}`;
+  return uri(jpg);
 }
 
 const TONE: Record<string, string> = { pass: 'ok', fail: 'bad', blocked: 'warn', skip: 'mute', 'not-run': 'mute', info: 'info' };

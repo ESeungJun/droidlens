@@ -1,6 +1,6 @@
 import { writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { ensureDir, safeName, timestamp, writeJson } from './workspace.js';
+import { ensureDir, readJson, safeName, timestamp, writeFileAtomic, writeJson } from './workspace.js';
 import { SCENARIO_TOKENS } from './report-tokens.js';
 import { CASE_ID, PLAN_ID } from './qa/plan.js';
 import {
@@ -86,12 +86,22 @@ export class Scenario {
     this.data.summary = summary;
     await this.persist();
     const html = join(this.data.dir, 'report.html');
-    await writeFile(html, renderReport(this.data));
+    // 이름 바꾸기로 쓴다: report.html 이 링크여도 링크를 바꿀 뿐 가리키는 파일에 쓰지 않는다 (#113)
+    await writeFileAtomic(html, renderReport(this.data));
     return html;
   }
 
-  private persist(): Promise<void> {
-    return writeJson(join(this.data.dir, 'scenario.json'), this.data);
+  /**
+   * 디스크에 이미 마무리된 기록은 끝나지 않은 메모리 값으로 되돌리지 않는다 (#113).
+   * 앱이 멈춘 회차의 기록을 막힘으로 닫은 뒤, 늦게 꺼지는 MCP 서버가 처리 중이던 단계를 적으며 다시 여는 일을 막는다
+   */
+  private async persist(): Promise<void> {
+    const file = join(this.data.dir, 'scenario.json');
+    if (!this.data.finishedAt) {
+      const disk = await readJson<Partial<ScenarioData>>(file).catch(() => undefined);
+      if (disk?.finishedAt) return;
+    }
+    await writeJson(file, this.data);
   }
 }
 
@@ -186,7 +196,20 @@ document.querySelectorAll('.filters button').forEach(b=>b.addEventListener('clic
 }));
 `;
 
-export function renderReport(d: ScenarioData): string {
+/** 숫자로 믿고 HTML 에 그대로 넣는 칸을 숫자로 맞춘다. 디스크에서 다시 읽은 기록은 손댄 것일 수 있다 (#113) */
+const num = (x: unknown) => (Number.isFinite(Number(x)) ? Number(x) : 0);
+function numeric(d: ScenarioData): ScenarioData {
+  return {
+    ...d,
+    startedAt: num(d.startedAt),
+    finishedAt: d.finishedAt === undefined ? undefined : num(d.finishedAt),
+    steps: d.steps.map((s) => ({ ...s, index: num(s.index), at: num(s.at), corrects: s.corrects === undefined ? undefined : num(s.corrects) })),
+    actions: d.actions?.map((a) => ({ ...a, at: num(a.at) })),
+  };
+}
+
+export function renderReport(input: ScenarioData): string {
+  const d = numeric(input);
   const v = buildScenarioView(d);
   const c = v.counts;
   const verdictCls = v.verdict === 'pass' ? 'pass' : v.verdict === 'fail' ? 'fail' : 'warn';

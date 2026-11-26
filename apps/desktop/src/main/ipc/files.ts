@@ -60,9 +60,9 @@ export function register(handle: Handle): void {
       // 시나리오 폴더 바로 아래의 기록만 지운다 (경로 조작 방지)
       if (typeof id !== 'string' || !id || id.includes('/') || id.includes('\\') || id.startsWith('.')) throw new Error(`잘못된 시나리오 id: ${id}`);
       // 에이전트가 아직 기록 중인 리포트를 지우면 다음 단계 저장이 실패한다.
-      // 끝나지 않았어도 1시간이 지났으면 에이전트가 중간에 멈춘 것으로 보고 지울 수 있게 한다
+      // 끝나지 않았어도 목록에 '끝나지 않음' 으로 보이는 기록(scenarioStale, 30분)은 주인이 사라진 것으로 보고 지울 수 있게 한다 (#113)
       const d = await dl.readJson<dl.ScenarioData>(join(dir, id, 'scenario.json'));
-      if (d && !d.finishedAt && Date.now() - d.startedAt < 60 * 60 * 1000) throw new Error('진행 중인 시나리오는 지울 수 없습니다');
+      if (d && !d.finishedAt && !dl.scenarioStale(d)) throw new Error('진행 중인 시나리오는 지울 수 없습니다');
       await fs.rm(join(dir, id), { recursive: true, force: true });
     }
   });

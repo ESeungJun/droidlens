@@ -134,6 +134,27 @@ test('scenario_finish: 저장한 YAML 전문을 응답에 다시 붙이지 않�
   assert.match(read.text, /wait:/);
 });
 
+test('scenario_finish: 숫자가 든 정확한 글자를 기다리는 단계가 있으면 바뀌는 값 경고를 붙인다 (#115)', async () => {
+  s.setUi(ui({ cls: 'android.widget.TextView', text: 'note #9', bounds: [0, 0, 100, 100] }));
+  const st = await s.call('scenario_start', { name: '바뀌는 값 흐름', packageName: 'com.example.app' });
+  assert.equal(st.isError, false, st.text);
+  await s.call('wait_for', { text: 'note #9', timeoutMs: 1000 });
+  const fin = await s.call('scenario_finish', { verdict: 'pass', summary: 'ok' });
+  assert.equal(fin.isError, false, fin.text);
+  assert.match(fin.text, /스크립트 저장:/);
+  assert.match(fin.text, /다시 돌리면 바뀌는 값/);
+  assert.match(fin.text, /textContains: "note #"/);
+});
+
+test('scenario_finish: 숫자 없는 글자만 기다리면 경고하지 않는다 (#115)', async () => {
+  s.setUi(ui({ cls: 'android.widget.TextView', text: '완료', bounds: [0, 0, 100, 100] }));
+  await s.call('scenario_start', { name: '고정 글자 흐름', packageName: 'com.example.app' });
+  await s.call('wait_for', { text: '완료', timeoutMs: 1000 });
+  const fin = await s.call('scenario_finish', { verdict: 'pass', summary: 'ok' });
+  assert.match(fin.text, /스크립트 저장:/);
+  assert.doesNotMatch(fin.text, /다시 돌리면 바뀌는 값/);
+});
+
 test('clear_app_data: 기본은 실행, DROIDLENS_CONFIRM=1 이고 확인을 받을 수 없으면 실행하지 않는다', async () => {
   s.clearLog();
   assert.equal((await s.call('clear_app_data', { packageName: 'com.example.app' })).isError, false);

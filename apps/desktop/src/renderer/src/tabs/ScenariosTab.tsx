@@ -67,8 +67,15 @@ function groupOf(s: ScenarioData, by: GroupBy, other: string): string {
 /** 목록 한 줄: 낱개 기록 또는 QA 회차 묶음 (#98) */
 type Entry = { kind: 'one'; s: ScenarioData } | { kind: 'run'; g: RunGroup };
 
+/**
+ * 이 시각(#107 머지) 뒤의 TC 기록은 회차 안에서 돌았으면 tc.run 이 적혀 있다. tc.run 이 없으면 회차 밖(스크립트 패널·MCP script_run)에서 돈 것이라
+ * 시각으로 회차를 짐작하지 않는다 (#113)
+ */
+const LEGACY_RUN_BEFORE = Date.parse('2026-11-26T17:09:00+09:00');
+
 /** 회차 번호가 없는 옛 TC 기록: 같은 계획에서 그 기록 직전(2시간 안)에 시작한 회차 */
 function runAt(index: QaRunIndexItem[], plan: string, at: number): QaRunIndexItem | undefined {
+  if (!(at < LEGACY_RUN_BEFORE)) return undefined;
   let best: QaRunIndexItem | undefined;
   for (const r of index) if (r.plan === plan && r.startedAt <= at && at - r.startedAt < 2 * 3600_000 && (!best || r.startedAt > best.startedAt)) best = r;
   return best;
