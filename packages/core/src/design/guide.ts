@@ -48,6 +48,19 @@ export const guideElementSchema = z
     parent: z.string().max(200).regex(FIGMA_NODE_ID).optional(),
     /** 가격·날짜·닉네임처럼 시안에 예시로 넣은 문구: 문구 비교에서 뺀다 */
     example: z.boolean().optional(),
+    /** 폭이 부모를 채운다(w-full·self-stretch·flex-1) true, 고정 폭(w-[320px]) false, 모르면 없음 (#89 상자 크기) */
+    fill: z.boolean().optional(),
+  })
+  .strict();
+
+/** 가이드와 함께 저장한 Figma 프레임 이미지 (#89). 파일은 guide.json 옆에 둔다 */
+export const guideImageSchema = z
+  .object({
+    file: z.literal('figma.png'),
+    width: z.number().int().positive(),
+    height: z.number().int().positive(),
+    /** 이미지 px 가 Figma px 몇 개인가 (2 면 @2x) */
+    scale: z.number().positive().max(10),
   })
   .strict();
 
@@ -66,12 +79,29 @@ export const designGuideSchema = z
     /** Figma px 하나가 몇 dp 인가. 360~480 폭 프레임이면 1, @2x·@3x 로 그린 큰 프레임이면 360/폭 */
     scale: z.number().positive().max(10),
     elements: z.array(guideElementSchema).max(5000),
+    image: guideImageSchema.optional(),
     savedAt: z.number().int(),
   })
   .strict();
 
 export type GuideElement = z.infer<typeof guideElementSchema>;
 export type DesignGuide = z.infer<typeof designGuideSchema>;
+export type GuideImage = z.infer<typeof guideImageSchema>;
+
+/** Figma 링크에서 파일 키와 노드 id. node-id=1-2 → 1:2, 브랜치 링크는 브랜치 키 */
+export function parseFigmaLink(link: string): { fileKey: string; nodeId?: string } | undefined {
+  let u: URL;
+  try {
+    u = new URL(link);
+  } catch {
+    return undefined;
+  }
+  if (u.protocol !== 'https:' || !/(^|\.)figma\.com$/.test(u.hostname)) return undefined;
+  const m = /^\/(?:design|file|proto)\/([A-Za-z0-9]+)(?:\/branch\/([A-Za-z0-9]+))?/.exec(u.pathname);
+  if (!m) return undefined;
+  const raw = u.searchParams.get('node-id')?.replace(/-/g, ':');
+  return { fileKey: m[2] ?? m[1], ...(raw && FIGMA_NODE_ID.test(raw) ? { nodeId: raw } : {}) };
+}
 
 export interface FigmaGuideInput {
   /** TC 의 Figma 프레임 링크 */
@@ -120,13 +150,18 @@ const ATTR = /([a-z-]+)="([^"]*)"/gi;
 
 /**
  * 메타데이터 XML 의 노드를 프레임 기준 좌표로 펼친다. 응답 앞뒤의 안내 글은 건너뛴다.
- * 자식 좌표는 부모 기준이고, group 은 좌표 공간을 만들지 않아 그 자식은 group 의 부모 기준이다
+ * 자식 좌표는 부모 기준이고, group 은 좌표 공간을 만들지 않아 그 자식은 group 의 부모 기준이다.
+ * 응답에 프레임이 여럿이면(섹션·페이지를 읽었거나 여러 응답을 이어 붙임) rootId 노드를 프레임으로 삼고 그 안쪽만 남긴다 (#89).
+ * rootId 가 없거나 못 찾으면 첫 번째 맨 바깥 노드를 쓰고 others 에 나머지 맨 바깥 노드 수를 적는다
  */
-export function parseFigmaMetadata(xml: string): { frame?: MetaNode; nodes: MetaNode[] } {
-  const nodes: MetaNode[] = [];
+export function parseFigmaMetadata(
+  xml: string,
+  rootId?: string,
+): { frame?: MetaNode; nodes: MetaNode[]; others: number; outside: Set<string> } {
+  const all: MetaNode[] = [];
   /** space: 이 노드의 자식 좌표가 기준으로 삼는 원점 (보통 노드 자신, group 이면 그 부모의 원점) */
   const stack: { node: MetaNode; space: { x: number; y: number } }[] = [];
-  let frame: MetaNode | undefined;
+  const tops: MetaNode[] = [];
   for (const m of xml.matchAll(TAG)) {
     const [, close, tag, attrs, self] = m;
     if (close) {
@@ -138,24 +173,45 @@ export function parseFigmaMetadata(xml: string): { frame?: MetaNode; nodes: Meta
     if (!a.id || !FIGMA_NODE_ID.test(a.id)) continue;
     const num = (k: string) => (Number.isFinite(Number(a[k])) ? Number(a[k]) : 0);
     const top = stack[stack.length - 1];
-    // 맨 바깥 노드(프레임)는 캔버스 위치를 빼고 0,0 으로 둔다
-    const x = top ? top.space.x + num('x') : 0;
-    const y = top ? top.space.y + num('y') : 0;
-    const node: MetaNode = {
-      id: a.id,
-      tag: tag.toLowerCase(),
-      name: a.name ?? '',
-      x,
-      y,
-      w: num('width'),
-      h: num('height'),
-      parent: top?.node.id,
-    };
-    if (!frame) frame = node;
-    nodes.push(node);
+    // 맨 바깥 노드는 캔버스 위치 그대로 두고, 프레임을 고른 뒤 그 프레임 기준으로 옮긴다
+    const x = top ? top.space.x + num('x') : num('x');
+    const y = top ? top.space.y + num('y') : num('y');
+    const node: MetaNode = { id: a.id, tag: tag.toLowerCase(), name: a.name ?? '', x, y, w: num('width'), h: num('height'), parent: top?.node.id };
+    if (!top) tops.push(node);
+    all.push(node);
     if (!self) stack.push({ node, space: node.tag === 'group' && top ? top.space : { x, y } });
   }
-  return { frame, nodes };
+  // 링크의 노드가 자식을 가진 틀(글자가 아닌 노드)일 때만 그 노드를 프레임으로 삼는다
+  const linked = rootId ? all.find((n) => n.id === rootId && n.tag !== 'text') : undefined;
+  const frame = (linked && all.some((n) => n.parent === linked.id) ? linked : undefined) ?? tops[0];
+  if (!frame) return { nodes: [], others: 0, outside: new Set() };
+  // 프레임 안쪽만: 부모를 따라 올라가 프레임에 닿는 노드
+  const byId = new Map(all.map((n) => [n.id, n]));
+  const memo = new Map<MetaNode, boolean>([[frame, true]]);
+  const inside = (n: MetaNode): boolean => {
+    const path: MetaNode[] = [];
+    let p: MetaNode | undefined = n;
+    let hit = false;
+    for (; p; p = p.parent ? byId.get(p.parent) : undefined) {
+      const known = memo.get(p);
+      if (known !== undefined) {
+        hit = known;
+        break;
+      }
+      path.push(p);
+    }
+    for (const q of path) memo.set(q, hit);
+    return hit;
+  };
+  const nodes = all
+    .filter(inside)
+    .map((n) => ({ ...n, x: n.x - frame.x, y: n.y - frame.y, ...(n === frame ? { parent: undefined } : {}) }));
+  return {
+    frame: nodes[0],
+    nodes,
+    others: tops.filter((t) => t !== frame && !inside(t)).length,
+    outside: new Set(all.filter((n) => !inside(n)).map((n) => n.id)),
+  };
 }
 
 // ---------- 디자인 코드 (React + Tailwind) ----------
@@ -184,22 +240,40 @@ interface JsxTag {
   end: number;
 }
 
+/**
+ * 짝이 안 맞는 긴 입력에서 제곱 시간이 되지 않게 (#89): 괄호 하나를 훑는 글자 수에 상한을 두고,
+ * 한 번 끝(또는 상한)까지 짝을 못 찾으면 그 뒤의 { } 속성은 훑지 않고 태그가 아닌 것으로 본다.
+ * 따옴표 속성도 한 번 짝을 못 찾으면 그 위치 뒤로는 같은 따옴표를 다시 찾지 않는다
+ */
+const MAX_BRACE_SCAN = 100_000;
+interface ScanState {
+  /** 이 위치부터는 { } 짝을 찾지 않는다 (앞에서 끝까지 못 찾음) */
+  braceDeadFrom: number;
+  /** 따옴표별로, 이 위치 뒤에는 그 따옴표가 없다 */
+  noQuoteAfter: Record<string, number>;
+}
+const newScanState = (): ScanState => ({ braceDeadFrom: Infinity, noQuoteAfter: {} });
+
 /** i 가 여는 괄호({)일 때 짝이 맞는 닫는 괄호 다음 위치. 문자열·템플릿 안의 괄호는 세지 않는다 */
-function skipBraces(code: string, i: number): number {
+function skipBraces(code: string, i: number, st: ScanState): number {
+  if (i >= st.braceDeadFrom) return -1;
+  const start = i;
+  const end = Math.min(code.length, i + MAX_BRACE_SCAN);
   let depth = 0;
-  for (; i < code.length; i++) {
+  for (; i < end; i++) {
     const c = code[i];
     if (c === '"' || c === "'" || c === '`') {
       const q = c;
-      for (i++; i < code.length && code[i] !== q; i++) if (code[i] === '\\') i++;
+      for (i++; i < end && code[i] !== q; i++) if (code[i] === '\\') i++;
     } else if (c === '{') depth++;
     else if (c === '}' && --depth === 0) return i + 1;
   }
+  st.braceDeadFrom = start;
   return -1;
 }
 
 /** code[i] 가 '<' 일 때 JSX 태그 하나를 읽는다. 태그가 아니면(비교 연산자·타입 인자 등) undefined */
-function readTag(code: string, i: number): JsxTag | undefined {
+function readTag(code: string, i: number, st: ScanState = newScanState()): JsxTag | undefined {
   let j = i + 1;
   const close = code[j] === '/';
   if (close) j++;
@@ -215,7 +289,7 @@ function readTag(code: string, i: number): JsxTag | undefined {
     if (c === '/' && code[j + 1] === '>') return { close, self: true, tag: name, attrs, start: i, end: j + 2 };
     if (c === '{') {
       // {...props}
-      j = skipBraces(code, j);
+      j = skipBraces(code, j, st);
       if (j < 0) return undefined;
       continue;
     }
@@ -229,12 +303,16 @@ function readTag(code: string, i: number): JsxTag | undefined {
     j++;
     const q = code[j];
     if (q === '"' || q === "'") {
+      if (j >= (st.noQuoteAfter[q] ?? Infinity)) return undefined;
       const e = code.indexOf(q, j + 1);
-      if (e < 0) return undefined;
+      if (e < 0) {
+        st.noQuoteAfter[q] = j;
+        return undefined;
+      }
       attrs.set(key, { quoted: code.slice(j + 1, e) });
       j = e + 1;
     } else if (q === '{') {
-      const e = skipBraces(code, j);
+      const e = skipBraces(code, j, st);
       if (e < 0) return undefined;
       attrs.set(key, { expr: code.slice(j + 1, e - 1) });
       j = e;
@@ -264,8 +342,9 @@ export function parseFigmaCode(code: string): CodeNode[] {
   const stack: { tag: string; node?: CodeNode }[] = [];
   const current = () => stack[stack.length - 1]?.node;
   let last = 0;
+  const st = newScanState();
   for (let i = code.indexOf('<'); i >= 0; i = code.indexOf('<', i + 1)) {
-    const t = readTag(code, i);
+    const t = readTag(code, i, st);
     if (!t) continue;
     // 태그 사이 글자는 JSX 안(스택이 있을 때)에서만 모은다: import·타입 선언·return 문은 건너뛴다
     const holder = current();
@@ -368,6 +447,8 @@ interface Style {
   radius?: number;
   padding: [number?, number?, number?, number?];
   gap?: number;
+  /** 폭이 부모를 채우나 (w-full·self-stretch·flex-1 → true, w-[320px] → false) */
+  fill?: boolean;
 }
 
 export function parseClasses(classes: string[]): Style {
@@ -407,6 +488,9 @@ export function parseClasses(classes: string[]): Style {
     } else if ((v = arb(c, 'gap')) !== undefined) {
       const px = cssPx(v);
       if (px !== undefined) st.gap = px;
+    } else if (/^(w-full|self-stretch|flex-1|grow|flex-grow|flex-\[1_.*\]|inset-x-0)$/.test(c)) st.fill = true;
+    else if ((v = arb(c, 'w')) !== undefined) {
+      if (cssPx(v) !== undefined && st.fill === undefined) st.fill = false;
     } else {
       const pad = /^p([xytrbl]?)-\[(.+)\]$/.exec(c);
       const px = pad ? cssPx(pad[2].replace(/_/g, ' ')) : undefined;
@@ -434,8 +518,32 @@ export function defaultScale(frameWidth: number): number {
 /** Figma 커넥터 응답 원문으로 가이드를 만든다. 형식이 맞지 않으면 던진다 */
 export function buildDesignGuide(input: FigmaGuideInput): ParsedGuide {
   const notes: string[] = [];
-  const meta = input.metadata ? parseFigmaMetadata(input.metadata) : { nodes: [] as MetaNode[] };
-  const code = (input.code ?? []).flatMap((c) => parseFigmaCode(c));
+  const rootId = parseFigmaLink(input.figma)?.nodeId;
+  const meta = input.metadata ? parseFigmaMetadata(input.metadata, rootId) : { nodes: [] as MetaNode[], others: 0, outside: new Set<string>() };
+  if (meta.others)
+    notes.push(
+      meta.frame && meta.frame.id === rootId
+        ? `메타데이터에 프레임이 여럿이라 링크의 ${rootId} 안쪽만 썼습니다 (다른 맨 바깥 노드 ${meta.others}개는 뺌)`
+        : `메타데이터에 맨 바깥 노드가 여럿이라 첫 번째(${meta.frame?.id})만 썼습니다. 링크의 노드 id 와 같은 프레임을 읽었는지 확인하세요`,
+    );
+  let code = (input.code ?? []).flatMap((c) => parseFigmaCode(c));
+  if (meta.outside.size) {
+    // 다른 프레임의 노드는 버린다: 코드의 부모를 따라 올라가다 메타데이터에서 프레임 밖이던 노드에 닿으면 뺀다
+    const inMeta = new Set(meta.nodes.map((n) => n.id));
+    const codeById = new Map(code.map((c) => [c.id, c]));
+    const keep = (c: CodeNode) => {
+      const seen = new Set<string>();
+      for (let p: CodeNode | undefined = c; p && !seen.has(p.id); p = p.parent ? codeById.get(p.parent) : undefined) {
+        if (inMeta.has(p.id)) return true;
+        if (meta.outside.has(p.id)) return false;
+        seen.add(p.id);
+      }
+      return true;
+    };
+    const before = code.length;
+    code = code.filter(keep);
+    if (code.length < before) notes.push(`디자인 코드의 노드 ${before - code.length}개는 프레임 밖이라 뺐습니다`);
+  }
   if (!meta.nodes.length && !code.length)
     throw new Error('메타데이터나 디자인 코드에서 Figma 노드(data-node-id)를 찾지 못했습니다. 커넥터 응답 원문을 그대로 넘기세요');
   if (input.metadata && !meta.nodes.length) notes.push('메타데이터에서 노드를 찾지 못해 위치·크기는 모름으로 둡니다');
@@ -480,6 +588,7 @@ export function buildDesignGuide(input: FigmaGuideInput): ParsedGuide {
     if (st.border) el.border = st.border;
     if (st.radius !== undefined) el.radius = st.radius;
     if (st.gap !== undefined) el.gap = st.gap;
+    if (st.fill !== undefined) el.fill = st.fill;
     if (st.padding.some((p) => p !== undefined))
       el.padding = [0, 1, 2, 3].map((i) => st.padding[i] ?? 0) as [number, number, number, number];
     if (!el.parent && c.parent) el.parent = c.parent;

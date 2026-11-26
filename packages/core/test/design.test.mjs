@@ -8,6 +8,9 @@ import { PNG } from 'pngjs';
 
 const home = mkdtempSync(join(import.meta.dirname, '.test-home-'));
 process.env.DROIDLENS_HOME = home;
+// 개발 기기에 Figma 토큰이 있어도 시험은 네트워크를 쓰지 않는다
+delete process.env.FIGMA_TOKEN;
+delete process.env.DROIDLENS_FIGMA_TOKEN;
 after(() => rmSync(home, { recursive: true, force: true }));
 
 const d = await import('../dist/design/index.js');
@@ -70,54 +73,92 @@ const K = DENSITY / 160;
 const W = 360 * K;
 const H = 640 * K;
 
-/** texts: [{ text, x, y, w, h (dp), size (sp), color, bg? }] / boxes: [{ x, y, w, h, color }] */
-function makeScreen(texts, boxes = []) {
-  const png = new PNG({ width: W, height: H });
+/**
+ * texts: [{ text, x, y, w, h (dp), size (sp), color, bold?, lines?: [줄 수, 줄 높이 dp], icon?: { color, w (dp) }, desc?, scrollable? }]
+ * boxes: [{ x, y, w, h, color, radius? (dp) }]
+ * 글자 획은 세로 막대로 흉내 낸다: 막대 폭은 글자 크기의 0.09배(보통)·0.14배(굵게)
+ */
+function makeScreen(texts, boxes = [], opt = {}) {
+  const sw = opt.width ?? W;
+  const sh = opt.height ?? H;
+  const png = new PNG({ width: sw, height: sh });
+  const put = (x, y, [r, g, b], a = 1) => {
+    if (x < 0 || y < 0 || x >= sw || y >= sh) return;
+    const i = (y * sw + x) * 4;
+    png.data[i] = Math.round(png.data[i] * (1 - a) + r * a);
+    png.data[i + 1] = Math.round(png.data[i + 1] * (1 - a) + g * a);
+    png.data[i + 2] = Math.round(png.data[i + 2] * (1 - a) + b * a);
+    png.data[i + 3] = 255;
+  };
   const fill = (x0, y0, x1, y1, hex) => {
-    const [r, g, b] = d.hexToRgb(hex);
-    for (let y = Math.max(0, y0); y < Math.min(H, y1); y++)
-      for (let x = Math.max(0, x0); x < Math.min(W, x1); x++) {
-        const i = (y * W + x) * 4;
-        png.data[i] = r;
-        png.data[i + 1] = g;
-        png.data[i + 2] = b;
-        png.data[i + 3] = 255;
+    const c = d.hexToRgb(hex);
+    for (let y = Math.max(0, Math.round(y0)); y < Math.min(sh, Math.round(y1)); y++)
+      for (let x = Math.max(0, Math.round(x0)); x < Math.min(sw, Math.round(x1)); x++) put(x, y, c);
+  };
+  /** 모서리가 둥근 상자 (모서리 화소는 4×4 로 나눠 덮인 만큼 섞는다) */
+  const round = (x0, y0, x1, y1, r, hex) => {
+    const c = d.hexToRgb(hex);
+    const inside = (x, y) => {
+      const cx = Math.min(Math.max(x, x0 + r), x1 - r);
+      const cy = Math.min(Math.max(y, y0 + r), y1 - r);
+      return (x - cx) ** 2 + (y - cy) ** 2 <= r * r && x >= x0 && x <= x1 && y >= y0 && y <= y1;
+    };
+    for (let y = Math.floor(y0); y < Math.ceil(y1); y++)
+      for (let x = Math.floor(x0); x < Math.ceil(x1); x++) {
+        let n = 0;
+        for (let sy = 0; sy < 4; sy++) for (let sx = 0; sx < 4; sx++) n += inside(x + (sx + 0.5) / 4, y + (sy + 0.5) / 4) ? 1 : 0;
+        if (n) put(x, y, c, n / 16);
       }
   };
-  fill(0, 0, W, H, '#ffffff');
-  for (const b of boxes) fill(b.x * K, b.y * K, (b.x + b.w) * K, (b.y + b.h) * K, b.color);
-  // 글자 획 흉내: 가장자리 4px 는 배경으로 두고 안쪽에 세로 막대
+  fill(0, 0, sw, sh, '#ffffff');
+  for (const b of boxes) round(b.x * K, b.y * K, (b.x + b.w) * K, (b.y + b.h) * K, (b.radius ?? 0) * K, b.color);
   for (const t of texts) {
+    if (t.desc) continue;
     const [l, tp, r, bt] = [t.x * K, t.y * K, (t.x + t.w) * K, (t.y + t.h) * K];
-    for (let x = l + 4; x < r - 4; x += 6) fill(x, tp + 4, x + 3, bt - 4, t.color);
+    const stroke = Math.max(2, Math.round((t.size ?? t.h / 1.4) * K * (t.bold ? 0.14 : 0.09)));
+    let x0 = l + 4;
+    if (t.icon) {
+      fill(x0, tp + 4, x0 + t.icon.w * K, bt - 4, t.icon.color);
+      x0 += t.icon.w * K + 12;
+    }
+    const rows = t.lines ? Array.from({ length: t.lines[0] }, (_, i) => [tp + i * t.lines[1] * K, tp + (i + 1) * t.lines[1] * K]) : [[tp, bt]];
+    for (const [a, b] of rows) {
+      const pad = t.lines ? (b - a) * 0.15 : 4;
+      for (let x = x0; x + stroke < r - 4; x += stroke + 3) fill(x, a + pad, x + stroke, b - pad, t.color);
+    }
   }
   const nodes = texts
     .map((t, i) => {
       const b = `[${t.x * K},${t.y * K}][${(t.x + t.w) * K},${(t.y + t.h) * K}]`;
       const size = t.size ? ` text-size-px="${t.size * K}" text-size-unit="2"` : '';
-      return `<node index="${i}" class="android.widget.TextView" resource-id="" text="${t.text}" content-desc="" package="com.example.app" bounds="${b}"${size} clickable="false" enabled="true"/>`;
+      const text = t.desc ? '' : t.text;
+      const desc = t.desc ? t.text : '';
+      return `<node index="${i}" class="android.widget.TextView" resource-id="" text="${text}" content-desc="${desc}" package="com.example.app" bounds="${b}"${size} clickable="false" enabled="true"/>`;
     })
     .join('');
-  const xml = `<?xml version='1.0' encoding='UTF-8'?><hierarchy rotation="0"><node class="android.widget.FrameLayout" text="" package="com.example.app" bounds="[0,0][${W},${H}]">${nodes}</node></hierarchy>`;
+  const inner = opt.scroll
+    ? `<node class="android.widget.ScrollView" text="" package="com.example.app" scrollable="true" bounds="[0,${opt.scroll[0] * K}][${sw},${opt.scroll[1] * K}]">${nodes}</node>`
+    : nodes;
+  const xml = `<?xml version='1.0' encoding='UTF-8'?><hierarchy rotation="0"><node class="android.widget.FrameLayout" text="" package="com.example.app" bounds="[0,0][${sw},${sh}]">${inner}</node></hierarchy>`;
   return { png: PNG.sync.write(png), xml };
 }
 
 const SAME = [
-  { text: '설정', x: 20, y: 56, w: 40, h: 28, size: 20, color: '#191919' },
+  { text: '설정', x: 20, y: 56, w: 40, h: 28, size: 20, color: '#191919', bold: true },
   { text: '알림 받기', x: 20, y: 120, w: 80, h: 21, size: 15, color: '#191919' },
   { text: '마케팅 정보를 받아요', x: 20, y: 145, w: 140, h: 18, size: 13, color: '#888888' },
-  { text: '9,900원', x: 280, y: 120, w: 60, h: 21, size: 15, color: '#191919' },
-  { text: '저장하기', x: 140, y: 580, w: 80, h: 24, size: 16, color: '#ffffff' },
+  { text: '9,900원', x: 280, y: 120, w: 60, h: 21, size: 15, color: '#191919', bold: true },
+  { text: '저장하기', x: 140, y: 580, w: 80, h: 24, size: 16, color: '#ffffff', bold: true },
   { text: '홈', x: 170, y: 620, w: 20, h: 16, size: 11, color: '#999999' },
 ];
-const BUTTON = [{ x: 20, y: 568, w: 320, h: 48, color: '#ff5a00' }];
+const BUTTON = [{ x: 20, y: 568, w: 320, h: 48, color: '#ff5a00', radius: 8 }];
 const screen = { width: W, height: H, density: DENSITY, fontScale: 1 };
 
-function run(texts, boxes = BUTTON, rendering = true) {
+function run(texts, boxes = BUTTON, rendering = true, guide = guideOf()) {
   const { png, xml } = makeScreen(texts, boxes);
   const img = d.decodePng(png);
   const measured = d.measureTexts(parseHierarchyXml(xml).root, img, screen, 'com.example.app');
-  return { result: d.compareDesign(guideOf(), measured, screen, rendering), img, measured };
+  return { result: d.compareDesign(guide, measured, screen, rendering, img), img, measured };
 }
 
 test('화면을 잰다: dp 위치, 렌더링 정보의 sp, 배경·글자 색', () => {
@@ -344,4 +385,304 @@ test('비밀번호 칸은 재지 않고, Android 14+ 의 되돌린 sp 를 쓴다
     ['큰 글'],
   );
   assert.deepEqual(m[0].fontSize, { value: 30, unit: 'sp' });
+});
+
+// ---------- #89: 굵기·줄 높이·상자 크기·모서리, Figma 이미지, 한계 항목 ----------
+
+/** 샘플 앱 DesignActivity 의 variant=changed 와 같은 바뀐 화면 (#77 의 6곳 + #89 의 굵기·버튼 높이·모서리) */
+const CHANGED = [
+  { ...SAME[0], color: '#3366ff' },
+  { ...SAME[1], size: 17 },
+  { ...SAME[2], text: '마케팅 소식을 받아요', y: 155 },
+  { ...SAME[3], bold: false },
+  { text: '새 기능', x: 280, y: 300, w: 60, h: 20, size: 14, color: '#191919' },
+];
+const CHANGED_BUTTON = [{ x: 20, y: 568, w: 320, h: 56, color: '#ff5a00', radius: 0 }];
+
+test('샘플 앱 바뀐 화면: 굵기·상자 크기·모서리를 바꾼 곳이 차이로 나온다', () => {
+  const { result } = run(CHANGED, CHANGED_BUTTON);
+  const by = (prop, el) => result.items.find((i) => i.prop === prop && (!el || i.element.startsWith(el)));
+  const w = by('weight', '12,000원');
+  assert.ok(w, JSON.stringify(result.items, null, 1));
+  assert.equal(w.expected, '700');
+  assert.equal(w.actual, '보통 (500 이하)');
+  assert.equal(w.severity, 'low', '추정값은 낮음');
+  assert.equal(by('weight', '설정'), undefined, '굵게 그린 제목은 차이 없음');
+  const size = by('size', '저장 버튼');
+  assert.equal(size?.expected, '320×48dp');
+  assert.equal(size?.actual, '320×56dp');
+  assert.equal(size?.severity, 'high', '8dp 차이는 높음');
+  const radius = by('radius', '저장 버튼');
+  assert.equal(radius?.expected, '8dp');
+  assert.ok(Math.abs(Number(radius.actual.replace('dp', ''))) <= 1, radius.actual);
+  assert.equal(radius.accuracy, 'estimated');
+  // #77 에서 찾던 6곳은 그대로 나온다
+  for (const [prop, el] of [
+    ['color', '설정'],
+    ['fontSize', '알림'],
+    ['text', '마케팅'],
+    ['gap', '마케팅'],
+    ['missing', '저장하기'],
+    ['extra', '새 기능'],
+  ])
+    assert.ok(by(prop, el), `${prop} ${el}`);
+  assert.equal(result.boxes, 1);
+});
+
+test('상자: 모서리 반경을 둥근 정도별로 어림하고, 상자가 없으면 없다고 한다', () => {
+  for (const radius of [0, 4, 12, 24]) {
+    const { png } = makeScreen([], [{ x: 40, y: 100, w: 200, h: 48, color: '#2255aa', radius }]);
+    const box = d.measureBox(d.decodePng(png), [40 * K, 100 * K, 240 * K, 148 * K], 48);
+    const want = [40 * K, 100 * K, 240 * K, 148 * K];
+    assert.ok(box.bounds.every((v, i) => Math.abs(v - want[i]) <= 1), `반경 ${radius}: ${box.bounds}`);
+    assert.ok(Math.abs(box.radius / K - radius) <= 1.5, `반경 ${radius} → ${box.radius / K}`);
+  }
+  const { png } = makeScreen([], []);
+  assert.equal(d.measureBox(d.decodePng(png), [40 * K, 100 * K, 240 * K, 148 * K], 48), undefined, '상자가 없으면 없음');
+  assert.equal(run(SAME).result.items.filter((i) => i.prop === 'size' || i.prop === 'radius').length, 0);
+});
+
+test('상자: 고정 폭(w-[200px]) 상자는 넓은 기기에서도 200 과 견주고, 부모를 채우는 상자는 양쪽 여백을 뺀 폭과 견준다', () => {
+  const meta = `<frame id="1:1" name="A" x="0" y="0" width="360" height="640"><text id="1:2" name="제목" x="20" y="40" width="40" height="20" /><frame id="1:3" name="칩" x="80" y="100" width="200" height="40" /><frame id="1:4" name="버튼" x="20" y="200" width="320" height="48" /></frame>`;
+  const code = `<div className="bg-white" data-node-id="1:1"><p data-node-id="1:2">제목</p><div className="bg-[#2255aa] w-[200px] rounded-full" data-node-id="1:3" /><div className="bg-[#ff5a00] rounded-[8px]" data-node-id="1:4" /></div>`;
+  const guide = d.buildDesignGuide({ figma: FIGMA, metadata: meta, code: [code] }).guide;
+  assert.equal(guide.elements.find((e) => e.id === '1:3').fill, false);
+  const wide = { ...screen, width: 412 * K };
+  const { png, xml } = makeScreen(
+    [{ text: '제목', x: 20, y: 40, w: 40, h: 20, color: '#191919' }],
+    [
+      { x: 106, y: 100, w: 200, h: 40, color: '#2255aa', radius: 20 },
+      { x: 20, y: 200, w: 372, h: 48, color: '#ff5a00', radius: 8 },
+    ],
+    { width: 412 * K },
+  );
+  const img = d.decodePng(png);
+  const r = d.compareDesign(guide, d.measureTexts(parseHierarchyXml(xml).root, img, wide), wide, true, img);
+  assert.deepEqual(r.items, [], JSON.stringify(r.items, null, 1));
+  assert.equal(r.boxes, 2);
+});
+
+test('줄 높이: 두 줄 글자의 줄 간격을 재고 가이드와 다르면 추정 차이로 낸다', () => {
+  const meta = `<frame id="1:1" name="A" x="0" y="0" width="360" height="640"><text id="1:2" name="제목" x="20" y="40" width="40" height="20" /><text id="1:3" name="설명" x="20" y="100" width="200" height="42" /></frame>`;
+  const code = `<div data-node-id="1:1"><p className="text-[15px] leading-[21px]" data-node-id="1:3">긴 설명 글</p></div>`;
+  const guide = d.buildDesignGuide({ figma: FIGMA, metadata: meta, code: [code] }).guide;
+  const title = { text: '제목', x: 20, y: 40, w: 40, h: 20, color: '#191919' };
+  const same = run([title, { text: '긴 설명 글', x: 20, y: 100, w: 200, h: 42, size: 15, color: '#191919', lines: [2, 21] }], [], true, guide);
+  assert.equal(same.measured.find((m) => m.text === '긴 설명 글').lines.count, 2);
+  assert.equal(same.result.items.filter((i) => i.prop === 'lineHeight').length, 0, JSON.stringify(same.result.items));
+  const loose = run([title, { text: '긴 설명 글', x: 20, y: 100, w: 200, h: 52, size: 15, color: '#191919', lines: [2, 26] }], [], true, guide);
+  const it = loose.result.items.find((i) => i.prop === 'lineHeight');
+  assert.equal(it?.expected, '21sp');
+  assert.equal(it?.actual, '26sp');
+  assert.equal(it?.severity, 'low');
+});
+
+test('굵기: 견줄 보통 굵기 글자가 없으면 비교하지 않고 알린다', () => {
+  const meta = `<frame id="1:1" name="A" x="0" y="0" width="360" height="640"><text id="1:2" name="제목" x="20" y="40" width="80" height="28" /></frame>`;
+  const code = `<div data-node-id="1:1"><p className="text-[20px] font-bold" data-node-id="1:2">제목</p></div>`;
+  const guide = d.buildDesignGuide({ figma: FIGMA, metadata: meta, code: [code] }).guide;
+  const r = run([{ text: '제목', x: 20, y: 40, w: 80, h: 28, size: 20, color: '#191919' }], [], true, guide).result;
+  assert.equal(r.items.filter((i) => i.prop === 'weight').length, 0);
+  assert.ok(r.warnings.some((w) => w.includes('굵기')));
+});
+
+/** 프레임 크기(@2x)의 가짜 Figma 이미지: 버튼 자리를 주황으로 칠한다 */
+function figmaPng(scale = 2) {
+  const p = new PNG({ width: 360 * scale, height: 640 * scale });
+  p.data.fill(255);
+  for (let y = 568 * scale; y < 616 * scale; y++)
+    for (let x = 20 * scale; x < 340 * scale; x++) {
+      const i = (y * p.width + x) * 4;
+      p.data[i + 1] = 90;
+      p.data[i + 2] = 0;
+    }
+  return PNG.sync.write(p);
+}
+
+function fakeFetch(calls, { status = 200, imageUrl = 'https://figma-alpha-api.s3.us-west-2.amazonaws.com/images/abc', png = figmaPng() } = {}) {
+  return async (url, init) => {
+    calls.push({ url, headers: init?.headers });
+    const res = (body, st = 200) => ({
+      ok: st >= 200 && st < 300,
+      status: st,
+      headers: { get: (n) => (n === 'content-length' && Buffer.isBuffer(body) ? String(body.length) : null) },
+      json: async () => body,
+      arrayBuffer: async () => body.buffer.slice(body.byteOffset, body.byteOffset + body.length),
+    });
+    if (url.startsWith('https://api.figma.com/')) return res({ err: null, images: { '1:2': imageUrl } }, status);
+    return res(png);
+  };
+}
+
+test('Figma 이미지: 토큰이 있으면 REST 로 프레임 PNG 를 받아 가이드 옆에 두고, 보고서에 나란히 놓는다', async () => {
+  const plan = await qa.createQaPlan({ name: '디자인 이미지', app: 'com.example.app' });
+  await qa.saveQaPlan({
+    ...plan,
+    requirements: [{ id: 'R-01', text: '시안대로' }],
+    cases: [
+      { id: 'TC-001', title: '설정', requirements: ['R-01'], priority: 'P1', kind: 'design', steps: ['a'], expected: ['b'], design: { figma: FIGMA } },
+    ],
+  });
+  // 토큰 없음: 받지 않고 알린다
+  const none = await d.saveDesignGuide(plan.id, 'TC-001', { metadata: METADATA, code: [CODE], example: ['1:8'] });
+  assert.ok(none.notes.some((n) => n.includes('FIGMA_TOKEN')));
+  assert.equal(none.guide.image, undefined);
+
+  const calls = [];
+  const saved = await d.saveDesignGuide(
+    plan.id,
+    'TC-001',
+    { metadata: METADATA, code: [CODE], example: ['1:8'] },
+    { image: { token: 'figd_secret', fetch: fakeFetch(calls) } },
+  );
+  assert.match(calls[0].url, /^https:\/\/api\.figma\.com\/v1\/images\/AbCdEf123\?ids=1%3A2&format=png&scale=2$/);
+  assert.equal(calls[0].headers['X-Figma-Token'], 'figd_secret');
+  assert.equal(calls[1].headers, undefined, '이미지 주소에는 토큰을 보내지 않는다');
+  assert.deepEqual(saved.guide.image, { file: 'figma.png', width: 720, height: 1280, scale: 2 });
+  assert.ok(existsSync(saved.image));
+  assert.ok(!readFileSync(saved.path, 'utf8').includes('figd_secret'), '토큰은 파일에 남기지 않는다');
+  const guide = await d.loadDesignGuide(plan.id, 'TC-001');
+  const image = await d.loadDesignImage(plan.id, 'TC-001', guide);
+  assert.equal(image.width, 720);
+
+  const { result, img } = run(CHANGED, CHANGED_BUTTON);
+  const files = await d.writeDesignReport(d.designResultDir(plan.id, 'TC-001'), result, img, 'TC-001 설정', { guide, image });
+  const html = readFileSync(files.html, 'utf8');
+  assert.match(html, /<th>Figma<\/th><th>화면 조각<\/th>/);
+  assert.ok(existsSync(join(files.dir, 'figma.jpg')));
+  const idx = result.items.findIndex((i) => i.prop === 'size');
+  assert.ok(existsSync(join(files.dir, `figma-${idx + 1}.jpg`)), 'Figma 조각');
+  assert.match(html, new RegExp(`figma-${idx + 1}\\.jpg.+crop-${idx + 1}\\.jpg`), '같은 줄에 Figma 조각과 화면 조각');
+  const extra = result.items.findIndex((i) => i.prop === 'extra');
+  assert.ok(!existsSync(join(files.dir, `figma-${extra + 1}.jpg`)), '가이드에 없는 글자는 Figma 조각이 없다');
+
+  // 다시 저장하다 받지 못하면 지난 이미지는 지운다 (다른 프레임 것일 수 있다)
+  const bad = await d.saveDesignGuide(
+    plan.id,
+    'TC-001',
+    { metadata: METADATA, code: [CODE] },
+    { image: { token: 'figd_secret', fetch: fakeFetch([], { status: 403 }) } },
+  );
+  assert.ok(bad.notes.some((n) => n.includes('HTTP 403') && !n.includes('figd_secret')), bad.notes.join('\n'));
+  assert.equal(existsSync(saved.image), false);
+});
+
+test('Figma 이미지: 알 수 없는 주소·PNG 가 아닌 응답은 받지 않는다', async () => {
+  const guide = guideOf();
+  await assert.rejects(
+    d.fetchFigmaImage(guide, { token: 't', fetch: fakeFetch([], { imageUrl: 'http://169.254.169.254/latest' }) }),
+    /알 수 없는 주소/,
+  );
+  await assert.rejects(d.fetchFigmaImage(guide, { token: 't', fetch: fakeFetch([], { png: Buffer.from('not png') }) }), /PNG 가 아닙니다/);
+  // 머리만 아주 큰 화면이라고 적은 PNG: 풀기 전에 막는다
+  const bomb = Buffer.alloc(33);
+  Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]).copy(bomb, 0);
+  bomb.writeUInt32BE(13, 8);
+  bomb.write('IHDR', 12, 'latin1');
+  bomb.writeUInt32BE(30000, 16);
+  bomb.writeUInt32BE(30000, 20);
+  await assert.rejects(d.fetchFigmaImage(guide, { token: 't', fetch: fakeFetch([], { png: bomb }) }), /너무 큽니다 \(30000×30000\)/);
+  await assert.rejects(d.fetchFigmaImage({ ...guide, figma: 'https://example.com/x' }, { token: 't', fetch: fakeFetch([]) }), /파일 키/);
+  assert.equal(d.figmaImageScale({ width: 360, height: 640 }), 2);
+  assert.equal(d.figmaImageScale({ width: 1080, height: 8000 }), 0.51);
+  assert.deepEqual(d.parseFigmaLink('https://www.figma.com/design/AbC/branch/BrX/Name?node-id=12-34'), { fileKey: 'BrX', nodeId: '12:34' });
+  assert.equal(d.figmaToken({ FIGMA_TOKEN: '  ' }), undefined);
+});
+
+// ---------- 한계 항목 재현 (#89) ----------
+
+test('한계: 스크롤 경계에 반쯤 걸친 노드는 높이로 재는 값(글자 크기 추정·간격)을 쓰지 않는다', () => {
+  const meta = `<frame id="1:1" name="목록" x="0" y="0" width="360" height="1000"><text id="1:2" name="제목" x="20" y="40" width="60" height="20" /><text id="1:3" name="상품 하나" x="20" y="200" width="120" height="40" /><text id="1:4" name="상품 둘" x="20" y="260" width="120" height="40" /><text id="1:5" name="상품 셋" x="20" y="320" width="120" height="40" /></frame>`;
+  const code = `<div data-node-id="1:1"><p className="text-[28px] leading-[40px]" data-node-id="1:3">상품 하나</p><p className="text-[28px] leading-[40px]" data-node-id="1:4">상품 둘</p><p className="text-[28px] leading-[40px]" data-node-id="1:5">상품 셋</p></div>`;
+  const guide = d.buildDesignGuide({ figma: FIGMA, metadata: meta, code: [code] }).guide;
+  // 목록(100~600dp)을 스크롤해 '상품 하나'(본래 80~120)는 위가 잘려 100~120 만 보인다
+  const texts = [
+    { text: '제목', x: 20, y: 40, w: 60, h: 20, color: '#191919' },
+    { text: '상품 하나', x: 20, y: 100, w: 120, h: 20, color: '#191919' },
+    { text: '상품 둘', x: 20, y: 140, w: 120, h: 40, color: '#191919' },
+    { text: '상품 셋', x: 20, y: 200, w: 120, h: 40, color: '#191919' },
+  ];
+  const { png, xml } = makeScreen(texts, [], { scroll: [100, 600] });
+  const img = d.decodePng(png);
+  const measured = d.measureTexts(parseHierarchyXml(xml).root, img, screen);
+  assert.equal(measured.find((m) => m.text === '상품 하나').clipped, true);
+  assert.equal(measured.find((m) => m.text === '상품 둘').clipped, undefined);
+  const r = d.compareDesign(guide, measured, screen, false, img);
+  assert.equal(
+    r.items.filter((i) => ['fontSize', 'gap'].includes(i.prop) && i.element.startsWith('상품')).length,
+    0,
+    JSON.stringify(r.items, null, 1),
+  );
+});
+
+test('한계: 글자 옆 아이콘 색을 글자 색으로 잡지 않는다', () => {
+  const withIcon = SAME.map((t) => (t.text === '마케팅 정보를 받아요' ? { ...t, w: 170, icon: { color: '#191919', w: 16 } } : t));
+  const { result, measured } = run(withIcon);
+  const m = measured.find((x) => x.text === '마케팅 정보를 받아요');
+  assert.equal(m.inks.length, 2, JSON.stringify(m));
+  assert.equal(result.items.filter((i) => i.prop === 'color').length, 0, JSON.stringify(result.items, null, 1));
+  // 글자 색이 정말 다르면 낮음(추정)으로 낸다
+  const wrong = run(withIcon.map((t) => (t.text === '마케팅 정보를 받아요' ? { ...t, color: '#3366ff' } : t))).result;
+  const it = wrong.items.find((i) => i.prop === 'color');
+  assert.equal(it?.severity, 'low');
+  assert.match(it.note, /섞여/);
+});
+
+test('한계: RTL 화면은 좌우를 뒤집어 비교한다', () => {
+  const mirrored = SAME.map((t) => ({ ...t, x: 360 - t.x - t.w }));
+  const r = run(mirrored, BUTTON).result;
+  assert.equal(r.rtl, true);
+  assert.ok(r.warnings.some((w) => w.includes('RTL')));
+  assert.deepEqual(
+    r.items.filter((i) => i.prop === 'inset'),
+    [],
+    JSON.stringify(r.items, null, 1),
+  );
+  assert.equal(run(SAME).result.rtl, undefined, 'LTR 화면은 그대로');
+});
+
+test('한계: 메타데이터에 프레임이 여럿이면 링크의 프레임 안쪽만 쓴다', () => {
+  const meta = `<frame id="5:1" name="다른 화면" x="0" y="0" width="360" height="640"><text id="5:2" name="다른 글" x="20" y="40" width="60" height="20" /></frame>
+<frame id="1:2" name="설정 화면" x="400" y="0" width="360" height="640"><text id="1:3" name="설정" x="20" y="56" width="40" height="28" /></frame>`;
+  const code = `<div data-node-id="5:1"><p className="text-[30px]" data-node-id="5:2">다른 글</p></div><div data-node-id="1:2"><p className="text-[20px]" data-node-id="1:3">설정</p></div>`;
+  const { guide, notes } = d.buildDesignGuide({ figma: FIGMA, metadata: meta, code: [code] });
+  assert.equal(guide.frame.id, '1:2');
+  assert.deepEqual(
+    guide.elements.map((e) => e.id),
+    ['1:3'],
+  );
+  assert.deepEqual(guide.elements[0].rect, { x: 20, y: 56, w: 40, h: 28 }, '두 번째 프레임 기준');
+  assert.ok(notes.some((n) => n.includes('프레임이 여럿')));
+  assert.ok(notes.some((n) => n.includes('프레임 밖')));
+});
+
+test('한계: Compose 처럼 여러 글자가 한 노드로 합쳐져도 문구로 짝짓고 자리·크기는 비교하지 않는다', () => {
+  const merged = [SAME[0], { text: '알림 받기, 마케팅 정보를 받아요', x: 20, y: 120, w: 140, h: 43, color: '#191919' }, ...SAME.slice(3)];
+  const r = run(merged).result;
+  assert.equal(r.items.filter((i) => i.prop === 'missing' || i.prop === 'extra').length, 0, JSON.stringify(r.items, null, 1));
+  assert.equal(r.items.filter((i) => i.element === '알림 받기' || i.element.startsWith('마케팅')).length, 0);
+  assert.ok(r.warnings.some((w) => w.includes('합쳐진')));
+});
+
+test('한계: contentDescription 만 있는 아이콘도 문구로 짝짓고, 가이드에 없는 아이콘은 더 있다고 하지 않는다', () => {
+  const icons = [
+    ...SAME.filter((t) => t.text !== '홈'),
+    { text: '홈', x: 170, y: 618, w: 20, h: 20, desc: true },
+    { text: '뒤로 가기', x: 4, y: 52, w: 12, h: 24, desc: true },
+  ];
+  const { result, measured } = run(icons);
+  assert.equal(measured.find((m) => m.text === '홈').description, true);
+  assert.deepEqual(result.items, [], JSON.stringify(result.items, null, 1));
+});
+
+test('디자인 코드: 짝이 안 맞는 긴 입력도 제곱 시간이 걸리지 않는다', () => {
+  for (const unit of ['<a {', '<a b={"', "<a b='x' c={`", '<a b="']) {
+    const input = unit.repeat(200_000);
+    const t0 = Date.now();
+    d.parseFigmaCode(input);
+    assert.ok(Date.now() - t0 < 2000, `${JSON.stringify(unit)}: ${Date.now() - t0}ms`);
+  }
+  // 뒤에서 짝을 못 찾아도 그 앞의 태그는 읽는다
+  const nodes = d.parseFigmaCode(`<p className="text-[14px]" data-node-id="1:1">가</p><a b={ ${'x'.repeat(10)}`);
+  assert.equal(nodes[0].text, '가');
 });

@@ -4,7 +4,7 @@ import { dumpHierarchyWithRendering } from '../hierarchy.js';
 import { compareDesign, type DesignCompareResult } from './compare.js';
 import { decodePng, measureTexts, type ScreenMetrics } from './measure.js';
 import { writeDesignReport, type DesignReportFiles } from './report.js';
-import { designResultDir, loadDesignCase, loadDesignGuide } from './store.js';
+import { designResultDir, loadDesignCase, loadDesignGuide, loadDesignImage } from './store.js';
 
 /**
  * 시스템 글자 크기 배율. 화면 설정(mGlobalConfiguration 의 첫 값)을 먼저 본다:
@@ -37,7 +37,15 @@ export async function compareDesignOnDevice(
   // 화면 크기는 스크린샷 기준 (wm size 는 회전·해상도 바꾸기를 반영하지 않을 수 있다)
   const screen: ScreenMetrics = { width: img.width, height: img.height, density: info.screen.density || 160, fontScale };
   const texts = measureTexts(hierarchy.root, img, screen, plan.app);
-  const result = compareDesign(guide, texts, screen, rendering);
-  const files = await writeDesignReport(designResultDir(planId, caseId, runId), result, img, `${c.id} ${c.title}`);
+  const result = compareDesign(guide, texts, screen, rendering, img);
+  const figma = await loadDesignImage(planId, caseId, guide);
+  if (guide.image && !figma) result.warnings.push('가이드의 Figma 이미지를 읽지 못해 나란히 놓지 않았습니다. design_guide_save 로 다시 저장하세요');
+  const files = await writeDesignReport(
+    designResultDir(planId, caseId, runId),
+    result,
+    img,
+    `${c.id} ${c.title}`,
+    figma ? { guide, image: figma } : undefined,
+  );
   return { result, files };
 }
