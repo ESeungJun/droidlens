@@ -59,7 +59,8 @@ export interface ScenarioData {
  * 번호가 이미 여러 번 붙어 있으면("TC-001 TC-001", #92 이전에 저장된 스크립트) 하나로 줄인다 (#102)
  */
 export function tcName(caseId: string, name: string): string {
-  let rest = name.trim();
+  if (!caseId) return name; // 빈 번호면 아래 반복이 끝나지 않는다 (#113)
+  let rest = typeof name === 'string' ? name.trim() : '';
   while (rest === caseId || rest.startsWith(`${caseId} `)) rest = rest.slice(caseId.length).trim();
   return rest ? `${caseId} ${rest}` : caseId;
 }
@@ -70,7 +71,8 @@ export const SCENARIO_STALE_MS = 30 * 60_000;
 /** 끝나지 않았는데 마지막 활동(시작·마지막 단계)이 SCENARIO_STALE_MS 보다 오래된 기록 */
 export function scenarioStale(d: Pick<ScenarioData, 'finishedAt' | 'startedAt' | 'steps'>, now = Date.now()): boolean {
   if (d.finishedAt) return false;
-  const last = Math.max(d.startedAt, ...(Array.isArray(d.steps) ? d.steps.map((s) => s.at ?? 0) : []));
+  // 펼치기(...)는 단계가 아주 많으면 RangeError 라 하나씩 본다 (#113)
+  const last = (Array.isArray(d.steps) ? d.steps : []).reduce((m, s) => Math.max(m, Number(s?.at) || 0), Number(d.startedAt) || 0);
   return now - last > SCENARIO_STALE_MS;
 }
 

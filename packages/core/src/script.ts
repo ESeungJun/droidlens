@@ -25,6 +25,7 @@
  * - script/assert.ts    검사기 표와 evaluateAssertion
  * - script/steps.ts     단계 실행기 표와 runStep
  * - script/run.ts       실행 흐름(준비·단계 반복·정리·리포트)과 runSuite
+ * - script/volatile.ts  다시 돌리면 바뀌는 값을 정확히 일치로 보는 단계 찾기(#115)
  * 의존 방향: schema ← describe·common ← assert ← steps ← run. 거꾸로 가는 import 는 없다.
  */
 export {
@@ -43,4 +44,5 @@ export {
 export { describeAssertion, describeStep, selectorLabel } from './script/describe.js';
 export { waitScreenSettled } from './script/common.js';
 export { evaluateAssertion } from './script/assert.js';
+export { volatileChecks, volatileWarning, type VolatileCheck } from './script/volatile.js';
 export { foreignPackage, runScript, runSuite, type RunResult, type ScriptRunOptions, type SuiteResult } from './script/run.js';

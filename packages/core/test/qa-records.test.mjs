@@ -32,7 +32,7 @@ test('closeOpenTcScenarios: 그 회차(와 TC)의 끝나지 않은 기록만 막
   const other = record('20261126-100100_b', { tc: { plan: 'p1', case: 'TC-002', run: 'r1' } });
   const done = record('20261126-100200_c', { tc: { plan: 'p1', case: 'TC-003', run: 'r1' }, finishedAt: 5, verdict: 'pass' });
   const otherRun = record('20261126-100300_d', { tc: { plan: 'p1', case: 'TC-001', run: 'r2' } });
-  const closed = await qa.closeOpenTcScenarios('p1', 'r1', '회차를 멈춤', 'TC-001');
+  const closed = await qa.closeOpenTcScenarios('p1', 'r1', '회차를 멈춤', { caseId: 'TC-001' });
   assert.deepEqual(closed.map((x) => x.case), ['TC-001']);
   const d = JSON.parse(readFileSync(join(open, 'scenario.json'), 'utf8'));
   assert.equal(d.verdict, 'blocked');

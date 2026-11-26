@@ -285,6 +285,8 @@ export function register(server: McpServer): void {
         if (verdict === 'pass' && saveScript !== false && !noEvidence) {
           const p = await dl.saveScript(script);
           lines.push(`스크립트 저장: ${p} (${steps.length}단계) — script_run("${basename(p, '.yaml')}")으로 재실행, 내용은 script_read`);
+          // 이번 실행에서 본 값(번호·개수)이 정확히 일치로 녹화됐으면 알린다. 다음 실행에서 실패한다 (#115)
+          lines.push(...dl.volatileWarning(dl.volatileChecks(script.steps)));
           if (tc) {
             // 통과한 TC 에 스크립트를 잇는다. 다음 실행부터 이 TC 는 스크립트로 돈다 (#76)
             // 잇는 순간의 파일 해시를 남긴다. 나중에 파일이 바뀌면 그 스크립트로는 확인 필수 동작을 누르지 않는다.

@@ -144,7 +144,7 @@ test('캡처 축소본을 남겨 다음 내보내기에 다시 쓰고, 원본이
   const { plan, run, sid } = await setup();
   const dir = join(home, 'scenarios', sid);
   await qa.writeQaRunExport(plan.id, run.id, 'html');
-  const cache = join(dir, 'step-001.480.jpg');
+  const cache = join(dir, 'step-001.480q70.jpg');
   assert.ok(existsSync(cache), '축소본을 남김');
   writeFileSync(cache, Buffer.from('ffd8ffe0', 'hex'));
   const past = new Date(Date.now() - 60_000);
