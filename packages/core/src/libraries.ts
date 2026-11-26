@@ -263,6 +263,20 @@ function packagePrefix(cls: string, depth: number): string {
   return parts.slice(0, depth).join('.');
 }
 
+/** 난독화 이름으로 보는 클래스 이름(패키지 뺀 이름, `$` 앞 부분): 1~2글자, 또는 소문자 1~4글자 */
+const OBFUSCATED_NAME = /^(?:[a-zA-Z]{1,2}|[a-z]{1,4})(?:\$[\w$]*)?$/;
+
+/**
+ * 난독화 추정: 난독화 이름처럼 생긴 클래스 비율.
+ * R8 은 a, b, …, aa, …, aaa 순으로 이름을 짓고 repackage 하면 한 패키지에 수만 개를 모으므로
+ * 1~2글자가 바닥나 3~4글자 소문자 이름이 대부분이 된다(#111). 손으로 쓴 클래스는 대문자로 시작해 걸리지 않는다.
+ */
+export function obfuscationStats(classNames: string[]): { shortNameRatio: number; likelyObfuscated: boolean; minified: boolean } {
+  const hits = classNames.filter((c) => OBFUSCATED_NAME.test(c.slice(c.lastIndexOf('.') + 1))).length;
+  const ratio = classNames.length ? hits / classNames.length : 0;
+  return { shortNameRatio: Math.round(ratio * 1000) / 1000, likelyObfuscated: ratio > 0.25, minified: ratio > 0.1 };
+}
+
 export async function analyzeApk(apkPaths: string[], appPackage?: string): Promise<ApkAnalysis> {
   const classes: string[] = [];
   const nativeLibs: ApkAnalysis['nativeLibs'] = [];
@@ -335,10 +349,7 @@ export async function analyzeApk(apkPaths: string[], appPackage?: string): Promi
     unknown.set(p3, (unknown.get(p3) ?? 0) + 1);
   }
 
-  // 난독화 추정: 단순 이름(1~2글자) 클래스 비율
-  const simpleNames = uniqueClasses.map((c) => c.split('.').pop() ?? '');
-  const short = simpleNames.filter((n) => /^[a-zA-Z]{1,2}(\$\w+)?$/.test(n)).length;
-  const shortNameRatio = uniqueClasses.length ? short / uniqueClasses.length : 0;
+  const obf = obfuscationStats(uniqueClasses);
 
   return {
     apkFiles: apkPaths,
@@ -353,8 +364,8 @@ export async function analyzeApk(apkPaths: string[], appPackage?: string): Promi
       .sort((a, b) => b[1] - a[1])
       .slice(0, 40)
       .map(([pkg, classes]) => ({ pkg, classes })),
-    obfuscation: { shortNameRatio: Math.round(shortNameRatio * 1000) / 1000, likelyObfuscated: shortNameRatio > 0.25 },
-    minified: shortNameRatio > 0.1,
+    obfuscation: { shortNameRatio: obf.shortNameRatio, likelyObfuscated: obf.likelyObfuscated },
+    minified: obf.minified,
     kotlin: uniqueClasses.some((c) => c.startsWith('kotlin.')),
   };
 }
