@@ -197,6 +197,7 @@ export const qa: Record<string, string> = {
   'TC 기록 펼치기': 'Expand TC records',
   '끝나지 않음': 'Not finished',
   // #129 검증 갈래·TC 표 가져오기
+  유형: 'Type',
   '기획 흐름': 'Spec flow',
   '디자인 가이드': 'Design guide',
   'TC 문서': 'TC document',

@@ -1,10 +1,10 @@
-import type { QaTable } from './tc-table.js';
 import { createHash } from 'node:crypto';
 import { readFile, stat } from 'node:fs/promises';
 import { basename, extname } from 'node:path';
 import { XMLParser } from 'fast-xml-parser';
 import { unzipSync } from 'fflate';
 import type { QaSourceKind } from './plan.js';
+import type { QaTable } from './tc-table.js';
 
 /**
  * QA 문서 읽기: 파일(md·txt·PDF·CSV·엑셀)을 에이전트가 읽을 글(markdown)로 바꾼다.
@@ -117,10 +117,11 @@ export async function readQaSourceFile(path: string): Promise<QaSourceFile> {
       text = decodeText(bytes, warnings);
       break;
     case 'csv': {
-      const rows = parseCsv(decodeText(bytes, warnings), extname(path).toLowerCase() === '.tsv' ? '\t' : undefined, warnings);
+      const lines: number[] = [];
+      const rows = parseCsv(decodeText(bytes, warnings), extname(path).toLowerCase() === '.tsv' ? '\t' : undefined, warnings, lines);
       text = tableToMarkdown(rows, warnings);
-      const body = rows.slice(0, MAX_TABLE_ROWS + 1);
-      tables = [{ sheet: '', rows: body, rowNums: body.map((_, i) => i + 1) }];
+      const body = rows.slice(0, MAX_TABLE_ROWS + 1).map((r) => r.slice(0, MAX_TABLE_COLS));
+      tables = [{ sheet: '', rows: body, rowNums: lines.slice(0, body.length) }];
       break;
     }
     case 'xlsx':
@@ -161,11 +162,15 @@ export function decodeText(b: Uint8Array, warnings: string[] = []): string {
 // ---------- 표 ----------
 
 /** RFC 4180 CSV (따옴표 안 쉼표·줄바꿈·"" 이스케이프). 구분자를 안 주면 첫 줄로 쉼표·탭·세미콜론 중 고른다 */
-export function parseCsv(text: string, delimiter?: string, warnings: string[] = []): string[][] {
+export function parseCsv(text: string, delimiter?: string, warnings: string[] = [], lineNums?: number[]): string[][] {
   const s = text.replace(/^\uFEFF/, '');
   const firstLine = s.slice(0, s.search(/\r?\n|$/));
   const delim = delimiter ?? [',', '\t', ';'].map((d) => [d, countOutsideQuotes(firstLine, d)] as const).sort((a, b) => b[1] - a[1])[0][0];
   const rows: string[][] = [];
+  // 레코드마다 시작 줄 번호 (따옴표 안 줄바꿈도 원본 줄로 센다)
+  const starts: number[] = [];
+  let line = 1;
+  let start = 1;
   let row: string[] = [];
   let cell = '';
   let quoted = false;
@@ -177,7 +182,10 @@ export function parseCsv(text: string, delimiter?: string, warnings: string[] = 
           cell += '"';
           i++;
         } else quoted = false;
-      } else cell += ch;
+      } else {
+        if (ch === '\n' || (ch === '\r' && s[i + 1] !== '\n')) line++;
+        cell += ch;
+      }
     } else if (ch === '"' && cell === '') quoted = true;
     else if (ch === delim) {
       row.push(cell);
@@ -186,6 +194,9 @@ export function parseCsv(text: string, delimiter?: string, warnings: string[] = 
       if (ch === '\r' && s[i + 1] === '\n') i++;
       row.push(cell);
       rows.push(row);
+      starts.push(start);
+      line++;
+      start = line;
       row = [];
       cell = '';
     } else cell += ch;
@@ -194,8 +205,11 @@ export function parseCsv(text: string, delimiter?: string, warnings: string[] = 
   if (cell !== '' || row.length) {
     row.push(cell);
     rows.push(row);
+    starts.push(start);
   }
-  return rows.filter((r) => r.some((c) => c.trim() !== ''));
+  const keep = rows.map((r) => r.some((c) => c.trim() !== ''));
+  lineNums?.push(...starts.filter((_, i) => keep[i]));
+  return rows.filter((_, i) => keep[i]);
 }
 
 function countOutsideQuotes(line: string, d: string): number {

@@ -567,6 +567,7 @@ const TC_PICK_FIELDS = [
   ['id', '번호'],
   ['preconditions', '사전 조건'],
   ['priority', '우선순위'],
+  ['kind', '유형'],
   ['notes', '비고'],
 ] as const;
 
@@ -588,7 +589,7 @@ function TcColumnPicker({
   const t = useT();
   const [at, setAt] = useState(0);
   const table = tables[at];
-  const [map, setMap] = useState<Record<string, number | undefined>>({});
+  const [map, setMap] = useState<Record<string, number | undefined>>(() => ({ ...tables[0]?.guess }));
   const ready = map.title !== undefined || map.steps !== undefined;
   return (
     <div className="card">
@@ -599,7 +600,7 @@ function TcColumnPicker({
       {tables.length > 1 && (
         <label className="chk" style={{ marginBottom: 8 }}>
           {t('시트')}
-          <select className="input" value={at} onChange={(e) => (setAt(Number(e.target.value)), setMap({}))}>
+          <select className="input" value={at} onChange={(e) => (setAt(Number(e.target.value)), setMap({ ...tables[Number(e.target.value)]?.guess }))}>
             {tables.map((x, i) => (
               <option key={i} value={i}>
                 {x.sheet || t('(CSV)')}
@@ -1447,6 +1448,8 @@ function RunStep({ view }: { view: QaPlanView }) {
           </div>
         ) : (
           <RunResult
+            // 회차를 바꾸면 갈래 거르기도 처음으로 (새 회차에 없는 갈래로 걸린 채 남지 않게)
+            key={result.run.id}
             view={view}
             result={result}
             // 보고 있는 회차가 지금 도는 회차일 때만 진행 중인 TC 를 표에 표시한다 (#97)

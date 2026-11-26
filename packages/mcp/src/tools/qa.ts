@@ -260,7 +260,14 @@ export function register(server: McpServer): void {
       // 에이전트가 낸 선택값은 받지 않는다 (확인 필수 TC 를 스스로 고르지 못하게). 고르기·끄기는 qa_case_update
       const stripped = cases.map(({ selected: _s, allowDanger: _a, script: _sc, review: _r, ...c }) => c);
       const p = await dl.saveAgentQaPlan(plan, { name, app, requirements, cases: stripped });
-      return text(`저장했습니다.\n${planReport(p)}\n\n사용자에게 TC 를 검토·선택하게 한 뒤에 실행하세요`);
+      // TC 문서 TC 에 원문 칸을 보냈으면 반영하지 않았다고 알린다 (말없이 버리지 않게)
+      const tcIds = new Set(p.cases.filter((c) => c.track === 'tc').map((c) => c.id));
+      const kept = new Set<string>(['id', ...dl.AGENT_TC_TRACK_FIELDS]);
+      const ignored = stripped.filter((c) => typeof c.id === 'string' && tcIds.has(c.id) && Object.keys(c).some((k) => !kept.has(k))).map((c) => c.id as string);
+      const note = ignored.length
+        ? `\n\n${ignored.join(', ')} 는 TC 문서 TC 라 요구사항·확인 필수 표시만 반영했어요. 다른 내용의 TC 가 필요하면 새 번호로 내세요(추가 제안이 됩니다)`
+        : '';
+      return text(`저장했습니다.\n${planReport(p)}${note}\n\n사용자에게 TC 를 검토·선택하게 한 뒤에 실행하세요`);
     },
   );
 

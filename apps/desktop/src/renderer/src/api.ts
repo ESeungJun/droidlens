@@ -152,7 +152,7 @@ export interface QaSourceAdded {
   /** TC 표를 알아보고 원문 그대로 가져온 결과 (#129) */
   tcImport?: { cases: number; warnings: string[] };
   /** 머리글을 못 알아본 표: 열 고르기 후보 */
-  tcTables?: { sheet: string; headerRow: number; headers: string[] }[];
+  tcTables?: { sheet: string; headerRow: number; headers: string[]; guess: Record<string, number | undefined> }[];
 }
 export type QaJobKind = 'extract' | 'run';
 export type QaEvent =

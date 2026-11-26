@@ -122,6 +122,14 @@ test('qa: TC 표는 넣는 순간 원문 그대로 들어오고, 저장 응답�
   const edit = await s.call('qa_case_update', { plan: id, case: 'TC-001', patch: { title: '바꿈' } });
   assert.equal(edit.isError, true);
   assert.match(edit.text, /원문/);
+  // 에이전트는 추가 제안 TC 를 고를 수 없다
+  const pick = await s.call('qa_case_update', { plan: id, case: 'TC-002', patch: { selected: true } });
+  assert.equal(pick.isError, true);
+  assert.match(pick.text, /추가 제안/);
+  // TC 문서 TC 번호에 다른 내용을 보내면 반영하지 않았다고 알린다
+  const over = await s.call('qa_plan_save', { plan: id, requirements: noSourceReqs, cases: [{ id: 'TC-001', title: '다른 내용', requirements: ['R-01'] }] });
+  assert.equal(over.isError, false, over.text);
+  assert.match(over.text, /TC-001 는 TC 문서 TC 라 요구사항·확인 필수 표시만 반영했어요/);
 });
 
 const noSourceReqs = requirements.map(({ source, ...r }) => r);

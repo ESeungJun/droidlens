@@ -199,6 +199,9 @@ export function updateQaCaseByAgent(id: string, caseId: string, patch: AgentCase
     const next = acceptAgentPlan({ ...prev, cases, updatedAt: Date.now() }, prev);
     const c = next.cases[i];
     // 확인 필수였거나, 지금 확인 필수거나, 다시 보기 표시가 있으면 사람이 고른다 (표시를 지우면서 고르는 것도 막는다)
+    if (selected === true && !c.selected && prev.cases[i].suggested) {
+      throw new Error(`${caseId} 는 추가 제안 TC 라 사용자가 QA 탭에서 넣어야 고를 수 있습니다`);
+    }
     if (selected === true && !c.selected && (c.danger || prev.cases[i].danger || c.review?.length)) {
       throw new Error(`${caseId} 는 확인 필수 TC 이거나 다시 보기 표시가 있어 에이전트가 고를 수 없습니다. 사용자가 고르게 안내하세요`);
     }
@@ -294,8 +297,8 @@ export interface AddedQaSource {
   textLength?: number;
   /** TC 표를 알아보고 원문 그대로 가져온 결과 (#129) */
   tcImport?: QaTcImport;
-  /** 표는 있는데 머리글을 못 알아봤을 때 열 고르기 후보. 사람이 열을 고르면 importQaTcTable 로 가져온다 */
-  tcTables?: { sheet: string; headerRow: number; headers: string[] }[];
+  /** 표는 있는데 머리글을 못 알아봤을 때 열 고르기 후보 (guess: 찾은 열, 화면에 미리 채움). 사람이 열을 고르면 importQaTcTable 로 가져온다 */
+  tcTables?: { sheet: string; headerRow: number; headers: string[]; guess: TcColumnMap }[];
 }
 
 export interface QaTcImport {
@@ -323,7 +326,7 @@ function importTables(
     const found = findTcTable(t);
     if (!found) continue;
     if (!found.detect.ok) {
-      candidates.push({ sheet: found.sheet, headerRow: found.headerRow, headers: found.headers });
+      candidates.push({ sheet: found.sheet, headerRow: found.headerRow, headers: found.headers, guess: found.detect.map });
       continue;
     }
     const r = importTcRows(t, found.headerRow, found.detect.map, { sourceId, existingIds: ids });

@@ -218,6 +218,11 @@ export function caseTrack(c: Pick<QaCase, 'track' | 'kind'>): QaTrack {
 /** TC 문서 갈래 TC 에서 에이전트가 고칠 수 있는 칸: 요구사항 잇기와 확인 필수 표시 (원문은 바꾸지 못한다) */
 export const AGENT_TC_TRACK_FIELDS = ['requirements', 'danger'] as const;
 
+/** 에이전트가 보낸 목록에서 TC 문서 TC 자리를 표시한다 */
+class TcSlot {
+  constructor(readonly id: string) {}
+}
+
 /**
  * 에이전트가 낸 TC 목록을 TC 문서 갈래 규칙에 맞춘다 (형식 검사 전).
  * - 이미 있는 TC 문서 TC 는 저장된 원문을 그대로 두고 요구사항·확인 필수 표시만 받는다. 빠뜨려도 지우지 않는다
@@ -234,11 +239,13 @@ function guardTcTrack(raw: unknown, prev?: QaPlan): unknown {
       : [],
   );
   const given = new Map<string, Record<string, unknown>>();
+  // 에이전트가 보낸 순서를 지킨다. TC 문서 TC 는 그 자리에 원문으로 채워 넣는다
   const others: unknown[] = [];
   for (const c of (raw as { cases: unknown[] }).cases) {
     const o = c && typeof c === 'object' ? (c as Record<string, unknown>) : undefined;
     const id = typeof o?.id === 'string' ? o.id : undefined;
     if (o && id && before.get(id)?.track === 'tc') {
+      if (!given.has(id)) others.push(new TcSlot(id));
       given.set(id, o);
       continue;
     }
@@ -257,15 +264,18 @@ function guardTcTrack(raw: unknown, prev?: QaPlan): unknown {
       ...(old ? (old.suggested ? { suggested: true } : {}) : prevTc.length && !isDesign ? { suggested: true, selected: false } : {}),
     });
   }
-  const tc = prevTc.map((c) => {
+  const tc = new Map(prevTc.map((c) => {
     const g = given.get(c.id);
-    if (!g) return { ...c, requirements: c.requirements.filter((r) => reqIds.has(r)) };
+    if (!g) return [c.id, { ...c, requirements: c.requirements.filter((r) => reqIds.has(r)) }] as const;
     const reqs = Array.isArray(g.requirements) ? g.requirements : c.requirements;
     // 확인 필수 표시는 더하거나 바꿀 수만 있다 (빼면 저장된 표시를 둔다)
     const danger = typeof g.danger === 'string' && g.danger.trim() ? g.danger : c.danger;
-    return { ...c, requirements: reqs, danger };
-  });
-  return { ...(raw as object), cases: [...tc, ...others] };
+    return [c.id, { ...c, requirements: reqs, danger }] as const;
+  }));
+  const slotted = others.map((o) => (o instanceof TcSlot ? tc.get(o.id) : o));
+  // 에이전트가 빠뜨린 TC 문서 TC 는 지우지 않고 뒤에 둔다
+  const missing = prevTc.filter((c) => !given.has(c.id)).map((c) => tc.get(c.id));
+  return { ...(raw as object), cases: [...slotted, ...missing] };
 }
 
 /**

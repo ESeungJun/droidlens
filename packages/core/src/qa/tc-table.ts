@@ -19,8 +19,8 @@ export type TcColumnMap = Partial<Record<TcField, number>>;
 
 /** 머리글 별칭. 비교할 때는 소문자로 바꾸고 공백·기호를 뺀다 */
 const ALIASES: Record<TcField, string[]> = {
-  id: ['tc id', 'tc no', 'tc 번호', 'tc번호', 'test id', 'case id', 'test case id', '케이스 id', '케이스 번호', '테스트 id', 'no', 'no.', '번호', 'id', '순번', '#'],
-  title: ['title', 'test title', 'test case', 'test case name', 'test name', 'case name', 'summary', 'scenario', '제목', '테스트 항목', '항목', '테스트 케이스', '테스트케이스', '케이스명', '테스트명', '시나리오', '확인 항목', '점검 항목', '검증 항목'],
+  id: ['tc id', 'tc no', 'test case no', 'test case number', 'tc 번호', 'tc번호', 'test id', 'case id', 'test case id', '케이스 id', '케이스 번호', '테스트 id', 'no', 'no.', '번호', 'id', '순번', '#'],
+  title: ['title', 'test title', 'test case', 'test case name', 'test name', 'case name', 'summary', 'scenario', 'description', '제목', '테스트 항목', '항목', '테스트 케이스', '테스트케이스', '케이스명', '테스트명', '시나리오', '확인 항목', '점검 항목', '검증 항목'],
   preconditions: ['precondition', 'preconditions', 'pre-condition', 'pre-conditions', 'prerequisite', 'prerequisites', 'setup', '사전 조건', '사전조건', '전제 조건', '전제조건', '선행 조건', '준비'],
   steps: ['steps', 'step', 'test steps', 'test step', 'procedure', 'actions', 'action', 'how to test', '테스트 절차', '절차', '단계', '테스트 단계', '수행 절차', '수행 방법', '테스트 방법', '재현 절차', '실행 절차', '진행 방법'],
   expected: ['expected', 'expected result', 'expected results', 'expected outcome', 'expectation', '기대 결과', '기대결과', '예상 결과', '예상결과', '기대 동작', '기대값', '기대 값'],
@@ -33,29 +33,46 @@ const norm = (s: string) => s.toLowerCase().replace(/[\s_\-.()[\]/:·]+/g, '');
 const NORM_ALIASES = Object.fromEntries(TC_FIELDS.map((f) => [f, ALIASES[f].map(norm).filter(Boolean)])) as Record<TcField, string[]>;
 
 export interface TcColumnDetect {
-  /** 제목과 단계(또는 기대 결과) 열을 찾았는지 */
+  /** 기대 결과 열과 제목·단계 중 하나를 찾았는지 */
   ok: boolean;
   map: TcColumnMap;
 }
 
-/** 머리줄에서 열을 찾는다. 이름이 같은 열을 먼저, 그다음 3글자 이상 별칭을 머리글이 품은 열 (예: "기대 결과 (Expected)") */
+/** 영어 별칭은 5글자 이상만 머리글 속에서 찾는다 ('type'·'note' 가 "Device Type" 같은 엉뚱한 열에 붙지 않게) */
+const containsOk = (a: string) => a.length >= (/^[a-z0-9]+$/.test(a) ? 5 : 3);
+
+/**
+ * 머리줄에서 열을 찾는다. 이름이 같은 열을 먼저, 그다음 별칭을 머리글이 품은 열 (예: "기대 결과 (Expected)").
+ * 품은 경우는 가장 길게 맞는 별칭이 이긴다 ("Expected Action" 은 'action'(단계)보다 'expected'(기대 결과)).
+ * 기대 결과 열과 제목·단계 중 하나가 있어야 TC 표로 본다. 일정표·액션 아이템 표처럼 기대 결과가 없는 표는 사람이 열을 고른다
+ */
 export function detectTcColumns(header: string[]): TcColumnDetect {
   const map: TcColumnMap = {};
   const used = new Set<number>();
   const heads = header.map((h) => norm(h ?? ''));
-  for (const pass of ['exact', 'contains'] as const) {
-    for (const f of TC_FIELDS) {
-      if (map[f] !== undefined) continue;
-      const i = heads.findIndex(
-        (h, i) => !!h && !used.has(i) && NORM_ALIASES[f].some((a) => (pass === 'exact' ? h === a : a.length >= 3 && h.includes(a))),
-      );
-      if (i >= 0) {
-        map[f] = i;
-        used.add(i);
-      }
+  for (const f of TC_FIELDS) {
+    const i = heads.findIndex((h, i) => !!h && !used.has(i) && NORM_ALIASES[f].includes(h));
+    if (i >= 0) {
+      map[f] = i;
+      used.add(i);
     }
   }
-  return { ok: map.title !== undefined && (map.steps !== undefined || map.expected !== undefined), map };
+  const cands: { f: TcField; i: number; len: number }[] = [];
+  for (const f of TC_FIELDS) {
+    if (map[f] !== undefined) continue;
+    heads.forEach((h, i) => {
+      if (!h || used.has(i)) return;
+      const len = Math.max(0, ...NORM_ALIASES[f].filter((a) => containsOk(a) && h.includes(a)).map((a) => a.length));
+      if (len) cands.push({ f, i, len });
+    });
+  }
+  cands.sort((a, b) => b.len - a.len || TC_FIELDS.indexOf(a.f) - TC_FIELDS.indexOf(b.f) || a.i - b.i);
+  for (const c of cands) {
+    if (map[c.f] !== undefined || used.has(c.i)) continue;
+    map[c.f] = c.i;
+    used.add(c.i);
+  }
+  return { ok: map.expected !== undefined && (map.title !== undefined || map.steps !== undefined), map };
 }
 
 /** 머리줄을 찾을 앞쪽 행 수 (표 위에 제목·작성자 줄이 있는 문서가 많다) */
@@ -85,7 +102,8 @@ export function findTcTable(t: QaTable): TcTableFound | undefined {
   }
   if (best < 0 || bestFilled < 2) return undefined;
   const row = t.rows[best];
-  return { sheet: t.sheet, headerRow: best, headers: row.map((h) => h ?? ''), detect: { ok: false, map: {} } };
+  // 찾은 열은 열 고르기 화면에 미리 채운다 (기대 결과 열만 못 찾은 표는 그 칸만 고르면 된다)
+  return { sheet: t.sheet, headerRow: best, headers: row.map((h) => h ?? ''), detect: { ok: false, map: detectTcColumns(row).map } };
 }
 
 const MAX_LINE = 2000;
@@ -98,7 +116,7 @@ export function mapPriority(v: string): QaCase['priority'] | undefined {
   if (!s) return undefined;
   const up = v.trim().toUpperCase();
   if ((PRIORITIES as readonly string[]).includes(up)) return up as QaCase['priority'];
-  if (/^p[3-9]$/.test(s)) return 'P2';
+  if (/^p[3-9]$/.test(s) || /^[4-9]$/.test(s)) return 'P2';
   if (['상', '높음', '최상', '긴급', 'high', 'highest', 'critical', 'blocker', 'urgent', 'must', '1'].includes(s)) return 'P0';
   if (['중', '보통', '중간', 'medium', 'normal', 'major', 'should', '2'].includes(s)) return 'P1';
   if (['하', '낮음', '최하', 'low', 'lowest', 'minor', 'trivial', 'could', '3'].includes(s)) return 'P2';

@@ -254,3 +254,65 @@ test('표 위 제목 줄을 건너뛰고 머리줄을 찾으며, 원본 행 번�
   assert.equal(qa.mapPriority('중'), 'P1');
   assert.equal(qa.mapPriority('뭔가'), undefined);
 });
+
+// ---------- 리뷰 뒤 보강 (#129) ----------
+
+test('에이전트는 추가 제안 TC 를 고를 수 없다 (사람이 넣어야 실행된다)', async () => {
+  const plan = await qa.createQaPlan({ name: '제안 고르기' });
+  await qa.addQaSource(plan.id, put('tc3.xlsx', makeXlsx(ROWS.slice(0, 1))));
+  const prev = await qa.loadQaPlan(plan.id);
+  await qa.saveAgentQaPlan(plan.id, {
+    requirements: [{ id: 'R-01', text: '배너' }],
+    cases: [{ id: 'TC-010', title: '배너', requirements: ['R-01'], priority: 'P1', kind: 'normal', steps: ['홈'], expected: ['배너'] }],
+  });
+  assert.equal(prev.cases.length, 1);
+  await assert.rejects(qa.updateQaCaseByAgent(plan.id, 'TC-010', { selected: true }), /추가 제안/);
+  const after = await qa.loadQaPlan(plan.id);
+  assert.equal(after.cases.find((c) => c.id === 'TC-010').selected, false);
+});
+
+test('TC 표가 아닌 표(일정표·액션 아이템)는 자동으로 가져오지 않고, 열을 더 맞는 칸에 매긴다', () => {
+  assert.equal(qa.detectTcColumns(['번호', '항목', '담당자', '단계', '일정']).ok, false, '기대 결과 열이 없으면 TC 표로 보지 않는다');
+  assert.equal(qa.detectTcColumns(['No', 'Summary', 'Action', 'Owner', 'Due']).ok, false);
+  const a = qa.detectTcColumns(['Test Case No.', 'Description', 'Steps', 'Expected Result']);
+  assert.equal(a.ok, true);
+  assert.equal(a.map.id, 0);
+  assert.equal(a.map.title, 1);
+  const b = qa.detectTcColumns(['No', 'Scenario', 'Device Type', 'Steps', 'Expected Action']);
+  assert.equal(b.map.expected, 4, '"Expected Action" 은 단계가 아니라 기대 결과');
+  assert.equal(b.map.steps, 3);
+  assert.equal(b.map.kind, undefined, '"Device Type" 을 유형으로 보지 않는다');
+});
+
+test('CSV 의 근거 행 번호는 빈 줄·여러 줄 칸이 있어도 원본 줄 번호', async () => {
+  const plan = await qa.createQaPlan({ name: '행 번호' });
+  const csv = ['', 'TC ID,테스트 항목,테스트 절차,기대 결과', 'A-1,첫째,"앱 실행\n홈 보기",홈', '', 'A-2,둘째,설정,설정 화면'].join('\n');
+  const r = await qa.addQaSource(plan.id, put('rows.csv', csv));
+  assert.equal(r.tcImport.cases, 2);
+  const p = await qa.loadQaPlan(plan.id);
+  assert.deepEqual(p.cases.map((c) => c.source.locator), ['3행', '6행']);
+});
+
+test('숫자 우선순위 4 이하 척도는 낮은 쪽으로, 모르는 값은 그대로 기본값', () => {
+  assert.equal(qa.mapPriority('4'), 'P2');
+  assert.equal(qa.mapPriority('5'), 'P2');
+  assert.equal(qa.mapPriority('1'), 'P0');
+});
+
+test('에이전트 저장은 TC 순서를 바꾸지 않는다 (TC 문서 TC 를 맨 앞으로 옮기지 않음)', async () => {
+  const plan = await qa.createQaPlan({ name: '순서' });
+  const mine = { id: 'TC-001', title: '먼저 있던 TC', requirements: ['R-01'], priority: 'P1', kind: 'normal', steps: ['a'], expected: ['b'] };
+  await qa.saveAgentQaPlan(plan.id, { requirements: [{ id: 'R-01', text: 'x' }], cases: [mine] });
+  await qa.addQaSource(plan.id, put('tc4.xlsx', makeXlsx(ROWS.slice(0, 2))));
+  const prev = await qa.loadQaPlan(plan.id);
+  assert.equal(prev.cases[0].id, 'TC-001');
+  const saved = await qa.saveAgentQaPlan(plan.id, { requirements: prev.requirements, cases: prev.cases.map((c) => (c.track === 'tc' ? { id: c.id, requirements: [] } : c)) });
+  assert.deepEqual(saved.cases.map((c) => c.id), prev.cases.map((c) => c.id));
+});
+
+test('열이 아주 많은 CSV 는 가져오기 표도 앞 256열까지만', async () => {
+  const plan = await qa.createQaPlan({ name: '넓은 표' });
+  const head = Array.from({ length: 400 }, (_, i) => `열${i}`);
+  const r = await qa.addQaSource(plan.id, put('wide.csv', [head.join(','), head.map((_, i) => `v${i}`).join(',')].join('\n')));
+  assert.ok(r.tcTables[0].headers.length <= 256);
+});
