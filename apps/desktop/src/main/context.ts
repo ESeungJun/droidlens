@@ -23,7 +23,7 @@ export const getWindow = () => win;
 export const setWindow = (w: BrowserWindow | null) => {
   win = w;
 };
-/** 화면이 뜨기 전 창 배경. styles.css 의 --bg 와 같은 색 */
+/** 화면이 뜨기 전 창 배경. renderer/src/tokens.css 의 --bg 와 같은 색 */
 export const windowBackground = () => (nativeTheme.shouldUseDarkColors ? '#0e0f12' : '#f4f5f7');
 
 export const debug = process.env.DROIDLENS_DEBUG ? (...a: unknown[]) => console.log('[droidlens]', ...a) : () => undefined;
