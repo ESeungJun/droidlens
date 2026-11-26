@@ -36,3 +36,17 @@ jobs:
           exit 1
       - run: pnpm --filter @droidlens/desktop typecheck
       - run: pnpm --filter @droidlens/desktop build
+
+  # 구현 하네스(#91): 규칙표 · 구조 규칙(레이어) · 하드코딩 색 · 기능 지도 · 하네스 시험. 의존성 설치 없이 빨리 끝난다
+  harness:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - run: bash scripts/harness/check-rules.sh
+      - run: bash scripts/harness/check-layers.sh
+      - run: bash scripts/harness/check-tokens.sh
+      - run: bash scripts/harness/check-map.sh
+      - run: for t in scripts/harness/tests/*.test.sh; do bash "$t" || exit 1; done
