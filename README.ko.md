@@ -76,8 +76,8 @@ Linux    sudo apt install adb
 | **앱** | **앱 데이터** ¹ | SharedPreferences 조회·편집, SQLite/Room DB 브라우저와 SQL 실행, 커스텀 이벤트 |
 |  | **앱 정보** | 버전·SDK·권한·Activity, 실행/재시작/종료, 딥링크 |
 |  | **라이브러리** | APK의 DEX·네이티브 lib로 100여 개 라이브러리·프레임워크 탐지, 난독화 추정 |
-| **테스트** | **QA 계획** | QA 할 앱을 고르고 기획 문서(md·txt·PDF·CSV·엑셀·Confluence·Figma 링크) 넣기 → planner 에이전트가 요구사항·TC 추출 → 추적표로 검토(TC 편집·선택, 확인 필수 동작은 사람이 직접 허용) → 실행: 스크립트가 있는 TC 는 바로 돌리고 나머지는 TC 마다 새 verifier 실행(TC 하나에 10분 제한, 언제든 멈춤, 확인 필수 동작은 화면에서 물음) → 요구사항별·TC 별 결과표와 디자인 차이, HTML·CSV·JUnit 내보내기(이 컴퓨터의 Claude Code 로그인 사용) |
-|  | **검증 기록** | 검증 리포트(단계별 스크린샷·판정), **YAML 스크립트** 작성·실행·전체 회귀 실행, 스크린샷 비교 실패 시 지금 화면을 새 기준으로 받아들이기. QA 실행으로 생긴 기록에는 어느 계획·TC 인지 표시 |
+| **테스트** | **QA 계획** | QA 할 앱을 고르고 기획 문서(md·txt·PDF·CSV·엑셀·Confluence·Figma 링크) 넣기 → planner 에이전트가 요구사항·TC 추출 → 추적표로 검토(TC 편집·선택, 확인 필수 동작은 사람이 직접 허용) → 실행: 스크립트가 있는 TC 는 바로 돌리고 나머지는 TC 마다 새 verifier 실행(TC 하나에 10분 제한, 언제든 멈춤, 확인 필수 동작은 화면에서 물음) → 요구사항별·TC 별 결과표와 디자인 차이, HTML·CSV·JUnit 내보내기(이 컴퓨터의 Claude Code 로그인 사용). [문서로 QA 돌리기](#문서로-qa-돌리기) 참고 |
+|  | **검증 기록** | 검증 리포트(단계별 스크린샷·판정), **YAML 스크립트** 작성·실행·전체 회귀 실행, 스크린샷 비교 실패 시 지금 화면을 새 기준으로 받아들이기. 같은 QA 회차의 기록은 회차 줄 하나(계획·회차·결과 개수)로 묶이고, 회차를 엑셀(요약·단계 두 시트)·캡처가 든 단계별 HTML 한 파일로 내보내거나 앱 안에서 보거나, claude.ai 비공개 아티팩트로 올리는 요청 문구를 복사 |
 | **설정** | **설정·연동** | adb 경로, Claude Code MCP 원클릭 등록, 전용 에이전트 설치 |
 | | **💬 에이전트 대화** | 상단 버튼으로 여는 대화창. 미러링을 보면서 검증·분석 에이전트에게 바로 요청 (이 컴퓨터의 Claude Code 로그인 사용, API 키 불필요) |
 
@@ -120,7 +120,7 @@ DroidLens.event("purchase_clicked", JSONObject().put("itemId", 42))
 
 앱의 **설정** 탭에서 버튼 두 개만 누르면 됩니다.
 
-1. **MCP 자동 등록** — 앱에 내장된 MCP 서버(도구 63개)를 `claude mcp add --scope user`로 등록합니다. Node를 따로 설치할 필요가 없습니다.
+1. **MCP 자동 등록** — 앱에 내장된 MCP 서버(도구 65개)를 `claude mcp add --scope user`로 등록합니다. Node를 따로 설치할 필요가 없습니다.
 2. **에이전트 설치** — 전용 에이전트를 `~/.claude/agents/`에 복사합니다.
 
 | 에이전트 | 하는 일 |
@@ -137,6 +137,28 @@ Claude Code를 재시작한 뒤 이렇게 요청하세요.
 MCP 서버 환경 변수 `DROIDLENS_TOOLS=core,graph` (`core`·`perf`·`graph`·`sdk`·`scenario`·`qa` 중 골라 쉼표로, 기본은 전부)로 등록할 도구 묶음을 고르면 도구 목록이 줄어듭니다. 예: 앱에 DroidLens SDK 가 없으면 `sdk` 를 뺍니다.
 
 앱 없이 MCP만 쓰려면 Releases의 `droidlens-mcp.mjs`(Node 20+)를 받아 `claude mcp add --scope user droidlens -- node /path/to/droidlens-mcp.mjs`로 등록하세요. 같은 릴리스의 `droidlens-agent.apk` 를 `droidlens-mcp.mjs` 와 같은 폴더에 두면 온디바이스 에이전트가 설치되어 한글 입력과 빠른 뷰 계층 조회(0.1~0.3초)가 됩니다. 없어도 동작하지만 뷰 계층 조회가 `uiautomator dump`(1.5~3초)로 돌고 영문·숫자만 입력할 수 있습니다.
+
+## 문서로 QA 돌리기
+
+기획서나 TC 문서를 넣으면 테스트 계획을 만들고, 기기에서 돌려 회차마다 결과표 하나를 받아요.
+
+1. **문서 넣기** — 기획 파일(md·txt·PDF), TC 표(CSV·엑셀), Confluence·Figma 링크.
+2. **TC 뽑기** — `droidlens-qa-planner` 가 문서를 읽고 요구사항 목록(`R-01` …)과 TC(`TC-001` …)를 만들어요. TC 표가 없으면 요구사항마다 정상·예외 TC 를 만들고, TC 표가 있으면 표를 옮긴 뒤 덮이지 않은 요구사항의 TC 만 더해요.
+3. **검토** — 추적표에서 요구사항마다 덮는 TC 를 보고, TC 가 없는 요구사항은 표시돼요. TC 를 고치고 실행할 것을 골라요. 확인 필수 동작(결제·삭제·전송)이 있는 TC 는 기본으로 고르지 않고, 그 동작은 사람이 직접 허용해야 실제로 눌러요.
+4. **실행** — 스크립트가 이어진 TC 는 바로 돌리고, 나머지는 TC 마다 새 `droidlens-verifier` 실행으로 돌려요. 통과한 TC 는 그 TC 에 이어진 스크립트로 저장돼서 다음 회차부터는 스크립트로 돌아요.
+5. **결과** — 회차마다 `report.html`·`results.csv`·`junit.xml`. **검증 기록** 에서는 회차의 기록이 한 줄로 묶이고 `results.xlsx`·`steps.html` 로 내보낼 수 있어요.
+
+### 예시로 해 보기
+
+[examples/qa](examples/qa) 에 샘플 앱 첫 화면 기획서([sample-app-spec.ko.md](examples/qa/sample-app-spec.ko.md), 영어: [sample-app-spec.md](examples/qa/sample-app-spec.md))와 그에 맞는 TC 표([sample-app-tc.csv](examples/qa/sample-app-tc.csv))가 있어요. 모두 인터넷 없이 확인할 수 있어요.
+
+1. 기기나 에뮬레이터에 샘플 앱(SDK 를 넣은 debug 빌드)을 깔아요: `cd android && ./gradlew :sample:installDebug`
+2. 데스크톱: **테스트 → QA 계획** 에서 대상 앱으로 `io.github.eseungjun.droidlens.sample` 을 고르고 두 파일을 넣은 뒤 **TC 뽑기 → TC 검토 → ▶ 실행**.
+   Claude Code: *"droidlens-qa-planner 로 /path/to/droidlens/examples/qa/sample-app-spec.ko.md 와 /path/to/droidlens/examples/qa/sample-app-tc.csv 로 io.github.eseungjun.droidlens.sample QA 계획 만들어 줘"*(파일마다 넣을지 물어요), 이어서 *"droidlens-verifier 로 그 QA 계획에서 고른 TC 실행해 줘"*.
+3. 요구사항 7개, TC 7개(모두 골라짐, 확인 필수 없음)가 나오고 결과표에 7줄이 나와요. **검증 기록** 에서 그 회차를 엑셀이나 단계별 HTML 로 내보내요.
+4. 통과한 TC 는 스크립트로 다시 돌려요: `node droidlens-mcp.mjs qa run <QA 계획 id>`
+
+소스를 받아 `pnpm build` 했다면 `node scripts/verify/F16-qa-example.mjs` 가 같은 흐름을 에이전트 없이 다시 해요. TC 표를 옮기고, TC 마다 스크립트를 이은 뒤, 연결된 기기에서 `qa run` 을 돌려 7개가 모두 통과하는지 봐요. `--no-device` 를 붙이면 검토 단계까지만 해요.
 
 ## 시나리오 스크립트 (회귀 테스트)
 
@@ -190,7 +212,7 @@ steps:
 | `graphs/<패키지>/` | 앱 화면 지도 `graph.json`, `graph.mmd`(mermaid), 화면별 스크린샷. 화면 흐름 탭의 '내보내기'는 스크린샷을 담은 `*.droidlens-map.json` 한 파일로 저장 |
 | `scenarios/<id>/` | 시나리오 검증 `report.html`, `scenario.json`, 녹화된 `script.yaml`, 단계별 스크린샷 |
 | `scripts/` | 회귀 테스트 스크립트 (YAML) |
-| `qa/<계획>/` | QA 계획 `plan.json`, 넣은 문서 사본. `runs/<회차>/` 결과표(`report.html`, `results.csv`, `junit.xml`). `design/<TC>/guide.json` 디자인 TC 의 Figma 가이드, 비교 결과 `diff.json`·`report.html`·표시한 화면은 `runs/<회차>/design/<TC>/`(회차 밖이면 `design/<TC>/last/`) |
+| `qa/<계획>/` | QA 계획 `plan.json`, 넣은 문서 사본. `runs/<회차>/` 결과표(`report.html`, `results.csv`, `junit.xml`)와 검증 기록에서 내보낸 파일(`results.xlsx`, `steps.html`). `design/<TC>/guide.json` 디자인 TC 의 Figma 가이드, 비교 결과 `diff.json`·`report.html`·표시한 화면은 `runs/<회차>/design/<TC>/`(회차 밖이면 `design/<TC>/last/`) |
 | `apks/<패키지>/` | 분석용 APK |
 
 ## 버전 호환 (다음 릴리스부터)
@@ -248,6 +270,7 @@ android/sdk-noop  릴리스 빌드용 빈 SDK
 android/sample    예제 앱
 apps/desktop      Electron + React
 agents/           Claude Code 에이전트 정의
+examples/         CI 워크플로, YAML 스크립트, 샘플 앱 QA 기획서·TC 표
 ```
 
 ### 브랜치 (git flow)

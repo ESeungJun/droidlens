@@ -76,8 +76,8 @@ Then enable **Developer options → USB debugging** on your device and connect i
 | **App** | **App data** ¹ | View and edit SharedPreferences, SQLite/Room DB browser with SQL execution, custom events |
 |  | **App info** | Version, SDK, permissions, activities; launch / restart / kill; deep links |
 |  | **Libraries** | Detects 100+ libraries and frameworks from the APK's DEX and native libs, estimates obfuscation |
-| **Test** | **QA plans** | Pick the app to test and add spec documents (md, txt, PDF, CSV, Excel, Confluence and Figma links) → the planner agent extracts requirements and test cases → review them in a traceability table (edit, pick cases, allow confirm-required actions yourself) → run: cases with a script run directly, the rest each get a fresh verifier run (10-minute limit per case, stop anytime; confirm-required actions ask you on screen) → results table by requirement and case with design differences, HTML, CSV and JUnit export (uses this computer's Claude Code login) |
-|  | **Records** | Verification reports (per-step screenshots and verdicts), write and run **YAML scripts**, run the full regression suite, accept the current screen as the new baseline when a screenshot comparison fails. Records from a QA run show which plan and test case they came from |
+| **Test** | **QA plans** | Pick the app to test and add spec documents (md, txt, PDF, CSV, Excel, Confluence and Figma links) → the planner agent extracts requirements and test cases → review them in a traceability table (edit, pick cases, allow confirm-required actions yourself) → run: cases with a script run directly, the rest each get a fresh verifier run (10-minute limit per case, stop anytime; confirm-required actions ask you on screen) → results table by requirement and case with design differences, HTML, CSV and JUnit export (uses this computer's Claude Code login). See [QA from spec documents](#qa-from-spec-documents) |
+|  | **Records** | Verification reports (per-step screenshots and verdicts), write and run **YAML scripts**, run the full regression suite, accept the current screen as the new baseline when a screenshot comparison fails. Records from the same QA run are grouped into one run row (plan, run, result counts); export a run as Excel (Summary and Steps sheets) or one step-by-step HTML file with screenshots, view it in the app, or copy a request to publish it as a private claude.ai artifact |
 | **Settings** | **Settings & Integrations** | adb path, one-click Claude Code MCP registration, install bundled agents |
 | | **💬 Agent chat** | Chat panel opened from the top bar. Ask the verifier or analyst agent while watching the mirror (uses this computer's Claude Code login — no API key needed) |
 
@@ -120,7 +120,7 @@ DroidLens.event("purchase_clicked", JSONObject().put("itemId", 42))
 
 Just press two buttons in the app's **Settings** tab.
 
-1. **Register MCP** — registers the app's built-in MCP server (63 tools) with `claude mcp add --scope user`. No separate Node install needed.
+1. **Register MCP** — registers the app's built-in MCP server (65 tools) with `claude mcp add --scope user`. No separate Node install needed.
 2. **Install agents** — copies the bundled agents to `~/.claude/agents/`.
 
 | Agent | What it does |
@@ -137,6 +137,28 @@ Restart Claude Code, then ask:
 Set `DROIDLENS_TOOLS=core,graph` (any of `core`, `perf`, `graph`, `sdk`, `scenario`, `qa`; default all) in the MCP server's environment to register only those tool groups and shrink the tool list — e.g. drop `sdk` when the app has no DroidLens SDK.
 
 To use only the MCP server without the app, download `droidlens-mcp.mjs` (Node 20+) from Releases and register it with `claude mcp add --scope user droidlens -- node /path/to/droidlens-mcp.mjs`. Put `droidlens-agent.apk` from the same release next to `droidlens-mcp.mjs` to get the on-device agent (Unicode text input and fast view-hierarchy dumps, 0.1–0.3 s). Without it everything still works, but dumps fall back to `uiautomator dump` (1.5–3 s) and only ASCII text can be typed.
+
+## QA from spec documents
+
+Turn a spec or test-case document into a test plan, run it on the device, and get one results table per run.
+
+1. **Add docs** — spec files (md, txt, PDF), test-case tables (CSV, Excel), or Confluence and Figma links.
+2. **Extract** — `droidlens-qa-planner` reads them and writes a requirement list (`R-01` …) and test cases (`TC-001` …). With no TC table it writes a normal and an exception case per requirement; with a TC table it copies the table and only adds cases for uncovered requirements.
+3. **Review** — a traceability table shows which cases cover each requirement and flags requirements with none. Edit cases and pick what to run. Cases with a confirm-required action (pay, delete, send) are not picked by default, and that action is only really performed after you allow it yourself.
+4. **Run** — cases with a linked script run directly; the rest each get a fresh `droidlens-verifier` run, and a passing case is saved as a script linked to that case, so the next run is a plain script run.
+5. **Results** — per-run `report.html`, `results.csv` and `junit.xml`. In **Records**, the run's records are grouped into one row you can export as `results.xlsx` or `steps.html`.
+
+### Try it with the example
+
+[examples/qa](examples/qa) has a spec for the sample app's main screen ([sample-app-spec.md](examples/qa/sample-app-spec.md), Korean: [sample-app-spec.ko.md](examples/qa/sample-app-spec.ko.md)) and a matching TC table ([sample-app-tc.csv](examples/qa/sample-app-tc.csv)). Everything in it works offline.
+
+1. Install the sample app (SDK debug build) on a device or emulator: `cd android && ./gradlew :sample:installDebug`
+2. Desktop: **Test → QA plans**, pick `io.github.eseungjun.droidlens.sample` as the target app, add both files, then **Extract TCs → Review TCs → ▶ Run**.
+   Claude Code: *"Use droidlens-qa-planner to make a QA plan for io.github.eseungjun.droidlens.sample from /path/to/droidlens/examples/qa/sample-app-spec.md and /path/to/droidlens/examples/qa/sample-app-tc.csv"* (it asks you to confirm each file), then *"Use droidlens-verifier to run the selected cases of that QA plan"*.
+3. Expect 7 requirements, 7 cases (all picked, none confirm-required) and a results table with 7 rows. Open **Records** to export the run as Excel or step-by-step HTML.
+4. Rerun the cases that passed as scripts: `node droidlens-mcp.mjs qa run <QA plan id>`
+
+From a source checkout (`pnpm build`), `node scripts/verify/F16-qa-example.mjs` replays the same flow without agents: it imports the TC table, links a script to each case, runs `qa run` on the connected device and checks that all 7 cases pass. Add `--no-device` to stop after the review step.
 
 ## Scenario scripts (regression tests)
 
@@ -190,7 +212,7 @@ Everything is saved under `~/.droidlens/` (override with `DROIDLENS_HOME`).
 | `graphs/<package>/` | App screen map `graph.json`, `graph.mmd` (mermaid), per-screen screenshots. 'Export' in the Screen flow tab saves a single `*.droidlens-map.json` with screenshots |
 | `scenarios/<id>/` | Scenario verification `report.html`, `scenario.json`, recorded `script.yaml`, per-step screenshots |
 | `scripts/` | Regression test scripts (YAML) |
-| `qa/<plan>/` | QA plan `plan.json` and source copies; `runs/<run>/` results table (`report.html`, `results.csv`, `junit.xml`); `design/<TC>/guide.json` Figma guide for a design case, with each comparison's `diff.json`, `report.html` and marked screenshot under `runs/<run>/design/<TC>/` (or `design/<TC>/last/` outside a run) |
+| `qa/<plan>/` | QA plan `plan.json` and source copies; `runs/<run>/` results table (`report.html`, `results.csv`, `junit.xml`) and exports from Records (`results.xlsx`, `steps.html`); `design/<TC>/guide.json` Figma guide for a design case, with each comparison's `diff.json`, `report.html` and marked screenshot under `runs/<run>/design/<TC>/` (or `design/<TC>/last/` outside a run) |
 | `apks/<package>/` | APKs pulled for analysis |
 
 ## Version compatibility (from the next release)
@@ -248,6 +270,7 @@ android/sdk-noop  no-op SDK for release builds
 android/sample    sample app
 apps/desktop      Electron + React
 agents/           Claude Code agent definitions
+examples/         CI workflow, YAML scripts, QA spec and TC table for the sample app
 ```
 
 ### Branches (git flow)

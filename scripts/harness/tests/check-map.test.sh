@@ -16,6 +16,14 @@ check "빈 지도는 통과(화면 없는 저장소)" 'run >/dev/null'
 mkdir -p "$work/src/search" "$work/scripts/verify"; touch "$work/scripts/verify/F1-search.sh"
 map '| F1 | 검색 | 홈 → 사이드바 | `src/search/` | - | `scripts/verify/F1-search.sh` |'
 check "경로가 다 있으면 통과" 'run >/dev/null'
+# 2026-11-26 #91: 지도에 적지 않은 확인 스크립트는 아무도 돌리지 않는다
+touch "$work/scripts/verify/F2-orphan.mjs" "$work/scripts/verify/README.md"
+out=$(run)
+check "지도에 없는 확인 스크립트는 실패" '! run >/dev/null'
+check "어느 스크립트인지 알려 줌" 'printf "%s" "$out" | grep -q "F2-orphan.mjs"'
+rm "$work/scripts/verify/F2-orphan.mjs"
+check "README 같은 F 로 시작하지 않는 파일은 보지 않음" 'run >/dev/null'
+rm "$work/scripts/verify/F1-search.sh"
 
 map '| F1 | 검색 | 홈 | `src/nope/` | - | 손 |'
 out=$(run)
