@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { api, type QaCase, type QaPlanSummary, type QaPlanView, type QaRunView } from '../api';
 import { useApp } from '../App';
 import { useT } from '../i18n';
-import { answerQaConfirm, useQaState, type QaLogLine } from '../qaStore';
+import { answerQaConfirm, useQaState, type QaLogLine, type QaState } from '../qaStore';
 import { linkName, shortTime } from '../format';
 import { requestScenario, takeQaPlan } from '../nav';
 
@@ -928,7 +928,7 @@ function CaseEditor({
 // ---------- 3. 실행·결과 ----------
 
 function RunStep({ view }: { view: QaPlanView }) {
-  const { run, serial, toast } = useApp();
+  const { run, serial, devices, toast } = useApp();
   const t = useT();
   const qa = useQaState();
   const { plan } = view;
@@ -938,6 +938,10 @@ function RunStep({ view }: { view: QaPlanView }) {
   const [append, setAppend] = useState(false);
   const [minutes, setMinutes] = useState(10);
   const [asking, setAsking] = useState(false);
+  // 회차를 돌릴 기기. 고르지 않았거나 고른 기기가 빠지면 맨 위 막대의 기기를 쓴다 (#99)
+  const online = devices.filter((d) => d.state === 'device');
+  const [picked, setPicked] = useState<string | null>(null);
+  const target = [picked, serial].find((s) => s && online.some((d) => d.serial === s)) ?? online[0]?.serial ?? null;
   const mine = qa.job?.plan === plan.id && qa.job.kind === 'run';
   const busy = qa.job !== null;
 
@@ -970,9 +974,9 @@ function RunStep({ view }: { view: QaPlanView }) {
 
   const start = async () => {
     setAsking(false);
-    if (!serial) return;
+    if (!target) return;
     await run(
-      api.qaRun(plan.id, { serial, run: append && runId ? runId : undefined, recheckFailed: recheck, timeoutMs: minutes * 60_000 }),
+      api.qaRun(plan.id, { serial: target, run: append && runId ? runId : undefined, recheckFailed: recheck, timeoutMs: minutes * 60_000 }),
     );
   };
 
@@ -1029,6 +1033,18 @@ function RunStep({ view }: { view: QaPlanView }) {
           )}
         </div>
         <div className="qa-row" style={{ marginTop: 10 }}>
+          {online.length > 0 && (
+            <label className="chk">
+              {t('기기')}
+              <select className="input" value={target ?? ''} disabled={busy} onChange={(e) => setPicked(e.target.value)}>
+                {online.map((d) => (
+                  <option key={d.serial} value={d.serial}>
+                    {d.model ? `${d.model} (${d.serial})` : d.serial}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
           {mine ? (
             <button className="btn danger" onClick={() => run(api.qaStop())}>
               {t('■ 멈추기')}
@@ -1036,14 +1052,14 @@ function RunStep({ view }: { view: QaPlanView }) {
           ) : (
             <button
               className="btn primary"
-              disabled={busy || !serial || !sel.length}
+              disabled={busy || !target || !sel.length}
               onClick={() => (armed.length ? setAsking(true) : start())}
               title={t('스크립트가 있는 TC 는 바로, 나머지는 TC 마다 에이전트로 돌립니다. 통과하면 스크립트로 저장됩니다')}
             >
               {t('▶ 실행')}
             </button>
           )}
-          {!serial && <span className="v-blocked">{t('기기를 연결하세요')}</span>}
+          {!target && <span className="v-blocked">{t('기기를 연결하세요')}</span>}
           {!sel.length && <span className="v-blocked">{t('검토 단계에서 실행할 TC 를 고르세요')}</span>}
           {mine && qa.current && (
             <span className="qa-live">
@@ -1133,7 +1149,13 @@ function RunStep({ view }: { view: QaPlanView }) {
             {view.runs.length ? t('불러오는 중…') : t('아직 돌린 회차가 없습니다.')}
           </div>
         ) : (
-          <RunResult view={view} result={result} onOpen={(p) => run(api.openPath(p)).then((r) => r && toast(r, true))} />
+          <RunResult
+            view={view}
+            result={result}
+            // 보고 있는 회차가 지금 도는 회차일 때만 진행 중인 TC 를 표에 표시한다 (#97)
+            running={mine && qa.run?.plan === plan.id && qa.run.id === result.run.id ? qa.current : null}
+            onOpen={(p) => run(api.openPath(p)).then((r) => r && toast(r, true))}
+          />
         )}
       </div>
     </div>
@@ -1168,7 +1190,18 @@ function ConfirmBox({ c }: { c: { id: string; what: string; case?: string; timeo
   );
 }
 
-function RunResult({ view, result, onOpen }: { view: QaPlanView; result: QaRunView; onOpen: (path: string) => void }) {
+function RunResult({
+  view,
+  result,
+  running,
+  onOpen,
+}: {
+  view: QaPlanView;
+  result: QaRunView;
+  /** 이 회차에서 지금 돌고 있는 TC (없으면 null) */
+  running: QaState['current'];
+  onOpen: (path: string) => void;
+}) {
   const t = useT();
   const { openTab } = useApp();
   const { summary } = result;
@@ -1176,8 +1209,8 @@ function RunResult({ view, result, onOpen }: { view: QaPlanView; result: QaRunVi
   const reqs = summary.requirements;
   const [onlyBad, setOnlyBad] = useState(false);
   const rows = useMemo(
-    () => summary.rows.filter((r) => !onlyBad || r.status === 'fail' || r.status === 'blocked'),
-    [summary.rows, onlyBad],
+    () => summary.rows.filter((r) => !onlyBad || r.status === 'fail' || r.status === 'blocked' || r.case.id === running?.case),
+    [summary.rows, onlyBad, running?.case],
   );
   return (
     <div style={{ display: 'grid', gap: 10, marginTop: 10 }}>
@@ -1239,15 +1272,20 @@ function RunResult({ view, result, onOpen }: { view: QaPlanView; result: QaRunVi
         <tbody>
           {rows.map((r) => {
             const d = result.design[r.case.id];
+            const live = running?.case === r.case.id ? running : null;
             return (
-              <tr key={r.case.id}>
+              <tr key={r.case.id} className={live ? 'qa-now' : undefined}>
                 <td className="mono">{r.case.id}</td>
                 <td className="qa-wrap">{r.case.title}</td>
                 <td>
-                  <span className={`rv-chip ${STATUS_TONE[r.status]}`}>{t(STATUS_LABEL[r.status])}</span>
+                  {live ? (
+                    <span className="rv-chip info">{t('진행 중')}</span>
+                  ) : (
+                    <span className={`rv-chip ${STATUS_TONE[r.status]}`}>{t(STATUS_LABEL[r.status])}</span>
+                  )}
                 </td>
                 <td className="faint">
-                  {r.result ? t(MODE_LABEL[r.result.mode]) : ''}
+                  {live ? t(MODE_LABEL[live.mode]) : r.result ? t(MODE_LABEL[r.result.mode]) : ''}
                   {r.result?.history?.length ? (
                     <div title={r.result.history.map((h) => `${t(STATUS_LABEL[h.status])}(${t(MODE_LABEL[h.mode])})`).join(' → ')}>
                       {t('재실행 {n}', { n: r.result.history.length })}
