@@ -219,7 +219,7 @@ export function runQaPlan(planId: string, opts: QaRunOptions, dev: dl.DeviceAdb,
           case: c.id,
           status: 'skip',
           mode: 'manual',
-          detail: '수동 TC 라 자동으로 실행하지 않았습니다. 사람이 확인해야 합니다',
+          note: { code: 'manualSkipped' },
         })
         .catch(() => undefined);
     }
@@ -263,13 +263,14 @@ export function runQaPlan(planId: string, opts: QaRunOptions, dev: dl.DeviceAdb,
       // 에이전트가 scenario_finish 로 결과를 적지 않고 끝났으면 막힘으로 남긴다 (실행해서 나온 앞 결과가 있으면 그대로 둔다)
       const after = await dl.loadQaRun(planId, run.id);
       if (!after.results.some((x) => x.case === c.id && x.at >= t0)) {
-        const why = r.timedOut
-          ? `시간 제한(${Math.round(timeoutMs / 60_000)}분)을 넘겨 멈췄습니다`
+        // 앱 메모는 코드 값으로 적는다. 화면·내보내기가 언어에 맞춰 보여 준다 (#114)
+        const why: dl.QaNote = r.timedOut
+          ? { code: 'timedOut', args: { min: Math.round(timeoutMs / 60_000) } }
           : 'notStarted' in r
-            ? `에이전트를 띄우지 못했습니다: ${r.error.slice(0, 300)}`
-            : `에이전트가 결과를 적지 않고 끝났습니다${r.error ? `: ${r.error.slice(0, 300)}` : ''}`;
+            ? { code: 'agentNotStarted', args: { error: r.error.slice(0, 300) } }
+            : { code: 'agentNoResult', ...(r.error ? { args: { error: r.error.slice(0, 300) } } : {}) };
         const report = closed.find((x) => x.case === c.id)?.report;
-        await dl.recordQaResult(planId, run.id, { case: c.id, status: 'blocked', mode: 'manual', detail: why, ...(report ? { report } : {}) }).catch(() => undefined);
+        await dl.recordQaResult(planId, run.id, { case: c.id, status: 'blocked', mode: 'manual', note: why, ...(report ? { report } : {}) }).catch(() => undefined);
       }
     }
   })()

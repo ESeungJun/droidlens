@@ -1,19 +1,21 @@
 import { clipboard, nativeTheme, shell } from 'electron';
 import { execFile } from 'node:child_process';
 import { existsSync } from 'node:fs';
-import { copyFile, mkdir, readdir, readFile } from 'node:fs/promises';
+import { copyFile, mkdir, readdir, readFile, stat } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { basename, isAbsolute, join } from 'node:path';
 import { promisify } from 'node:util';
 import * as dl from '@droidlens/core';
-import { resolveClaude } from '../claude';
-import { adb, agentsSrc, dev, getWindow, mcpScript, resetAdb, send, updateConfig, windowBackground, type Handle } from '../context';
+import { claudeAuthStatus, claudeConfigDir, claudeProcessEnv, resolveClaude } from '../claude';
+import { adb, agentsSrc, dev, getWindow, mcpScript, readConfig, resetAdb, send, updateConfig, windowBackground, type Handle } from '../context';
 import { checkForUpdate, currentVersion, installUpdate, type UpdateInfo } from '../updater';
 
 /** 설정 탭: 앱 버전·업데이트·adb 경로·테마·Claude Code 연동(MCP·에이전트 설치)·온디바이스 에이전트·클립보드·외부 링크 */
 
 const run = promisify(execFile);
-const agentsDst = () => join(homedir(), '.claude', 'agents');
+/** Claude Code 설정 폴더 (#120): 고른 폴더가 있으면 그 안, 없으면 기본 ~/.claude 와 ~/.claude.json */
+const agentsDst = (dir?: string) => (dir ? join(dir, 'agents') : join(homedir(), '.claude', 'agents'));
+const globalConfigFile = (dir?: string) => (dir ? join(dir, '.claude.json') : join(homedir(), '.claude.json'));
 const q = (s: string) => (process.platform === 'win32' ? `"${s}"` : `'${s.replace(/'/g, `'\\''`)}'`);
 
 function mcpAddArgs(): string[] {
@@ -24,7 +26,7 @@ function mcpAddArgs(): string[] {
 async function runClaude(args: string[]): Promise<string> {
   // claude 위치·PATH는 resolveClaude()가 로그인 셸에서 한 번만 찾아 캐시한다 (매번 로그인 셸을 띄우면 수 초씩 걸림)
   const c = await resolveClaude();
-  const env = { ...process.env, PATH: c.path };
+  const env = await claudeProcessEnv(c);
   if (process.platform === 'win32') {
     // claude.cmd 는 셸로 실행해야 하는데, shell 모드에서는 Node 가 인자를 따옴표 없이 이어 붙인다.
     // 'C:\Program Files\DroidLens\DroidLens.exe' 같은 공백 경로가 깨지지 않게 직접 감싼다
@@ -37,9 +39,9 @@ async function runClaude(args: string[]): Promise<string> {
 }
 
 /** user 범위 MCP 등록 여부. `claude mcp list`는 등록된 서버를 하나씩 띄워 검사해 느리므로 설정 파일을 직접 읽는다 */
-async function droidlensRegistered(): Promise<boolean> {
+async function droidlensRegistered(dir?: string): Promise<boolean> {
   try {
-    const cfg = JSON.parse(await readFile(join(homedir(), '.claude.json'), 'utf8')) as { mcpServers?: Record<string, unknown> };
+    const cfg = JSON.parse(await readFile(globalConfigFile(dir), 'utf8')) as { mcpServers?: Record<string, unknown> };
     return !!cfg.mcpServers?.droidlens;
   } catch {
     return false;
@@ -77,31 +79,53 @@ export function register(handle: Handle): void {
   handle('integration', async () => {
     const src = agentsSrc();
     const agents = existsSync(src) ? (await readdir(src)).filter((f) => f.endsWith('.md')) : [];
+    const dir = await claudeConfigDir();
+    const { claudeConfigDir: chosen } = await readConfig().catch(() => ({}) as Record<string, unknown>);
     let claudeVersion: string | null = null;
-    const registered = await droidlensRegistered();
+    let auth: dl.ClaudeAuthStatus = { state: 'unknown' };
+    const registered = await droidlensRegistered(dir);
     try {
       claudeVersion = (await resolveClaude()).version;
+      auth = await claudeAuthStatus();
     } catch {
       /* claude CLI 없음 */
     }
+    // 터미널에 붙여 넣을 명령도 앱과 같은 설정 폴더를 쓰게 한다
+    const prefix = dir ? (process.platform === 'win32' ? `set "CLAUDE_CONFIG_DIR=${dir}" && ` : `CLAUDE_CONFIG_DIR=${q(dir)} `) : '';
     return {
       mcpScript: mcpScript(),
       mcpScriptExists: existsSync(mcpScript()),
-      command: ['claude', ...mcpAddArgs()].map((a) => (/[\s'"]/.test(a) ? q(a) : a)).join(' '),
+      command: prefix + ['claude', ...mcpAddArgs()].map((a) => (/[\s'"]/.test(a) ? q(a) : a)).join(' '),
       claudeVersion,
       registered,
-      agents: agents.map((f) => ({ file: f, installed: existsSync(join(agentsDst(), f)) })),
-      agentsDir: agentsDst(),
+      agents: agents.map((f) => ({ file: f, installed: existsSync(join(agentsDst(dir), f)) })),
+      agentsDir: agentsDst(dir),
+      auth,
+      configDir: auth.configDir ?? dir ?? join(homedir(), '.claude'),
+      configDirSetting: typeof chosen === 'string' ? chosen : '',
+      loginCommand: dl.claudeLoginCommand(dir, process.platform),
     };
+  });
+  handle('setClaudeConfigDir', async (p: unknown) => {
+    // 비우면 기본 폴더. 있는 폴더의 전체 경로만 받는다 (claude 실행 환경 변수로 넘긴다)
+    if (typeof p !== 'string') throw new Error('잘못된 요청입니다');
+    const v = p.trim();
+    if (v) {
+      if (!isAbsolute(v) || /[\r\n\0]/.test(v)) throw new Error('설정 폴더의 전체 경로를 입력해 주세요');
+      const st = await stat(v).catch(() => null);
+      if (!st?.isDirectory()) throw new Error('그 경로에 폴더가 없습니다');
+    }
+    await updateConfig({ claudeConfigDir: v || undefined });
   });
   handle('registerMcp', async () => {
     await runClaude(['mcp', 'remove', '--scope', 'user', 'droidlens']).catch(() => undefined);
     return runClaude(mcpAddArgs());
   });
   handle('installAgents', async () => {
-    await mkdir(agentsDst(), { recursive: true });
+    const dst = agentsDst(await claudeConfigDir());
+    await mkdir(dst, { recursive: true });
     const files = (await readdir(agentsSrc())).filter((f) => f.endsWith('.md'));
-    for (const f of files) await copyFile(join(agentsSrc(), f), join(agentsDst(), f));
+    for (const f of files) await copyFile(join(agentsSrc(), f), join(dst, f));
     return files;
   });
   handle('copy', async (t: string) => clipboard.writeText(t));

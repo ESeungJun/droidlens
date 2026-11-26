@@ -6,6 +6,7 @@ import { strToU8, zipSync } from 'fflate';
 import { downscaleToJpeg } from '../image.js';
 import { readJson, droidlensHome, writeFileAtomic } from '../workspace.js';
 import { buildScenarioView, HOW_LABEL, STATUS_LABEL, VERDICT_LABEL, type ScenarioData } from '../scenario-view.js';
+import { qaResultMemo } from '../qa-note.js';
 import { loadQaPlan, qaPlanDir } from './store.js';
 import { listQaRunIds, loadQaRun, maskCaseData, QA_STATUS_LABEL, qaRunDir, qaRunSummary, type QaRun, type QaRunSummary } from './run.js';
 import { PLAN_ID, type QaPlan } from './plan.js';
@@ -193,7 +194,7 @@ function sheetXml(head: string[], rows: Cell[][], widths: number[]): string {
   );
 }
 
-/** 내보내기 파일의 언어 (앱 언어를 따른다, #106). 사용자가 적은 글(TC 제목·메모·단계 글)은 그대로 둔다 */
+/** 내보내기 파일의 언어 (앱 언어를 따른다, #106). 사용자가 적은 글(TC 제목·메모·단계 글)은 그대로 두고, 앱이 적은 메모는 그 언어로 (#114) */
 export type ExportLang = 'ko' | 'en';
 
 const TEXT = {
@@ -252,7 +253,7 @@ export function qaRunXlsx(b: QaRunBundle, lang: ExportLang = 'ko'): Uint8Array {
       L.status[status],
       r ? L.mode[r.mode] : '',
       r?.durationMs === undefined ? undefined : Math.round(r.durationMs / 100) / 10,
-      r?.detail,
+      qaResultMemo(r, lang),
       fmtTime(r?.at, L.locale),
     ]),
     [10, 9, 40, 14, 9, 10, 9, 60, 20],
@@ -378,7 +379,7 @@ export async function qaRunStepsHtml(b: QaRunBundle, lang: ExportLang = 'ko'): P
   const toc = summary.rows
     .map(
       ({ case: tc, result: r, status }) =>
-        `<tr><td class="mono"><a href="#${esc(tc.id)}">${esc(tc.id)}</a></td><td>${esc(tc.title)}</td><td>${pill(TONE[status], L.status[status])}</td><td>${r ? L.mode[r.mode] : ''}</td><td class="faint">${esc(r?.detail ?? '')}</td></tr>`,
+        `<tr><td class="mono"><a href="#${esc(tc.id)}">${esc(tc.id)}</a></td><td>${esc(tc.title)}</td><td>${pill(TONE[status], L.status[status])}</td><td>${r ? L.mode[r.mode] : ''}</td><td class="faint">${esc(qaResultMemo(r, lang) ?? '')}</td></tr>`,
     )
     .join('');
   const sections: string[] = [];
@@ -386,7 +387,7 @@ export async function qaRunStepsHtml(b: QaRunBundle, lang: ExportLang = 'ko'): P
     const s = b.scenarios.get(tc.id);
     const head = `<h2 id="${esc(tc.id)}"><span class="mono">${esc(tc.id)}</span> ${esc(tc.title)} ${pill(TONE[status], L.status[status])}</h2>`;
     if (!s) {
-      sections.push(`<section>${head}<p class="faint">${esc(r?.detail ?? L.noSteps)}</p></section>`);
+      sections.push(`<section>${head}<p class="faint">${esc(qaResultMemo(r, lang) ?? L.noSteps)}</p></section>`);
       continue;
     }
     const v = buildScenarioView(s);

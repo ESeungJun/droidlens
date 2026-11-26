@@ -1,3 +1,4 @@
+import { assertClaudeLoggedIn } from '../claude';
 import { confirmChat, resolveClaude, sendChat, stopChat, type ChatRequest } from '../chat';
 import { agentsSrc, mcpScript, send, type Handle } from '../context';
 
@@ -5,6 +6,8 @@ import { agentsSrc, mcpScript, send, type Handle } from '../context';
 export function register(handle: Handle): void {
   handle('chatStatus', async () => {
     const c = await resolveClaude();
+    // 로그인이 끊겼으면 대화창이 처음부터 안내를 보이고 보내기를 막는다 (#120)
+    await assertClaudeLoggedIn();
     return { version: c.version };
   });
   handle('chatSend', async (req: ChatRequest) => {

@@ -4,6 +4,7 @@ import { randomBytes } from 'node:crypto';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
 import * as dl from '@droidlens/core';
+import { readConfig } from './context';
 
 /**
  * Claude Code 헤드리스 실행(`claude -p --output-format stream-json`). 대화창(chat.ts)과 QA 탭(qa.ts)이 같이 쓴다.
@@ -47,6 +48,44 @@ export function resolveClaude(): Promise<ClaudeEnv> {
   })();
   resolved.catch(() => (resolved = null));
   return resolved;
+}
+
+/** 설정에서 고른 Claude Code 설정 폴더 (#120). 없으면 앱이 물려받은 CLAUDE_CONFIG_DIR, 그것도 없으면 기본(~/.claude) */
+export async function claudeConfigDir(): Promise<string | undefined> {
+  const { claudeConfigDir: v } = await readConfig().catch(() => ({}) as Record<string, unknown>);
+  return (typeof v === 'string' && v) || process.env.CLAUDE_CONFIG_DIR || undefined;
+}
+
+/** claude 를 실행할 환경: 로그인 셸 PATH + 고른 설정 폴더 */
+export async function claudeProcessEnv(c: ClaudeEnv): Promise<NodeJS.ProcessEnv> {
+  const env: NodeJS.ProcessEnv = { ...process.env, PATH: c.path };
+  const dir = await claudeConfigDir();
+  if (dir) env.CLAUDE_CONFIG_DIR = dir;
+  else delete env.CLAUDE_CONFIG_DIR;
+  return env;
+}
+
+/** `claude auth status` 로 지금 설정 폴더의 로그인 상태를 읽는다. 명령이 없거나 실패하면 unknown */
+export async function claudeAuthStatus(): Promise<dl.ClaudeAuthStatus> {
+  const c = await resolveClaude();
+  const env = await claudeProcessEnv(c);
+  try {
+    const { stdout } =
+      process.platform === 'win32'
+        ? await run(winQuote(c.bin), ['auth', 'status', '--json'], { timeout: 15_000, env, shell: true })
+        : await run(c.bin, ['auth', 'status', '--json'], { timeout: 15_000, env });
+    return dl.parseClaudeAuthStatus(stdout);
+  } catch (e) {
+    // 로그인이 안 됐으면 종료 코드 1 로 끝나면서 JSON 을 낼 수 있다
+    const out = (e as { stdout?: string }).stdout;
+    return out ? dl.parseClaudeAuthStatus(out) : { state: 'unknown' };
+  }
+}
+
+/** 실행 전 검사: 로그인이 끊겼으면 안내 문구로 막는다 (상태를 모르면 막지 않는다) */
+export async function assertClaudeLoggedIn(): Promise<void> {
+  const a = await claudeAuthStatus();
+  if (a.state === 'none' || a.state === 'expired') throw new Error(dl.CLAUDE_AUTH_MESSAGE);
 }
 
 /** 번들된 에이전트 정의(md frontmatter)를 --agents JSON으로 변환 */
@@ -118,6 +157,9 @@ export interface ClaudeHandle {
   exited: Promise<void>;
 }
 
+/** 실행 중 로그인이 끊겨 나온 영어 원문은 한국어 안내로 바꾼다 */
+const authHint = (text: string) => (dl.isClaudeAuthFailure(text) ? dl.CLAUDE_AUTH_MESSAGE : text);
+
 /**
  * Windows 에서는 claude.cmd 를 셸(cmd.exe)로 띄우므로 kill() 은 cmd.exe 만 죽이고 실제 claude 는 남는다.
  * 그래서 프로세스 트리째 끝낸다. 그 밖에서는 SIGINT 로 정상 종료를 요청한다
@@ -141,6 +183,7 @@ export async function startClaude(
   if (req.sessionId !== undefined && !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(req.sessionId))
     throw new Error('잘못된 대화 세션 id 입니다');
   const claude = await resolveClaude();
+  await assertClaudeLoggedIn();
   const agents = await loadAgents(ctx.agentsDir);
   if (!agents[req.agent]) throw new Error(`에이전트를 찾지 못했습니다: ${req.agent}`);
   if (cancelled()) {
@@ -235,7 +278,7 @@ export async function startClaude(
 
   const child = spawn(win ? winQuote(claude.bin) : claude.bin, args, {
     cwd,
-    env: { ...process.env, PATH: claude.path },
+    env: await claudeProcessEnv(claude),
     stdio: ['pipe', 'pipe', 'pipe'],
     shell: win,
   });
@@ -264,7 +307,8 @@ export async function startClaude(
         emit({ kind: 'session', sessionId: ev.session_id, model: ev.model });
       } else if (ev.type === 'assistant') {
         for (const c of ev.message?.content ?? []) {
-          if (c.type === 'text' && c.text) emit({ kind: 'text', text: c.text });
+          // 로그인 실패는 claude 가 답처럼 영어 원문을 내고 result 로도 낸다. 답으로는 보이지 않고 아래 done 에서 안내로 바꾼다
+          if (c.type === 'text' && c.text && !(ev.error && dl.isClaudeAuthFailure(c.text))) emit({ kind: 'text', text: c.text });
           else if (c.type === 'tool_use') emit({ kind: 'tool', id: c.id, name: c.name, input: c.input });
         }
       } else if (ev.type === 'user') {
@@ -282,7 +326,7 @@ export async function startClaude(
           sessionId: ev.session_id ?? sessionId,
           costUsd: ev.total_cost_usd,
           durationMs: ev.duration_ms,
-          error: ev.is_error ? String(ev.result ?? ev.subtype) : undefined,
+          error: ev.is_error ? authHint(String(ev.result ?? ev.subtype)) : undefined,
         });
       }
     }
@@ -292,7 +336,7 @@ export async function startClaude(
   child.on('close', (code) => {
     broker.close();
     void rm(runDir, { recursive: true, force: true }).catch(() => undefined);
-    if (!doneSent) emit({ kind: 'done', sessionId, error: code ? stderr.trim().slice(-600) || `종료 코드 ${code}` : undefined });
+    if (!doneSent) emit({ kind: 'done', sessionId, error: code ? authHint(stderr.trim().slice(-600)) || `종료 코드 ${code}` : undefined });
     resolveExit();
   });
   child.on('error', (e) => {
