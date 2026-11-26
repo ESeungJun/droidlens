@@ -185,4 +185,5 @@ export const qa: Record<string, string> = {
   '만들고 요청 복사': 'Build and copy request',
   'TC 기록 접기': 'Collapse TC records',
   'TC 기록 펼치기': 'Expand TC records',
+  '끝나지 않음': 'Not finished',
 };

@@ -4,6 +4,7 @@
 #   - 코드·확인 스크립트 칸에 `경로` 로 적은 것이 실제로 있는가(저장소 밖 경로 금지)
 #   - 확인 스크립트 칸이 `경로`(백틱) 또는 손 인가
 #   - 시나리오 칸의 SC-xx 가 docs/시나리오.md 에 있는가(그 파일이 있을 때)
+#   - scripts/verify/F<번호>-… 확인 스크립트가 모두 지도에 적혀 있는가
 # 실패하면 무엇이 틀렸는지 + Fix 를 출력하고 1로 끝난다. code-harness 스킬이 깔고 CI 가 돌린다(docs/RULES.md 3번).
 map="${1:-docs/기능지도.md}"; sc_doc="${CHECK_MAP_SCENARIOS:-docs/시나리오.md}"
 # 시나리오 ID 는 scenarios.py(표 해석을 한 곳에 둠: **SC-01**, 끝 | 없는 행, 칸 안 \|)로 읽는다. python3 가 없으면 줄 머리만 본다
@@ -59,6 +60,14 @@ while IFS= read -r line || [ -n "$line" ]; do
     done
   fi
 done < "$map"
+
+# 확인 스크립트(scripts/verify/F<번호>-…)는 지도의 확인 스크립트 칸에 적혀 있어야 qa-check·scenario-review 가 찾아 돌린다
+vdir="${CHECK_MAP_VERIFY:-scripts/verify}"
+for f in "$vdir"/F[0-9]*; do
+  [ -f "$f" ] || continue
+  grep -qF "\`$f\`" "$map" \
+    || { echo "[check-map] '$f' 가 기능 지도에 없어요. Fix: 그 기능 줄의 확인 스크립트 칸에 \`$f\` 로 적거나, 쓰지 않는 스크립트면 지우세요."; fail=1; }
+done
 
 [ "$fail" = 0 ] && echo "[check-map] 기능 ${rows}개 확인"
 exit $fail

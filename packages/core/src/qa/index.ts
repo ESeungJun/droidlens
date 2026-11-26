@@ -4,3 +4,4 @@ export * from './store.js';
 export * from './run.js';
 export * from './report.js';
 export * from './export.js';
+export * from './open-records.js';

@@ -199,22 +199,67 @@ function sheetXml(head: string[], rows: Cell[][], widths: number[]): string {
   );
 }
 
-const fmtTime = (ms?: number) => (ms === undefined ? '' : new Date(ms).toLocaleString('ko-KR', { hour12: false }));
+/** 내보내기 파일의 언어 (앱 언어를 따른다, #106). 사용자가 적은 글(TC 제목·메모·단계 글)은 그대로 둔다 */
+export type ExportLang = 'ko' | 'en';
+
+const TEXT = {
+  ko: {
+    locale: 'ko-KR',
+    status: QA_STATUS_LABEL,
+    mode: MODE_LABEL,
+    step: STATUS_LABEL,
+    how: HOW_LABEL,
+    verdict: VERDICT_LABEL,
+    sheets: ['요약', '단계'],
+    sumHead: ['TC', '우선순위', '제목', '요구사항', '결과', '방식', '시간(초)', '메모', '기록 시각'],
+    stepHead: ['TC', '단계', '판정', '방식', '확인', '기대', '실제', '조작', '근거', '시각'],
+    tocHead: ['TC', '제목', '결과', '방식', '메모'],
+    noSteps: '단계 기록이 없습니다',
+    expect: '기대',
+    actual: '실제',
+    recVerdict: '기록 판정',
+    steps: (n: number) => `${n}단계`,
+    run: '회차',
+    started: '시작',
+  },
+  en: {
+    locale: 'en-US',
+    status: { pass: 'Pass', fail: 'Fail', blocked: 'Blocked', skip: 'Skipped', 'not-run': 'Not run' } as Record<keyof typeof QA_STATUS_LABEL, string>,
+    mode: { script: 'Script', agent: 'Agent', manual: 'Manual' } as Record<keyof typeof MODE_LABEL, string>,
+    step: { pass: 'Pass', fail: 'Fail', info: 'Note', skip: 'Skipped' } as Record<keyof typeof STATUS_LABEL, string>,
+    how: { assert: 'Auto check', agent: 'Judged', record: 'Progress note', action: 'Action' } as Record<keyof typeof HOW_LABEL, string>,
+    verdict: { pass: 'Pass', fail: 'Fail', blocked: 'Blocked', running: 'In progress' } as Record<keyof typeof VERDICT_LABEL, string>,
+    sheets: ['Summary', 'Steps'],
+    sumHead: ['TC', 'Priority', 'Title', 'Requirements', 'Result', 'Mode', 'Time (s)', 'Notes', 'Recorded at'],
+    stepHead: ['TC', 'Step', 'Verdict', 'How', 'Check', 'Expected', 'Actual', 'Actions', 'Evidence', 'Time'],
+    tocHead: ['TC', 'Title', 'Result', 'Mode', 'Notes'],
+    noSteps: 'No step records',
+    expect: 'Expected',
+    actual: 'Actual',
+    recVerdict: 'Record verdict',
+    steps: (n: number) => `${n} step${n === 1 ? '' : 's'}`,
+    run: 'Run',
+    started: 'Started',
+  },
+} as const;
+
+const fmtTime = (ms: number | undefined, locale: string) => (ms === undefined ? '' : new Date(ms).toLocaleString(locale, { hour12: false }));
 
 /** 회차 결과를 .xlsx 바이트로 */
-export function qaRunXlsx(b: QaRunBundle): Uint8Array {
+export function qaRunXlsx(b: QaRunBundle, lang: ExportLang = 'ko'): Uint8Array {
+  const L = TEXT[lang];
   const summary = sheetXml(
-    ['TC', '우선순위', '제목', '요구사항', '결과', '방식', '시간(초)', '메모', '기록 시각'],
+    [...L.sumHead],
     b.summary.rows.map(({ case: c, result: r, status }) => [
       c.id,
       c.priority,
       c.title,
       c.requirements.join(' '),
-      QA_STATUS_LABEL[status],
-      r ? MODE_LABEL[r.mode] : '',
+      L.status[status],
+      r ? L.mode[r.mode] : '',
       r?.durationMs === undefined ? undefined : Math.round(r.durationMs / 100) / 10,
       r?.detail,
-      fmtTime(r?.at),
+      fmtTime(r?.at, L.locale),
     ]),
     [10, 9, 40, 14, 9, 10, 9, 60, 20],
   );
@@ -226,18 +271,18 @@ export function qaRunXlsx(b: QaRunBundle): Uint8Array {
       stepRows.push([
         c.id,
         r.no,
-        STATUS_LABEL[r.status],
-        HOW_LABEL[r.how],
+        L.step[r.status],
+        L.how[r.how],
         r.check,
         r.expect,
         r.actual,
         r.actions.map((a) => a.text).join('\n'),
         r.evidence,
-        fmtTime(r.at),
+        fmtTime(r.at, L.locale),
       ]);
     }
   }
-  const steps = sheetXml(['TC', '단계', '판정', '방식', '확인', '기대', '실제', '조작', '근거', '시각'], stepRows, [10, 6, 8, 10, 40, 30, 30, 40, 40, 20]);
+  const steps = sheetXml([...L.stepHead], stepRows, [10, 6, 8, 10, 40, 30, 30, 40, 40, 20]);
   const files: Record<string, Uint8Array> = {
     '[Content_Types].xml': strToU8(
       '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">' +
@@ -253,7 +298,7 @@ export function qaRunXlsx(b: QaRunBundle): Uint8Array {
     ),
     'xl/workbook.xml': strToU8(
       '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">' +
-        '<sheets><sheet name="요약" sheetId="1" r:id="rId1"/><sheet name="단계" sheetId="2" r:id="rId2"/></sheets></workbook>',
+        `<sheets><sheet name="${L.sheets[0]}" sheetId="1" r:id="rId1"/><sheet name="${L.sheets[1]}" sheetId="2" r:id="rId2"/></sheets></workbook>`,
     ),
     'xl/_rels/workbook.xml.rels': strToU8(
       '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' +
@@ -282,18 +327,38 @@ export function qaRunXlsx(b: QaRunBundle): Uint8Array {
 
 // ---------- 단계별 HTML ----------
 
-/** 캡처를 긴 변 480px JPEG data URI 로. 못 읽으면 undefined */
+/**
+ * 캡처를 긴 변 480px JPEG data URI 로. 못 읽으면 undefined.
+ * 줄인 것은 같은 폴더에 <이름>.480.jpg 로 남겨 다음 내보내기에 다시 쓴다(원본이 더 새것이면 다시 만든다, #104).
+ * 줄이기는 동기 계산이라 캡처마다 이벤트 루프에 한 번 양보해 데스크톱 창이 굳지 않게 한다
+ */
 async function shotUri(dir: string, file: string | undefined): Promise<string | undefined> {
   if (!file || file.includes('/') || file.includes('\\') || file.startsWith('.')) return undefined;
-  const buf = await readFile(join(dir, file)).catch(() => undefined);
-  if (!buf) return undefined;
+  const src = join(dir, file);
   const ext = extname(file).toLowerCase();
+  if (ext === '.jpg' || ext === '.jpeg') {
+    const buf = await readFile(src).catch(() => undefined);
+    return buf ? `data:image/jpeg;base64,${buf.toString('base64')}` : undefined;
+  }
+  if (ext !== '.png') return undefined;
+  const cache = join(dir, `${basename(file, ext)}.480.jpg`);
+  const [srcAt, cacheAt] = await Promise.all([mtime(src), mtime(cache)]);
+  if (srcAt < 0) return undefined;
+  if (cacheAt >= srcAt) {
+    const hit = await readFile(cache).catch(() => undefined);
+    if (hit) return `data:image/jpeg;base64,${hit.toString('base64')}`;
+  }
+  const buf = await readFile(src).catch(() => undefined);
+  if (!buf) return undefined;
+  await new Promise((r) => setImmediate(r));
+  let jpg: Buffer;
   try {
-    if (ext === '.png') return `data:image/jpeg;base64,${downscaleToJpeg(buf, 480, 70).toString('base64')}`;
+    jpg = downscaleToJpeg(buf, 480, 70);
   } catch {
     return undefined;
   }
-  return ext === '.jpg' || ext === '.jpeg' ? `data:image/jpeg;base64,${buf.toString('base64')}` : undefined;
+  await writeFileAtomic(cache, jpg).catch(() => undefined);
+  return `data:image/jpeg;base64,${jpg.toString('base64')}`;
 }
 
 const TONE: Record<string, string> = { pass: 'ok', fail: 'bad', blocked: 'warn', skip: 'mute', 'not-run': 'mute', info: 'info' };
@@ -303,23 +368,24 @@ const TONE: Record<string, string> = { pass: 'ok', fail: 'bad', blocked: 'warn',
 const ZOOM_JS = "document.addEventListener('click',function(e){var t=e.target;if(t&&t.classList&&t.classList.contains('shot'))t.classList.toggle('big');});";
 const CSP = `default-src 'none'; img-src data:; style-src 'unsafe-inline'; script-src 'sha256-${createHash('sha256').update(ZOOM_JS).digest('base64')}'; base-uri 'none'; form-action 'none'`;
 
-export async function qaRunStepsHtml(b: QaRunBundle): Promise<string> {
+export async function qaRunStepsHtml(b: QaRunBundle, lang: ExportLang = 'ko'): Promise<string> {
+  const L = TEXT[lang];
   const { plan, run, summary } = b;
   const c = summary.counts;
   const pill = (tone: string, text: string) => `<span class="pill ${tone}">${esc(text)}</span>`;
-  const counts = (['pass', 'fail', 'blocked', 'skip', 'not-run'] as const).map((k) => pill(TONE[k], `${QA_STATUS_LABEL[k]} ${c[k]}`)).join(' ');
+  const counts = (['pass', 'fail', 'blocked', 'skip', 'not-run'] as const).map((k) => pill(TONE[k], `${L.status[k]} ${c[k]}`)).join(' ');
   const toc = summary.rows
     .map(
       ({ case: tc, result: r, status }) =>
-        `<tr><td class="mono"><a href="#${esc(tc.id)}">${esc(tc.id)}</a></td><td>${esc(tc.title)}</td><td>${pill(TONE[status], QA_STATUS_LABEL[status])}</td><td>${r ? MODE_LABEL[r.mode] : ''}</td><td class="faint">${esc(r?.detail ?? '')}</td></tr>`,
+        `<tr><td class="mono"><a href="#${esc(tc.id)}">${esc(tc.id)}</a></td><td>${esc(tc.title)}</td><td>${pill(TONE[status], L.status[status])}</td><td>${r ? L.mode[r.mode] : ''}</td><td class="faint">${esc(r?.detail ?? '')}</td></tr>`,
     )
     .join('');
   const sections: string[] = [];
   for (const { case: tc, result: r, status } of summary.rows) {
     const s = b.scenarios.get(tc.id);
-    const head = `<h2 id="${esc(tc.id)}"><span class="mono">${esc(tc.id)}</span> ${esc(tc.title)} ${pill(TONE[status], QA_STATUS_LABEL[status])}</h2>`;
+    const head = `<h2 id="${esc(tc.id)}"><span class="mono">${esc(tc.id)}</span> ${esc(tc.title)} ${pill(TONE[status], L.status[status])}</h2>`;
     if (!s) {
-      sections.push(`<section>${head}<p class="faint">${esc(r?.detail ?? '단계 기록이 없습니다')}</p></section>`);
+      sections.push(`<section>${head}<p class="faint">${esc(r?.detail ?? L.noSteps)}</p></section>`);
       continue;
     }
     const v = buildScenarioView(s);
@@ -329,11 +395,11 @@ export async function qaRunStepsHtml(b: QaRunBundle): Promise<string> {
       const acts = row.actions.length ? `<ol class="acts">${row.actions.map((a) => `<li>${esc(a.text)}</li>`).join('')}</ol>` : '';
       const ea =
         row.expect || row.actual
-          ? `<div class="ea">${row.expect ? `<div><b>기대</b> ${esc(row.expect)}</div>` : ''}${row.actual ? `<div class="${row.actualBad ? 'badtxt' : ''}"><b>실제</b> ${esc(row.actual)}</div>` : ''}</div>`
+          ? `<div class="ea">${row.expect ? `<div><b>${L.expect}</b> ${esc(row.expect)}</div>` : ''}${row.actual ? `<div class="${row.actualBad ? 'badtxt' : ''}"><b>${L.actual}</b> ${esc(row.actual)}</div>` : ''}</div>`
           : '';
       rows.push(
         `<div class="step ${row.tone}"><div class="no">${row.no}</div><div class="body">` +
-          `<div>${pill(TONE[row.status], STATUS_LABEL[row.status])} <span class="faint">${HOW_LABEL[row.how]}</span></div>` +
+          `<div>${pill(TONE[row.status], L.step[row.status])} <span class="faint">${L.how[row.how]}</span></div>` +
           (row.check ? `<div class="check">${esc(row.check)}</div>` : '') +
           ea +
           acts +
@@ -341,17 +407,17 @@ export async function qaRunStepsHtml(b: QaRunBundle): Promise<string> {
           `</div>${img ? `<img class="shot" src="${img}" alt="" />` : ''}</div>`,
       );
     }
-    const verdict = s.verdict ? VERDICT_LABEL[s.verdict] : VERDICT_LABEL.running;
+    const verdict = s.verdict ? L.verdict[s.verdict] : L.verdict.running;
     sections.push(
-      `<section>${head}<p class="faint">${esc(s.goal ?? '')}${s.goal ? ' · ' : ''}기록 판정 ${esc(verdict)} · ${v.rows.length}단계${s.device ? ` · ${esc(s.device)}` : ''}</p>` +
+      `<section>${head}<p class="faint">${esc(s.goal ?? '')}${s.goal ? ' · ' : ''}${L.recVerdict} ${esc(verdict)} · ${L.steps(v.rows.length)}${s.device ? ` · ${esc(s.device)}` : ''}</p>` +
         (s.summary ? `<p>${esc(s.summary)}</p>` : '') +
         rows.join('') +
         '</section>',
     );
   }
-  return `<!doctype html><html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  return `<!doctype html><html lang="${lang}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <meta http-equiv="Content-Security-Policy" content="${CSP}">
-<title>${esc(plan.name)} · 회차 ${esc(run.id)}</title>
+<title>${esc(plan.name)} · ${L.run} ${esc(run.id)}</title>
 <style>
 :root{--bg:#f6f7f9;--panel:#fff;--fg:#1d2127;--faint:#6b7280;--line:#e3e6ea;--ok:#1f7a4d;--bad:#c0392b;--warn:#a5640c;--info:#2563eb;--mute:#6b7280}
 @media (prefers-color-scheme:dark){:root{--bg:#121417;--panel:#1b1e23;--fg:#e6e8eb;--faint:#9aa1ab;--line:#2c3138;--ok:#4cc38a;--bad:#f07167;--warn:#e3a33b;--info:#7aa7ff;--mute:#9aa1ab}}
@@ -371,9 +437,9 @@ table{width:100%;border-collapse:collapse}td,th{text-align:left;padding:6px;bord
 @media (max-width:640px){.step{grid-template-columns:24px 1fr}.shot{grid-column:2;width:140px}}
 </style></head><body><main>
 <h1>${esc(plan.name)}</h1>
-<div class="faint">${plan.app ? `<span class="mono">${esc(plan.app)}</span> · ` : ''}회차 ${esc(run.id)} · 시작 ${esc(fmtTime(run.startedAt))}</div>
+<div class="faint">${plan.app ? `<span class="mono">${esc(plan.app)}</span> · ` : ''}${L.run} ${esc(run.id)} · ${L.started} ${esc(fmtTime(run.startedAt, L.locale))}</div>
 <div class="card"><div>${counts}</div>
-<table style="margin-top:10px"><thead><tr><th>TC</th><th>제목</th><th>결과</th><th>방식</th><th>메모</th></tr></thead><tbody>${toc}</tbody></table></div>
+<table style="margin-top:10px"><thead><tr>${L.tocHead.map((h) => `<th>${h}</th>`).join('')}</tr></thead><tbody>${toc}</tbody></table></div>
 ${sections.join('\n')}
 </main>
 <script>${ZOOM_JS}</script>
@@ -381,11 +447,11 @@ ${sections.join('\n')}
 }
 
 /** 회차 폴더에 내보낼 파일을 쓴다 */
-export async function writeQaRunExport(planId: string, runId: string, kind: 'xlsx' | 'html'): Promise<{ path: string; bytes: number }> {
+export async function writeQaRunExport(planId: string, runId: string, kind: 'xlsx' | 'html', lang: ExportLang = 'ko'): Promise<{ path: string; bytes: number }> {
   const b = await loadQaRunBundle(planId, runId);
   const dir = qaRunDir(planId, runId);
   const path = join(dir, kind === 'xlsx' ? 'results.xlsx' : 'steps.html');
-  const body = kind === 'xlsx' ? qaRunXlsx(b) : Buffer.from(await qaRunStepsHtml(b), 'utf8');
+  const body = kind === 'xlsx' ? qaRunXlsx(b, lang) : Buffer.from(await qaRunStepsHtml(b, lang), 'utf8');
   await writeFileAtomic(path, body);
   return { path, bytes: body.byteLength };
 }

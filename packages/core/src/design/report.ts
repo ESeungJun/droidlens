@@ -2,6 +2,7 @@ import { mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { Bounds } from '../hierarchy.js';
 import { writeFileAtomic, writeJson } from '../workspace.js';
+import { DESIGN_REPORT_TOKENS } from '../report-tokens.js';
 import { DIFF_PROP_LABEL, SEVERITY_LABEL, type DesignCompareResult, type Severity } from './compare.js';
 import type { DesignGuide, GuideElement } from './guide.js';
 import type { Raster } from './measure.js';
@@ -90,9 +91,7 @@ export function designReportHtml(
     : '';
   return `<!doctype html><html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>${esc(title)} · 디자인 비교</title>
-<style>
-:root{--bg:#f7f8fa;--card:#fff;--fg:#1d2330;--mute:#677086;--line:#e2e6ee;--mbg:#eef0f4}
-@media (prefers-color-scheme:dark){:root{--bg:#12151b;--card:#1a1e26;--fg:#e6e9ef;--mute:#98a1b3;--line:#2b313c;--mbg:#262b35;color-scheme:dark}}
+<style>${DESIGN_REPORT_TOKENS}
 body{margin:0;background:var(--bg);color:var(--fg);font:14px/1.55 -apple-system,BlinkMacSystemFont,"Pretendard","Apple SD Gothic Neo",sans-serif;padding:24px 16px}
 main{max-width:1200px;margin:0 auto;display:grid;grid-template-columns:minmax(0,1fr) 320px;gap:24px;align-items:start}
 @media (max-width:900px){main{grid-template-columns:1fr}}
@@ -102,7 +101,7 @@ table{border-collapse:collapse;width:100%;min-width:760px}th,td{text-align:left;
 th{font-size:12px;color:var(--mute);font-weight:600;white-space:nowrap}tr:last-child td{border-bottom:0}
 .id{font-family:ui-monospace,Menlo,monospace;font-size:12px}td img{max-width:160px;max-height:80px;border:1px solid var(--line);border-radius:4px}
 .pill{display:inline-block;padding:1px 8px;border-radius:999px;font-size:12px;white-space:nowrap;background:var(--mbg);color:var(--mute)}
-.pill.high{background:#fdeceb;color:#b42318}.pill.medium{background:#fff4d6;color:#8a5a00}.pill.low{background:#e6efff;color:#1d4ed8}
+.pill.high{background:var(--high-bg);color:var(--high)}.pill.medium{background:var(--medium-bg);color:var(--medium)}.pill.low{background:var(--low-bg);color:var(--low)}
 .sw{display:inline-block;width:12px;height:12px;border-radius:3px;border:1px solid var(--line);margin-right:6px;vertical-align:-1px}
 aside img{width:100%;border:1px solid var(--line);border-radius:10px}
 aside .pair{display:grid;grid-template-columns:1fr 1fr;gap:8px}aside figure{margin:0}aside figcaption{font-size:12px;color:var(--mute);margin-bottom:4px}

@@ -1,6 +1,7 @@
 import { writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { ensureDir, safeName, timestamp, writeJson } from './workspace.js';
+import { SCENARIO_TOKENS } from './report-tokens.js';
 import { CASE_ID, PLAN_ID } from './qa/plan.js';
 import {
   buildScenarioView,
@@ -102,12 +103,7 @@ const clock = (at: number) => {
   return [d.getHours(), d.getMinutes(), d.getSeconds()].map((n) => String(n).padStart(2, '0')).join(':');
 };
 
-const REPORT_CSS = `
-:root{--bg:#f6f7f6;--card:#fff;--fg:#151917;--muted:#5f6763;--line:#dfe3e0;--soft:#eef1ef;
---pass:#17803d;--pass-bg:#e6f4ea;--fail:#c62828;--fail-bg:#fdecec;--warn:#a15c00;--warn-bg:#fff3dc;--info:#2b5fb4;--info-bg:#e8effb;--accent:#0f6b5c;
---sans:-apple-system,"Apple SD Gothic Neo","Pretendard",system-ui,sans-serif;--mono:ui-monospace,Menlo,monospace;color-scheme:light}
-@media (prefers-color-scheme:dark){:root{--bg:#0f1211;--card:#171b19;--fg:#e7ebe9;--muted:#97a19c;--line:#2a312e;--soft:#1e2422;
---pass:#5cc882;--pass-bg:#16301f;--fail:#ff7b72;--fail-bg:#3a1a1a;--warn:#f0b14a;--warn-bg:#35280f;--info:#82aaf0;--info-bg:#172440;--accent:#4fc2ab;color-scheme:dark}}
+const REPORT_CSS = `${SCENARIO_TOKENS}
 *{box-sizing:border-box}
 [hidden]{display:none!important}
 body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.6 var(--sans);font-variant-numeric:tabular-nums}
@@ -166,13 +162,13 @@ dl.kv li .t{color:var(--muted);font-family:var(--mono);font-size:11px;margin-rig
 .shots{display:grid;gap:8px;align-self:start;width:132px}
 .shot{display:block;padding:0;border:1px solid var(--line);border-radius:10px;overflow:hidden;background:var(--soft);cursor:zoom-in;width:100%;position:relative}
 .shot img{display:block;width:100%;height:auto}
-.shot .tag{position:absolute;left:6px;bottom:6px;font-size:11px;font-weight:600;padding:1px 6px;border-radius:6px;background:var(--warn);color:#fff}
+.shot .tag{position:absolute;left:6px;bottom:6px;font-size:11px;font-weight:600;padding:1px 6px;border-radius:6px;background:var(--warn);color:var(--on-warn)}
 .noshot{width:132px;aspect-ratio:9/19;border:1px dashed var(--line);border-radius:10px;display:grid;place-items:center;text-align:center;font-size:12px;color:var(--muted);padding:8px}
 .log{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px 16px}
 .log summary{cursor:pointer;font-weight:600}
 .log ol{margin:10px 0 0;padding-left:22px;font-size:13px;display:grid;gap:2px}
 .log .t{color:var(--muted);font-family:var(--mono);font-size:11px;margin-right:8px}
-.lb{position:fixed;inset:0;background:rgba(0,0,0,.8);display:grid;place-items:center;padding:24px;z-index:20;cursor:zoom-out}
+.lb{position:fixed;inset:0;background:var(--scrim);display:grid;place-items:center;padding:24px;z-index:20;cursor:zoom-out}
 .lb img{max-height:92vh;max-width:100%;width:auto;border-radius:12px}
 button:focus-visible,a:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 @media (max-width:560px){.step:not(.wide){grid-template-columns:minmax(0,1fr) 92px;gap:12px}.shots,.noshot{width:92px}.ea{grid-template-columns:1fr}.how{margin-left:0;width:100%}}
