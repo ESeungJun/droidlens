@@ -6,7 +6,7 @@ import { screenshot } from '../device.js';
 import { FlowCollector, launchAndSettle } from '../graph.js';
 import { resetFrameStats } from '../perf.js';
 import { Scenario } from '../scenario.js';
-import type { ScenarioAction, ScenarioData, ScenarioStep } from '../scenario-view.js';
+import { tcName, type ScenarioAction, type ScenarioData, type ScenarioStep } from '../scenario-view.js';
 import { sdkFor } from '../sdk.js';
 import { waitScreenSettled, type StepOutput } from './common.js';
 import { describeSetup, describeStep, stepReport } from './describe.js';
@@ -28,6 +28,8 @@ export interface ScriptRunOptions {
    * MCP 처럼 에이전트가 스크립트를 쓰고 돌리는 경로에서 켠다. 사람이 데스크톱·CLI 에서 돌릴 때는 끈다 (기본 false)
    */
   guardDanger?: boolean;
+  /** QA 회차에서 돌리면 그 회차 id. 기록의 tc.run 에 적어 검증 기록이 회차로 묶인다 (#105) */
+  qaRun?: string;
 }
 
 export interface RunResult {
@@ -73,11 +75,11 @@ class ScriptRun {
 
   static async start(dev: DeviceAdb, script: Script, opts: ScriptRunOptions): Promise<ScriptRun> {
     const t0 = Date.now();
-    const scenario = await Scenario.start(script.name, {
+    const scenario = await Scenario.start(script.tc ? tcName(script.tc.case, script.name) : script.name, {
       goal: script.description ?? (opts.sourcePath ? `스크립트 ${basename(opts.sourcePath)}` : undefined),
       packageName: script.app,
       device: dev.serial,
-      ...(script.tc ? { tc: script.tc } : {}),
+      ...(script.tc ? { tc: { ...script.tc, ...(opts.qaRun ? { run: opts.qaRun } : {}) } } : {}),
     });
     await ensureAgent(dev);
     const flow = opts.collectFlow === false ? undefined : await FlowCollector.open(dev, script.app).catch(() => undefined);

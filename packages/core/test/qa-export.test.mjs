@@ -1,7 +1,7 @@
 // QA 회차 묶어 보기·내보내기 (#98): 회차 ↔ 시나리오 잇기, .xlsx 두 시트, 단계별 HTML
 import { test, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, mkdirSync, rmSync, writeFileSync, readFileSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, rmSync, writeFileSync, readFileSync, existsSync, utimesSync } from 'node:fs';
 import { join } from 'node:path';
 import { unzipSync, strFromU8 } from 'fflate';
 import { PNG } from 'pngjs';
@@ -121,3 +121,41 @@ test('maskScenario 는 글 칸마다 입력값을 가리고, 형식이 틀리면
   assert.equal(qa.maskScenario({ ...d, steps: [{ index: 1, title: 1, status: 'pass' }] }, undefined), undefined);
   assert.equal(qa.maskScenario({ ...d, steps: 'x' }, undefined), undefined);
 });
+
+test('영어로 내보내면 고정 문구가 영어, 사용자 글은 그대로 (#106)', async () => {
+  const { plan, run } = await setup();
+  const { path: x } = await qa.writeQaRunExport(plan.id, run.id, 'xlsx', 'en');
+  const z = unzipSync(new Uint8Array(readFileSync(x)));
+  const wb = strFromU8(z['xl/workbook.xml']);
+  assert.match(wb, /name="Summary"/);
+  assert.match(wb, /name="Steps"/);
+  const s1 = strFromU8(z['xl/worksheets/sheet1.xml']);
+  assert.match(s1, />Priority</);
+  assert.match(s1, />Pass</);
+  assert.match(s1, /정상 로그인/, 'TC 제목은 그대로');
+  const { path: h } = await qa.writeQaRunExport(plan.id, run.id, 'html', 'en');
+  const html = readFileSync(h, 'utf8');
+  assert.match(html, /<html lang="en">/);
+  assert.match(html, /<th>Title<\/th>/);
+  assert.doesNotMatch(html, /기록 판정|단계 기록이 없습니다/);
+});
+
+test('캡처 축소본을 남겨 다음 내보내기에 다시 쓰고, 원본이 바뀌면 다시 만든다 (#104)', async () => {
+  const { plan, run, sid } = await setup();
+  const dir = join(home, 'scenarios', sid);
+  await qa.writeQaRunExport(plan.id, run.id, 'html');
+  const cache = join(dir, 'step-001.480.jpg');
+  assert.ok(existsSync(cache), '축소본을 남김');
+  writeFileSync(cache, Buffer.from('ffd8ffe0', 'hex'));
+  const past = new Date(Date.now() - 60_000);
+  utimesSync(join(dir, 'step-001.png'), past, past);
+  const html = readFileSync((await qa.writeQaRunExport(plan.id, run.id, 'html')).path, 'utf8');
+  assert.match(html, /data:image\/jpeg;base64,\/9j\/4A==/, '원본보다 새 축소본은 그대로 씀');
+  const png = new PNG({ width: 20, height: 40 });
+  png.data.fill(50);
+  writeFileSync(join(dir, 'step-001.png'), PNG.sync.write(png));
+  utimesSync(cache, past, past);
+  const html2 = readFileSync((await qa.writeQaRunExport(plan.id, run.id, 'html')).path, 'utf8');
+  assert.doesNotMatch(html2, /\/9j\/4A==/, '원본이 바뀌면 다시 만듦');
+});
+

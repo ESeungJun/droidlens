@@ -9,11 +9,6 @@ import { device, text, serialArg, acts, readOnly, recorder, allowDangerArg, dang
 
 const isYaml = (p: string) => ['.yaml', '.yml'].includes(extname(p).toLowerCase());
 
-/** TC 스크립트 이름: TC 번호를 한 번만 앞에 붙인다. 에이전트는 시나리오 이름을 'TC-005' 처럼 번호만으로 짓기도 한다 (#92) */
-function tcScriptName(caseId: string, name: string): string {
-  return name === caseId || name.startsWith(`${caseId} `) ? name : `${caseId} ${name}`;
-}
-
 /** 허용하는 폴더: scripts 폴더 + 실행이면 MCP 서버를 띄운 프로젝트 폴더(cwd) */
 async function allowedRoots(run: boolean): Promise<string[]> {
   const dir = await realpath(await dl.scriptsDir());
@@ -128,7 +123,7 @@ export function register(server: McpServer): void {
             .catch(() => undefined);
         dropped = `\n앞 시나리오 "${prev.data.name}" 는 scenario_finish 없이 남아 있어 중단(blocked)으로 마무리했습니다${html ? `: ${html}` : ''}`;
       }
-      scenario = await dl.Scenario.start(name, {
+      scenario = await dl.Scenario.start(tc ? dl.tcName(tc.case, name) : name, {
         goal: goal ?? tcCase?.title,
         packageName,
         ...(tc ? { tc: { plan: tc.plan, case: tc.case, ...(tc.run ? { run: tc.run } : {}) } } : {}),
@@ -279,7 +274,7 @@ export function register(server: McpServer): void {
         // 녹화는 이미 앱이 열린 상태에서 시작되므로, 재실행 시에는 앱을 새로 띄우고 시작한다
         const setup: dl.Script['setup'] = { restart: true, ...(mocks.length ? { mocks } : {}) };
         const script: dl.Script = {
-          name: tc ? tcScriptName(tc.case, scriptName ?? d.name) : (scriptName ?? d.name),
+          name: tc ? dl.tcName(tc.case, scriptName ?? d.name) : (scriptName ?? d.name),
           app,
           ...(tc ? { tc: { plan: tc.plan, case: tc.case } } : {}),
           setup,

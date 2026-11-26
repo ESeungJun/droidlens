@@ -6,7 +6,7 @@ import { ScriptsPanel } from './ScriptsPanel';
 import { RunDetail, RunHead, runKey, type RunGroup } from './QaRunRecord';
 import { shortTime } from '../format';
 import { requestQaPlan, takeScenario } from '../nav';
-import { buildScenarioView, formatDuration, STATUS_LABEL, VERDICT_LABEL, type StepRow } from '@droidlens/core/scenario-view';
+import { buildScenarioView, formatDuration, scenarioStale, tcName, STATUS_LABEL, VERDICT_LABEL, type StepRow } from '@droidlens/core/scenario-view';
 
 function StepShot({ dir, file }: { dir: string; file: string }) {
   const [src, setSrc] = useState<string>();
@@ -67,7 +67,14 @@ function groupOf(s: ScenarioData, by: GroupBy, other: string): string {
 /** 목록 한 줄: 낱개 기록 또는 QA 회차 묶음 (#98) */
 type Entry = { kind: 'one'; s: ScenarioData } | { kind: 'run'; g: RunGroup };
 
-/** 같은 QA 회차의 기록을 회차 하나로 묶는다. 목록 순서(최신순)에서 회차의 가장 최근 기록 자리에 놓는다 */
+/** 회차 번호가 없는 옛 TC 기록: 같은 계획에서 그 기록 직전(2시간 안)에 시작한 회차 */
+function runAt(index: QaRunIndexItem[], plan: string, at: number): QaRunIndexItem | undefined {
+  let best: QaRunIndexItem | undefined;
+  for (const r of index) if (r.plan === plan && r.startedAt <= at && at - r.startedAt < 2 * 3600_000 && (!best || r.startedAt > best.startedAt)) best = r;
+  return best;
+}
+
+/** 같은 QA 회차의 기록을 회차 하나로 묶는다 (#98·#105). 목록 순서(최신순)에서 회차의 가장 최근 기록 자리에 놓는다 */
 function toEntries(list: ScenarioData[], index: QaRunIndexItem[], planNames: Map<string, string>): Entry[] {
   const byScenario = new Map<string, QaRunIndexItem>();
   const byKey = new Map<string, QaRunIndexItem>();
@@ -78,9 +85,11 @@ function toEntries(list: ScenarioData[], index: QaRunIndexItem[], planNames: Map
   const out: Entry[] = [];
   const groups = new Map<string, RunGroup>();
   for (const s of list) {
-    const info = byScenario.get(s.id) ?? (s.tc?.run ? byKey.get(runKey(s.tc.plan, s.tc.run)) : undefined);
-    const plan = info?.plan ?? s.tc?.plan;
-    const run = info?.run ?? s.tc?.run;
+    // 기록에 적힌 회차(tc.run)가 기준이고, 회차 결과의 리포트 경로는 tc.run 이 없는 옛 기록에만 쓴다 (#105)
+    const own = s.tc?.run ? { plan: s.tc.plan, run: s.tc.run } : undefined;
+    const info = own ? byKey.get(runKey(own.plan, own.run)) : (byScenario.get(s.id) ?? (s.tc ? runAt(index, s.tc.plan, s.startedAt) : undefined));
+    const plan = own?.plan ?? info?.plan;
+    const run = own?.run ?? info?.run;
     if (!plan || !run) {
       out.push({ kind: 'one', s });
       continue;
@@ -211,8 +220,8 @@ function ReportsView() {
       {picking && <input type="checkbox" checked={picked.has(s.id)} readOnly style={{ marginTop: 3 }} />}
       <div className="scen-body">
         <div style={{ display: 'flex', justifyContent: 'space-between', gap: 6 }}>
-          <b style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.name}</b>
-          <span className={`v-${s.verdict ?? 'blocked'}`}>{s.verdict ? s.verdict.toUpperCase() : t('진행 중')}</span>
+          <b style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.tc ? tcName(s.tc.case, s.name) : s.name}</b>
+          <span className={`v-${s.verdict ?? 'blocked'}`}>{s.verdict ? s.verdict.toUpperCase() : scenarioStale(s) ? t('끝나지 않음') : t('진행 중')}</span>
         </div>
         <div className="faint" style={{ fontSize: 11 }}>
           {shortTime(s.startedAt)} · {listLine(s)}
@@ -343,8 +352,8 @@ function ReportsView() {
       ) : sel ? (
         <div className="steps">
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
-            <h2 style={{ margin: 0, fontSize: 18 }}>{sel.name}</h2>
-            <span className={`v-${sel.verdict ?? 'blocked'}`} style={{ fontWeight: 700 }}>{sel.verdict?.toUpperCase() ?? t('진행 중')}</span>
+            <h2 style={{ margin: 0, fontSize: 18 }}>{sel.tc ? tcName(sel.tc.case, sel.name) : sel.name}</h2>
+            <span className={`v-${sel.verdict ?? 'blocked'}`} style={{ fontWeight: 700 }}>{sel.verdict?.toUpperCase() ?? (scenarioStale(sel) ? t('끝나지 않음') : t('진행 중'))}</span>
             <div className="spacer" />
             {sel.finishedAt && <button className="btn sm" onClick={() => api.openPath(`${sel.dir}/report.html`)}>{t('HTML 리포트 열기')}</button>}
             <button className="btn sm" onClick={() => api.reveal(`${sel.dir}/scenario.json`)}>{t('폴더')}</button>
