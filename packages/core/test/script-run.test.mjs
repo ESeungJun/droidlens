@@ -534,3 +534,17 @@ test('runSuite: 폴더의 스크립트를 이름순으로 돌리고 형식 오�
     results: s.results.map((x) => ({ file: x.path.split('/').pop(), name: x.name, verdict: x.result?.verdict, error: x.error })),
   });
 });
+
+test('runScript: QA 회차에서 돌리면 기록 이름의 TC 번호는 한 번, tc.run 이 적힌다 (#102·#105)', async () => {
+  const pkg = 'com.ex.sqarun';
+  const r = await rig('fake-qarun', pkg, {});
+  try {
+    // #92 이전에 저장된 스크립트처럼 이름에 번호가 두 번 붙어 있어도
+    const script = parseScript(`name: TC-001 TC-001\napp: ${pkg}\ntc: { plan: p1, case: TC-001 }\nsteps:\n  - back\n`);
+    const result = await runScript(r.f.dev, script, { qaRun: '20261126-000000' });
+    assert.equal(result.scenario.name, 'TC-001');
+    assert.deepEqual(result.scenario.tc, { plan: 'p1', case: 'TC-001', run: '20261126-000000' });
+  } finally {
+    await r.close();
+  }
+});

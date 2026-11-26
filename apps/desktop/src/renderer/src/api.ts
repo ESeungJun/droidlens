@@ -279,8 +279,8 @@ export const api = {
   qaRunGet: (id: string, runId: string) => call<QaRunView>('qaRunGet', id, runId),
   qaReport: (id: string, runId: string) => call<{ html: string; csv: string; junit: string }>('qaReport', id, runId),
   qaRunIndex: () => call<QaRunIndexItem[]>('qaRunIndex'),
-  qaRunExport: (id: string, runId: string, kind: 'xlsx' | 'html') => call<{ path: string; bytes: number }>('qaRunExport', id, runId, kind),
-  qaRunPreview: (id: string, runId: string) => call<string>('qaRunPreview', id, runId),
+  qaRunExport: (id: string, runId: string, kind: 'xlsx' | 'html', lang: 'ko' | 'en') => call<{ path: string; bytes: number }>('qaRunExport', id, runId, kind, lang),
+  qaRunPreview: (id: string, runId: string, lang: 'ko' | 'en') => call<string>('qaRunPreview', id, runId, lang),
   onQaEvent: (fn: (e: QaEvent) => void) => window.dl.on('qa:event', (p) => fn(p as QaEvent)),
 };
 

@@ -1,5 +1,6 @@
 import { isAbsolute, join, relative } from 'node:path';
 import { writeFileAtomic } from '../workspace.js';
+import { QA_REPORT_TOKENS } from '../report-tokens.js';
 import { CASE_KIND_LABEL, type QaPlan } from './plan.js';
 import { xmlEscape as xml } from '../report-junit.js';
 import { QA_STATUS_LABEL, qaRunDir, qaRunSummary, type QaRun, type QaRunSummary } from './run.js';
@@ -72,9 +73,7 @@ export function qaReportHtml(
     .join('');
   return `<!doctype html><html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>${esc(plan.name)} · QA 결과 ${esc(run.id)}</title>
-<style>
-:root{--bg:#f7f8fa;--card:#fff;--fg:#1d2330;--mute:#677086;--line:#e2e6ee;--ok:#0f7b46;--okbg:#e3f5ea;--bad:#b42318;--badbg:#fdeceb;--warn:#8a5a00;--warnbg:#fff4d6;--mbg:#eef0f4}
-@media (prefers-color-scheme:dark){:root{--bg:#12151b;--card:#1a1e26;--fg:#e6e9ef;--mute:#98a1b3;--line:#2b313c;--ok:#5fd394;--okbg:#173626;--bad:#ff8a80;--badbg:#3a1d1b;--warn:#ffcc66;--warnbg:#3a2f12;--mbg:#262b35;color-scheme:dark}}
+<style>${QA_REPORT_TOKENS}
 body{margin:0;background:var(--bg);color:var(--fg);font:14px/1.55 -apple-system,BlinkMacSystemFont,"Pretendard","Apple SD Gothic Neo",sans-serif;padding:24px max(16px,env(safe-area-inset-left))}
 main{max-width:1200px;margin:0 auto}h1{font-size:22px;margin:0 0 4px}h2{font-size:16px;margin:28px 0 8px}
 .sub{color:var(--mute);margin:0 0 12px}.wrap{overflow-x:auto;background:var(--card);border:1px solid var(--line);border-radius:10px}

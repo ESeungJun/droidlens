@@ -3,7 +3,7 @@ import { api } from './api';
 
 /**
  * 화면 테마 (라이트·다크). 고른 값을 main 에 알리면 main 이 nativeTheme.themeSource 를 바꾸고,
- * 그 값이 렌더러의 prefers-color-scheme 으로 들어와 styles.css 의 색이 바뀐다.
+ * 그 값이 렌더러의 prefers-color-scheme 으로 들어와 tokens.css 의 색이 바뀐다.
  * 그래서 파일 대화상자 같은 OS 화면도 같은 테마가 되고, 다음 실행은 JS 가 돌기 전 첫 화면부터 맞는 색으로 뜬다.
  * 'system' 이면 OS 설정을 따라간다.
  */

@@ -254,6 +254,10 @@ export function runQaPlan(planId: string, opts: QaRunOptions, dev: dl.DeviceAdb,
         timeoutMs,
       ).catch((e: Error) => ({ timedOut: false, error: e.message, notStarted: true }));
       if (signal.aborted) break;
+      // 에이전트가 scenario_finish 없이 끝났으면 열린 기록을 막힘으로 마무리한다 (MCP 서버도 같이 꺼져 기록이 '진행 중' 으로 남지 않게, #101)
+      const closed = await dl
+        .closeOpenTcScenarios(planId, run.id, r.timedOut ? '시간 제한을 넘겨 멈춤' : '에이전트가 scenario_finish 없이 끝남', c.id)
+        .catch(() => []);
       // 에이전트가 scenario_finish 로 결과를 적지 않고 끝났으면 막힘으로 남긴다 (실행해서 나온 앞 결과가 있으면 그대로 둔다)
       const after = await dl.loadQaRun(planId, run.id);
       if (!after.results.some((x) => x.case === c.id && x.at >= t0)) {
@@ -262,7 +266,8 @@ export function runQaPlan(planId: string, opts: QaRunOptions, dev: dl.DeviceAdb,
           : 'notStarted' in r
             ? `에이전트를 띄우지 못했습니다: ${r.error.slice(0, 300)}`
             : `에이전트가 결과를 적지 않고 끝났습니다${r.error ? `: ${r.error.slice(0, 300)}` : ''}`;
-        await dl.recordQaResult(planId, run.id, { case: c.id, status: 'blocked', mode: 'manual', detail: why }).catch(() => undefined);
+        const report = closed.find((x) => x.case === c.id)?.report;
+        await dl.recordQaResult(planId, run.id, { case: c.id, status: 'blocked', mode: 'manual', detail: why, ...(report ? { report } : {}) }).catch(() => undefined);
       }
     }
   })()
@@ -274,6 +279,8 @@ export function runQaPlan(planId: string, opts: QaRunOptions, dev: dl.DeviceAdb,
       // 중간에 멈추거나 기기가 끊겨도 그때까지 적힌 결과로 결과표를 쓴다
       let reportErr: Error | undefined;
       if (runId) {
+        // 멈춘 TC 의 열린 기록은 결과를 적지 않고(남은 TC 로 둔다) 기록만 막힘으로 마무리한다 (#101)
+        if (signal.aborted) await dl.closeOpenTcScenarios(planId, runId, '회차를 멈춰 끝나지 않음').catch(() => undefined);
         try {
           await dl.writeQaReport(await dl.loadQaPlan(planId), await dl.loadQaRun(planId, runId));
         } catch (e) {

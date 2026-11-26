@@ -54,6 +54,26 @@ export interface ScenarioData {
   dir: string;
 }
 
+/**
+ * TC 에 이은 스크립트·기록 이름: 앞에 TC 번호를 한 번만 붙인다.
+ * 번호가 이미 여러 번 붙어 있으면("TC-001 TC-001", #92 이전에 저장된 스크립트) 하나로 줄인다 (#102)
+ */
+export function tcName(caseId: string, name: string): string {
+  let rest = name.trim();
+  while (rest === caseId || rest.startsWith(`${caseId} `)) rest = rest.slice(caseId.length).trim();
+  return rest ? `${caseId} ${rest}` : caseId;
+}
+
+/** 이만큼 아무 단계도 없이 끝나지 않은 기록은 주인(에이전트·MCP 서버)이 사라진 것으로 본다 (#101) */
+export const SCENARIO_STALE_MS = 30 * 60_000;
+
+/** 끝나지 않았는데 마지막 활동(시작·마지막 단계)이 SCENARIO_STALE_MS 보다 오래된 기록 */
+export function scenarioStale(d: Pick<ScenarioData, 'finishedAt' | 'startedAt' | 'steps'>, now = Date.now()): boolean {
+  if (d.finishedAt) return false;
+  const last = Math.max(d.startedAt, ...(Array.isArray(d.steps) ? d.steps.map((s) => s.at ?? 0) : []));
+  return now - last > SCENARIO_STALE_MS;
+}
+
 /** 앱 위를 가리는 것으로 알려진 시스템 창 (에이전트 설치 때 뜨는 Play 프로텍트 등) */
 export const BLOCKING_PACKAGES = [
   'com.google.android.finsky',

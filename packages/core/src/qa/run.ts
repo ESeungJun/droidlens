@@ -257,6 +257,7 @@ export async function runQaScripts(
           signal: opts.signal,
           onStep: opts.onStep,
           guardDanger: !(c.allowDanger && !s.changed),
+          qaRun: run.id,
         });
         const note =
           s.changed && c.danger && c.allowDanger
