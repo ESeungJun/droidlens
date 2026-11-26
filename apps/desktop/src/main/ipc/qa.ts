@@ -102,12 +102,13 @@ export function register(handle: Handle): void {
   });
   // #98 검증 기록에서 회차로 묶기·내보내기
   handle('qaRunIndex', async () => dl.qaRunIndex());
-  handle('qaRunExport', async (id: string, runId: string, kind: 'xlsx' | 'html') => {
+  const langOf = (v: unknown): dl.ExportLang => (v === 'en' ? 'en' : 'ko');
+  handle('qaRunExport', async (id: string, runId: string, kind: 'xlsx' | 'html', lang?: string) => {
     if (kind !== 'xlsx' && kind !== 'html') throw new Error('잘못된 형식입니다');
-    return dl.writeQaRunExport(id, runId, kind);
+    return dl.writeQaRunExport(id, runId, kind, langOf(lang));
   });
-  handle('qaRunPreview', async (id: string, runId: string) => {
-    const { path } = await dl.writeQaRunExport(id, runId, 'html');
+  handle('qaRunPreview', async (id: string, runId: string, lang?: string) => {
+    const { path } = await dl.writeQaRunExport(id, runId, 'html', langOf(lang));
     openPreview(path);
     return path;
   });

@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react';
 import { api, type QaRunIndexItem, type QaRunView, type ScenarioData } from '../api';
 import { useApp } from '../App';
-import { useT } from '../i18n';
+import { useI18n, useT } from '../i18n';
 import { useQaState } from '../qaStore';
 import { shortTime } from '../format';
+import { scenarioStale } from '@droidlens/core/scenario-view';
 
 /**
  * 검증 기록 탭의 QA 회차 묶음 (#98): 목록의 회차 줄과 오른쪽 회차 요약·내보내기.
@@ -30,12 +31,12 @@ export const runKey = (plan: string, run: string) => `${plan}/${run}`;
 
 /**
  * 이 회차가 지금 돌고 있는지와 지금 TC.
- * 이 앱이 돌리는 회차면 지금 TC 까지, 밖(에이전트·MCP)에서 돌리는 회차는 끝나지 않은 기록이 있으면 진행 중으로 본다
+ * 이 앱이 돌리는 회차면 지금 TC 까지, 밖(에이전트·MCP)에서 돌리는 회차는 끝나지 않은(오래되지 않은) 기록이 있으면 진행 중으로 본다
  */
 export function useRunLive(plan: string, run: string, items: ScenarioData[]) {
   const qa = useQaState();
   const mine = qa.job?.kind === 'run' && qa.job.plan === plan && qa.run?.plan === plan && qa.run.id === run;
-  const live = mine || items.some((s) => !s.finishedAt);
+  const live = mine || items.some((s) => !s.finishedAt && !scenarioStale(s));
   return { live, current: mine ? qa.current : null, tick: qa.tick };
 }
 
@@ -75,6 +76,7 @@ export function RunHead({ g }: { g: RunGroup }) {
 export function RunDetail({ g, onOpenRecord }: { g: RunGroup; onOpenRecord: (s: ScenarioData) => void }) {
   const { run, toast } = useApp();
   const t = useT();
+  const { lang } = useI18n();
   const { live, current, tick } = useRunLive(g.plan, g.run, g.items);
   // 회차 목록(5초마다)의 결과 개수가 바뀌면 다시 읽는다. 밖에서 돌리는 회차도 표가 따라오게
   const countsKey = g.info ? Object.values(g.info.counts).join(',') : '';
@@ -104,17 +106,17 @@ export function RunDetail({ g, onOpenRecord }: { g: RunGroup; onOpenRecord: (s: 
     }
   };
   const xlsx = async () => {
-    const f = await doing('xlsx', () => api.qaRunExport(g.plan, g.run, 'xlsx'));
+    const f = await doing('xlsx', () => api.qaRunExport(g.plan, g.run, 'xlsx', lang));
     if (f) await run(api.openPath(f.path)).then((r) => r && toast(r, true));
   };
   const html = async () => {
-    const f = await doing('html', () => api.qaRunExport(g.plan, g.run, 'html'));
+    const f = await doing('html', () => api.qaRunExport(g.plan, g.run, 'html', lang));
     if (f) await run(api.openPath(f.path)).then((r) => r && toast(r, true));
   };
-  const preview = () => doing('preview', () => api.qaRunPreview(g.plan, g.run));
+  const preview = () => doing('preview', () => api.qaRunPreview(g.plan, g.run, lang));
   const artifact = async () => {
     setAsking(false);
-    const f = await doing('artifact', () => api.qaRunExport(g.plan, g.run, 'html'));
+    const f = await doing('artifact', () => api.qaRunExport(g.plan, g.run, 'html', lang));
     if (!f) return;
     if (f.bytes > ARTIFACT_MAX_BYTES) {
       toast(t('파일이 {mb}MB 라 아티팩트 한도(16MB)를 넘습니다. 단계별 HTML 로 열어 주세요', { mb: (f.bytes / 1048576).toFixed(1) }), true);
