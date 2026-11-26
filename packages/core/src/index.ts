@@ -6,6 +6,7 @@ export * from './libraries.js';
 export * from './graph.js';
 export * from './scenario.js';
 export * from './scenario-view.js';
+export * from './qa-note.js';
 export * from './redact.js';
 export * from './workspace.js';
 export * from './image.js';

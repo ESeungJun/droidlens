@@ -5,6 +5,7 @@ import { useI18n, useT } from '../i18n';
 import { useQaState } from '../qaStore';
 import { shortTime } from '../format';
 import { scenarioStale } from '@droidlens/core/scenario-view';
+import { qaResultMemo } from '@droidlens/core/qa-note';
 
 /**
  * 검증 기록 탭의 QA 회차 묶음 (#98): 목록의 회차 줄과 오른쪽 회차 요약·내보내기.
@@ -216,7 +217,7 @@ export function RunDetail({ g, onOpenRecord }: { g: RunGroup; onOpenRecord: (s: 
                     )}
                   </td>
                   <td className="faint">{now ? t(MODE_LABEL[now.mode]) : r.result ? t(MODE_LABEL[r.result.mode]) : ''}</td>
-                  <td className="qa-wrap faint">{r.result?.detail}</td>
+                  <td className="qa-wrap faint">{qaResultMemo(r.result, lang)}</td>
                   <td>
                     {rec && (
                       <button className="btn sm" onClick={() => onOpenRecord(rec)}>
