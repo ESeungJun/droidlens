@@ -202,6 +202,9 @@ test('이은 스크립트를 다른 TC 에서 고치면 다음 회차에 돌리�
   s.clearLog();
   const ok = await s.call('qa_run_scripts', { plan: id });
   assert.match(ok.text, /TC-001 통과/, ok.text);
+  // 다시 잇기는 한 번뿐: 또 고쳐 통과해도 잇지 않는다
+  assert.equal((await s.call('script_write', { yaml: body + '# 또 고침\n', name: script })).isError, false);
+  assert.ok(!/다시 이었습니다/.test((await s.call('script_run', { script })).text));
 
   // 다른 TC 를 돌리는 중에 TC-001 의 스크립트를 덮어쓰면: 다시 잇지 않고, 다음 회차는 돌리지 않고 막힘 + 에이전트로 넘김
   const run2 = runOf(ok.text);
@@ -313,6 +316,18 @@ test('확인 필수 TC: 허용·같은 스크립트면 누르고, 파일이 바�
     const script = (await loadQaPlan(id)).cases.find((x) => x.id === 'TC-003').script;
     assert.equal(script, 'TC-003');
     const file = join(s.dir, 'home', 'scripts', `${script}.yaml`);
+
+    // 확인 필수 TC 는 방금 끝낸 TC 안에서 고쳐 script_run 이 통과해도 다시 잇지 않는다: 사람이 허용한 것은 원래 스크립트다 (#140)
+    const hash0 = (await loadQaPlan(id)).cases.find((x) => x.id === 'TC-003').scriptHash;
+    const orig = readFileSync(file, 'utf8');
+    writeFileSync(file, orig.replace(/steps:[\s\S]*/, 'steps:\n  - wait: { text: "계정 삭제" }\n'));
+    const tamper = await s.call('script_run', { script });
+    assert.match(tamper.text, /PASS/, tamper.text);
+    assert.match(tamper.text, /확인 필수 TC 라 다시 잇지 않았습니다/, tamper.text);
+    const kept = (await loadQaPlan(id)).cases.find((x) => x.id === 'TC-003');
+    assert.equal(kept.scriptHash, hash0, '해시를 바꾸지 않는다');
+    assert.equal(kept.allowDanger, true);
+    writeFileSync(file, orig);
     writeFileSync(file, readFileSync(file, 'utf8') + '# 바뀜\n');
     s.clearLog();
     const changed = await s.call('qa_run_scripts', { plan: id });

@@ -418,9 +418,12 @@ export function register(server: McpServer): void {
         p === (await scriptPath(rl.script, true)) // 같은 이름의 다른 폴더 파일이 아니라 스크립트 폴더의 그 파일
       )
         lines.push(
-          await dl.linkQaCaseScript(rl.plan, rl.case, rl.script, { hash: dl.sha256(bytes), fingerprint: rl.fingerprint }).then(
+          await dl.linkQaCaseScript(rl.plan, rl.case, rl.script, { hash: dl.sha256(bytes), fingerprint: rl.fingerprint, relink: true }).then(
             () => `${rl.case} 에 고친 스크립트를 다시 이었습니다`,
             (e) => `${rl.case} 에 고친 스크립트를 다시 잇지 못했습니다: ${(e as Error).message.split('\n')[0]}`,
+          ).finally(
+            // 다시 잇기는 한 번만 한다
+            () => (recorder.relink = undefined),
           ),
         );
       return text([`판정: ${r.verdict.toUpperCase()} (${r.passed} 통과 · ${r.failed} 실패 · ${r.skipped} 건너뜀, ${(r.durationMs / 1000).toFixed(1)}초)`, ...lines, `리포트: ${r.report}`].join('\n'));
