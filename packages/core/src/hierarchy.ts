@@ -306,7 +306,7 @@ export function structureSignature(root: ViewNode, maxDepth = 6): string {
     const kids = [...new Set(n.children.map((c) => skel(c, base)))].join(',');
     return `${n.className.split('.').pop()}#${n.resourceId.split(':id/')[1] ?? ''}(${kids})`;
   };
-  return createHash('sha1').update(skel(root) + webPages(root, skel)).digest('hex').slice(0, 12);
+  return createHash('sha1').update(skel(root) + webPages(root, skel) + drawers(root, skel)).digest('hex').slice(0, 12);
 }
 
 /**
@@ -317,6 +317,20 @@ export function structureSignature(root: ViewNode, maxDepth = 6): string {
 function webPages(root: ViewNode, skel: (n: ViewNode, base: number) => string): string {
   const pages = pageWebViews(root).map((w) => [...new Set(w.children.map((c) => skel(c, w.depth)))].join(','));
   return pages.length ? `|web:${pages.join('|')}` : '';
+}
+
+/**
+ * 열린 드로어의 뼈대 (#112). DrawerLayout 은 보통 화면 틀 몇 겹 아래(깊이 6 언저리)에 있어서, 열린 드로어 판이 maxDepth 에서 잘려
+ * 드로어를 열어도 시그니처가 그대로였다. DrawerLayout 의 첫 자식은 본문이고 그 뒤 자식이 드로어 판인데,
+ * 닫힌 판은 화면에 보이지 않아 덤프에 없으므로 둘째 자식부터가 곧 열린 드로어다. 판마다 그 깊이부터 다시 세어 붙인다.
+ * 열린 드로어가 없으면 빈 문자열이라 다른 화면의 시그니처는 바뀌지 않는다
+ */
+function drawers(root: ViewNode, skel: (n: ViewNode, base: number) => string): string {
+  const panels: string[] = [];
+  walk(root, (n) => {
+    if (n.className.endsWith('DrawerLayout')) for (const p of n.children.slice(1)) panels.push(skel(p, p.depth));
+  });
+  return panels.length ? `|drawer:${panels.join('|')}` : '';
 }
 
 const isWebView = (n: ViewNode) => n.className.endsWith('WebView');
@@ -341,6 +355,7 @@ export function pageWebViews(root: ViewNode): ViewNode[] {
  * - 페이저(ViewPager·ViewPager2)의 페이지는 화면 자체가 바뀌는 것이라 스크롤 영역이어도 내용을 남기고
  * - 선택 상태(하단 탭·탭 레이아웃의 고른 항목)를 넣어, 틀이 같은 탭 화면들이 하나로 합쳐지지 않게 한다
  * - WebView 안 웹 페이지의 뼈대를 붙여, 웹 페이지끼리 이동한 것을 다른 화면으로 본다
+ * - 열린 드로어의 뼈대를 붙여, 드로어를 연 상태를 다른 화면으로 본다
  */
 export function screenSignature(root: ViewNode, maxDepth = 6): string {
   const isPager = (n: ViewNode) => /Pager/.test(n.className);
@@ -363,7 +378,7 @@ export function screenSignature(root: ViewNode, maxDepth = 6): string {
   };
   walkSelected(root, false);
   const extra = deepSelected.size ? `|${[...deepSelected].sort().join(',')}` : '';
-  return createHash('sha1').update(skel(root) + extra + webPages(root, skel)).digest('hex').slice(0, 12);
+  return createHash('sha1').update(skel(root) + extra + webPages(root, skel) + drawers(root, skel)).digest('hex').slice(0, 12);
 }
 
 /** 깊이별 노드 수 등 뷰 계층 통계 (오버드로/과도한 중첩 진단용) */

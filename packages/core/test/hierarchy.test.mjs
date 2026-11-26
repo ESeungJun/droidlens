@@ -76,6 +76,28 @@ test('시그니처: 글자가 바뀌어도 같고 구조가 바뀌면 다르다'
   assert.notEqual(screenSignature(a), screenSignature(c));
 });
 
+// 캘린더 앱처럼 DrawerLayout 이 깊이 6에 있으면 드로어 판(깊이 7)이 뼈대 깊이 제한에 잘려 시그니처가 그대로였다 (#112)
+const drawerScreen = (open) => {
+  const content = node({ cls: 'android.widget.FrameLayout', id: 'main_content', bounds: '[0,0][1080,2400]' }, node({ cls: 'android.widget.ImageButton', desc: '메뉴', clickable: true }));
+  const panel = node(
+    { cls: 'android.widget.FrameLayout', id: 'drawer_frame', bounds: '[0,0][840,2400]' },
+    node({ cls: 'android.widget.ScrollView', scrollable: true, bounds: '[0,0][840,2400]' }, node({ cls: 'android.widget.Button', text: '일정', clickable: true })),
+  );
+  const drawer = node({ cls: 'androidx.drawerlayout.widget.DrawerLayout', id: 'drawer_layout', bounds: '[0,0][1080,2400]' }, content + (open ? panel : ''));
+  const wrap = (body, n) => (n ? wrap(node({ cls: 'android.widget.LinearLayout', bounds: '[0,0][1080,2400]' }, body), n - 1) : body);
+  return parseHierarchyXml(xml(wrap(drawer, 4))).root;
+};
+
+test('시그니처: 깊은 곳의 드로어를 열면 다른 화면, 같은 드로어면 같은 화면 (#112)', () => {
+  const closed = drawerScreen(false);
+  const open = drawerScreen(true);
+  assert.equal(findNodes(open, { className: 'DrawerLayout' })[0].depth, 6, '캘린더 앱과 같은 깊이');
+  assert.notEqual(screenSignature(open), screenSignature(closed));
+  assert.notEqual(structureSignature(open), structureSignature(closed));
+  assert.equal(screenSignature(drawerScreen(true)), screenSignature(open));
+  assert.equal(screenSignature(drawerScreen(false)), screenSignature(closed), '닫힌 화면은 그대로');
+});
+
 test('isRiskyLabel: 한글·영문·붙여 쓴 이름', () => {
   for (const s of ['삭제', '계정 삭제하기', '로그아웃', '결제하기', '송금', 'Delete', 'Log out', 'sign out', 'btnDelete', 'ic_trash', 'action.send', 'Place order', 'BUY']) {
     assert.equal(isRiskyLabel(s), true, s);
