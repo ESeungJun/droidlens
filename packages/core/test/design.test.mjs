@@ -802,7 +802,8 @@ test('리뷰: 큰 글자 노드도 화소 표본을 묶어 빨리 잰다', () =>
   }
   const t0 = performance.now();
   const [m] = d.measureTexts(parseHierarchyXml(xml).root, img, screen, 'com.example.app');
-  assert.ok(performance.now() - t0 < 300, `${Math.round(performance.now() - t0)}ms`);
+  // 기계 속도에 따라 흔들리지 않게 큰 퇴행(화소마다 객체를 만들던 때 수 초)만 잡는다. 로컬 약 80ms, CI 약 300ms
+  assert.ok(performance.now() - t0 < 1500, `${Math.round(performance.now() - t0)}ms`);
   assert.ok(m.color, '글자 색은 잰다');
 });
 
