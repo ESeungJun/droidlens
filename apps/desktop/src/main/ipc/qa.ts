@@ -45,7 +45,8 @@ export function register(handle: Handle): void {
     const out = [];
     for (const f of r.filePaths) {
       try {
-        const a = await dl.addQaSource(id, f);
+        // TC 표는 바로 가져오지 않고 미리보기에서 확인한 뒤 가져온다 (#153)
+        const a = await dl.addQaSource(id, f, { deferTcImport: true });
         out.push({
           id: a.source.id,
           title: a.source.title ?? a.source.ref,
@@ -71,7 +72,12 @@ export function register(handle: Handle): void {
   handle('qaTcImport', async (id: string, source: string, pick: { sheet: string; headerRow: number; map: Record<string, number> }) => {
     if (!pick || typeof pick !== 'object' || typeof pick.sheet !== 'string' || !pick.map || typeof pick.map !== 'object') throw new Error('잘못된 요청입니다');
     const r = await dl.importQaTcTable(String(id), String(source), { sheet: pick.sheet, headerRow: Number(pick.headerRow), map: pick.map });
-    return { cases: r.cases, warnings: r.warnings };
+    return { cases: r.cases, added: r.added, changed: r.changed, same: r.same, warnings: r.warnings };
+  });
+  // 가져오기 미리보기 (#153): 계획을 바꾸지 않는다
+  handle('qaTcPreview', async (id: string, source: string, pick: { sheet: string; headerRow: number; map: Record<string, number> }) => {
+    if (!pick || typeof pick !== 'object' || typeof pick.sheet !== 'string' || !pick.map || typeof pick.map !== 'object') throw new Error('잘못된 요청입니다');
+    return dl.previewQaTcTable(String(id), String(source), { sheet: pick.sheet, headerRow: Number(pick.headerRow), map: pick.map });
   });
   handle('qaCaseUpdate', async (id: string, caseId: string, patch: Record<string, unknown>) => {
     const extra = Object.keys(patch ?? {}).filter((k) => !(HUMAN_CASE_FIELDS as readonly string[]).includes(k));

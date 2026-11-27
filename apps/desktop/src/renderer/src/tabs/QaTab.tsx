@@ -1,5 +1,5 @@
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { api, type QaCase, type QaPlanSummary, type QaPlanDeleteInfo, type QaPlanView, type QaRunView, type QaSourceAdded } from '../api';
+import { api, type QaCase, type QaPlanSummary, type QaPlanDeleteInfo, type QaPlanView, type QaRunView, type QaSourceAdded, type QaTcPreview } from '../api';
 import { AuthHelp } from '../AuthHelp';
 import { useApp } from '../App';
 import { useI18n, useT } from '../i18n';
@@ -590,17 +590,33 @@ function TcColumnPicker({
   const [at, setAt] = useState(0);
   const table = tables[at];
   const [map, setMap] = useState<Record<string, number | undefined>>(() => ({ ...tables[0]?.guess }));
+  // 가져오기 전 미리보기 (#153). 열을 바꾸면 다시 본다
+  const [preview, setPreview] = useState<QaTcPreview | null>(null);
   const ready = map.title !== undefined || map.steps !== undefined;
+  const clean = () => Object.fromEntries(Object.entries(map).filter(([, v]) => v !== undefined)) as Record<string, number>;
+  const pick = () => ({ sheet: table.sheet, headerRow: table.headerRow, map: clean() });
+  const look = async () => {
+    const p = await run(api.qaTcPreview(planId, source, pick()));
+    if (p) setPreview(p);
+  };
+  const change = (next: Record<string, number | undefined>) => (setMap(next), setPreview(null));
+  // 머리글을 알아본 표는 열을 채워 두었으니 바로 미리 보여 준다
+  useEffect(() => {
+    if (table?.recognized) void look();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [at]);
   return (
     <div className="card">
-      <h5>{t('TC 표 열 고르기')}</h5>
+      <h5>{t(table?.recognized ? 'TC 표 가져오기 미리보기' : 'TC 표 열 고르기')}</h5>
       <p className="faint" style={{ marginTop: 0 }}>
-        {t('{name} 의 머리글을 알아보지 못했어요. TC 표라면 칸마다 맞는 열을 골라 주세요. 고른 열의 글은 바꾸지 않고 그대로 가져옵니다.', { name: title })}
+        {table?.recognized
+          ? t('{name} 에서 TC 표를 알아봤어요. 열과 미리보기를 확인하고 가져와 주세요. 고른 열의 글은 바꾸지 않고 그대로 가져옵니다.', { name: title })
+          : t('{name} 의 머리글을 알아보지 못했어요. TC 표라면 칸마다 맞는 열을 골라 주세요. 고른 열의 글은 바꾸지 않고 그대로 가져옵니다.', { name: title })}
       </p>
       {tables.length > 1 && (
         <label className="chk" style={{ marginBottom: 8 }}>
           {t('시트')}
-          <select className="input" value={at} onChange={(e) => (setAt(Number(e.target.value)), setMap({ ...tables[Number(e.target.value)]?.guess }))}>
+          <select className="input" value={at} onChange={(e) => (setAt(Number(e.target.value)), change({ ...tables[Number(e.target.value)]?.guess }))}>
             {tables.map((x, i) => (
               <option key={i} value={i}>
                 {x.sheet || t('(CSV)')}
@@ -616,7 +632,7 @@ function TcColumnPicker({
             <select
               className="input"
               value={map[f] ?? ''}
-              onChange={(e) => setMap((m) => ({ ...m, [f]: e.target.value === '' ? undefined : Number(e.target.value) }))}
+              onChange={(e) => change({ ...map, [f]: e.target.value === '' ? undefined : Number(e.target.value) })}
             >
               <option value="">{t('(없음)')}</option>
               {table.headers.map((h, i) => (
@@ -628,26 +644,87 @@ function TcColumnPicker({
           </label>
         ))}
       </div>
+      {preview && <TcPreviewTable p={preview} />}
       <div className="qa-row" style={{ marginTop: 10 }}>
-        <button
-          className="btn primary"
-          disabled={!ready}
-          onClick={async () => {
-            const clean = Object.fromEntries(Object.entries(map).filter(([, v]) => v !== undefined)) as Record<string, number>;
-            const r = await run(api.qaTcImport(planId, source, { sheet: table.sheet, headerRow: table.headerRow, map: clean }));
-            if (!r) return;
-            toast(t('TC {n}개를 원문 그대로 가져왔어요', { n: r.cases }));
-            for (const w of r.warnings) toast(`⚠ ${w}`, true);
-            await onDone();
-          }}
-        >
-          {t('이 열로 TC 가져오기')}
-        </button>
+        {preview ? (
+          <button
+            className="btn primary"
+            disabled={!ready || preview.added + preview.changed === 0}
+            onClick={async () => {
+              const r = await run(api.qaTcImport(planId, source, pick()));
+              if (!r) return;
+              toast(t('TC 를 가져왔어요: 새 TC {a}개, 바뀐 TC {c}개 (그대로 {s}개는 다시 넣지 않았어요)', { a: r.added, c: r.changed, s: r.same }));
+              for (const w of r.warnings) toast(`⚠ ${w}`, true);
+              await onDone();
+            }}
+          >
+            {t('이대로 가져오기')}
+          </button>
+        ) : (
+          <button className="btn primary" disabled={!ready} onClick={look}>
+            {t('미리보기')}
+          </button>
+        )}
         <button className="btn" onClick={() => onDone()}>
-          {t('TC 표가 아니에요')}
+          {t('가져오지 않기')}
         </button>
         {!ready && <span className="faint">{t('제목이나 단계 열은 꼭 골라 주세요')}</span>}
+        {preview && preview.added + preview.changed === 0 && <span className="faint">{t('새로 넣거나 바꿀 TC 가 없어요')}</span>}
       </div>
+    </div>
+  );
+}
+
+const PREVIEW_STATUS = { new: ['새 TC', 'pass'], changed: ['바뀜', 'warn'], same: ['그대로', 'mute'] } as const;
+
+/** 가져오기 미리보기 (#153): 개수와 처음 몇 줄 */
+function TcPreviewTable({ p }: { p: QaTcPreview }) {
+  const t = useT();
+  return (
+    <div style={{ marginTop: 12 }}>
+      <div className="qa-tally" style={{ marginBottom: 8 }}>
+        <span className="rv-chip pass">
+          {t('새 TC')} <b>{p.added}</b>
+        </span>
+        <span className="rv-chip warn">
+          {t('바뀌는 TC')} <b>{p.changed}</b>
+        </span>
+        <span className="rv-chip mute">
+          {t('그대로')} <b>{p.same}</b>
+        </span>
+        {p.total > p.rows.length && <span className="faint">{t('모두 {n}줄 중 처음 {k}줄', { n: p.total, k: p.rows.length })}</span>}
+      </div>
+      <table className="qa-table">
+        <thead>
+          <tr>
+            <th style={{ width: 80 }}>{t('결과')}</th>
+            <th>{t('제목')}</th>
+            <th style={{ width: 70 }}>{t('우선순위')}</th>
+            <th style={{ width: 60 }}>{t('단계')}</th>
+            <th>{t('기대 결과')}</th>
+          </tr>
+        </thead>
+        <tbody>
+          {p.rows.map((r, i) => (
+            <tr key={i}>
+              <td>
+                <span className={`rv-chip ${PREVIEW_STATUS[r.status][1]}`}>{t(PREVIEW_STATUS[r.status][0])}</span>
+                {r.target && <div className="faint mono">{r.target}</div>}
+              </td>
+              <td className="qa-wrap">{r.title}</td>
+              <td>{r.priority}</td>
+              <td>{r.steps}</td>
+              <td className="qa-wrap faint">{r.expected}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      {p.changed > 0 && <div className="faint" style={{ marginTop: 6 }}>{t('바뀌는 TC 는 그 자리에서 표의 내용으로 고쳐요. 고른 것은 그대로 두고, 내용이 바뀐 확인 필수 TC 는 허용을 다시 받아요.')}</div>}
+      {p.warnings.map((w, i) => (
+        <div key={i} className="faint">
+          ⚠ {w}
+        </div>
+      ))}
     </div>
   );
 }

@@ -243,4 +243,18 @@ export const qa: Record<string, string> = {
   '{m}분 {s}초': '{m}m {s}s',
   '{n}개, 합 {total}': '{n} TCs, {total} total',
   '앱 강제 종료': 'App force-stops',
+  // TC 표 가져오기 미리보기 (#153)
+  'TC 표 가져오기 미리보기': 'TC sheet import preview',
+  '{name} 에서 TC 표를 알아봤어요. 열과 미리보기를 확인하고 가져와 주세요. 고른 열의 글은 바꾸지 않고 그대로 가져옵니다.': 'Found a TC sheet in {name}. Check the columns and the preview, then import. Text in the picked columns is imported as is.',
+  'TC 를 가져왔어요: 새 TC {a}개, 바뀐 TC {c}개 (그대로 {s}개는 다시 넣지 않았어요)': 'Imported TCs: {a} new, {c} changed ({s} unchanged were not added again)',
+  '이대로 가져오기': 'Import as previewed',
+  '미리보기': 'Preview',
+  '가져오지 않기': 'Don\'t import',
+  '새로 넣거나 바꿀 TC 가 없어요': 'Nothing new or changed to import',
+  '새 TC': 'New',
+  '바뀜': 'Changed',
+  '그대로': 'Unchanged',
+  '바뀌는 TC': 'Changed',
+  '모두 {n}줄 중 처음 {k}줄': 'First {k} of {n} rows',
+  '바뀌는 TC 는 그 자리에서 표의 내용으로 고쳐요. 고른 것은 그대로 두고, 내용이 바뀐 확인 필수 TC 는 허용을 다시 받아요.': 'Changed TCs are updated in place from the sheet. Selections stay; confirm-required TCs whose content changed need approval again.',
 };
