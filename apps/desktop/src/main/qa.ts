@@ -16,8 +16,11 @@ export const QA_TURNS_PER_CONVERSATION = 10;
 /** TC 뽑기에 주는 시간. 문서가 길고 Figma 프레임이 많으면 오래 걸린다 */
 export const QA_EXTRACT_TIMEOUT_MS = 30 * 60_000;
 
-/** TC 뽑기에 주는 DroidLens 도구. graph_get 은 저장된 화면 지도 파일만 읽는다(기기 조작 없음, #128) */
-const DROIDLENS_PLANNER_TOOLS = ['qa_plan_get', 'qa_source_read', 'qa_plan_save', 'qa_case_update', 'design_guide_save', 'graph_get'].map(
+/**
+ * TC 뽑기에 주는 DroidLens 도구. graph_get 은 저장된 화면 지도 파일만 읽는다(기기 조작 없음, #128).
+ * figma_outline 은 Claude Code 가 파일로 저장한 큰 Figma get_metadata 응답에서 프레임 목록만 읽는다(그 자리·이름의 파일만, #156)
+ */
+const DROIDLENS_PLANNER_TOOLS = ['qa_plan_get', 'qa_source_read', 'qa_plan_save', 'qa_case_update', 'design_guide_save', 'graph_get', 'figma_outline'].map(
   (n) => `mcp__droidlens__${n}`,
 );
 
@@ -261,6 +264,9 @@ export function extractQaPlan(planId: string, note: string | undefined, ctx: Cla
       '기기 도구는 없다. 계획 저장 도구와 문서 읽기 도구만 쓴다.',
       links
         ? 'Confluence·Figma 링크는 사용자의 커넥터 읽기 도구로 읽는다. 커넥터가 없거나 거부되면 그 문서를 PDF 로 내보내 넣어 달라고 보고한다.'
+        : '',
+      plan.sources.some((s) => s.kind === 'figma')
+        ? 'Figma get_metadata 응답이 너무 커서 파일로 저장됐다는 결과가 오면(페이지·큰 섹션 링크) 그 파일 경로를 figma_outline 에 넘겨 화면 프레임 목록을 받는다. Read 는 쓸 수 없다.'
         : '',
       '보고는 한국어로.',
     ]

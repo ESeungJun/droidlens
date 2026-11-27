@@ -233,6 +233,8 @@ export async function startClaude(
     return null;
   }
 
+  // figma_outline 이 claude 가 큰 응답을 저장한 설정 폴더만 읽게 같은 폴더를 알려 준다 (#156)
+  const configDir = await claudeConfigDir();
   const mcpConfig = {
     mcpServers: {
       droidlens: {
@@ -244,6 +246,7 @@ export async function startClaude(
           ELECTRON_RUN_AS_NODE: '1',
           DROIDLENS_CONFIRM: '1',
           ...(confirmReady ? { DROIDLENS_CONFIRM_SOCKET: confirmSocket, DROIDLENS_CONFIRM_TOKEN: confirmToken } : {}),
+          ...(configDir ? { CLAUDE_CONFIG_DIR: configDir } : {}),
           ...req.mcpEnv,
         },
       },

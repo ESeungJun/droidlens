@@ -7,3 +7,4 @@ export * from './report.js';
 export * from './store.js';
 export * from './figma-image.js';
 export * from './run.js';
+export * from './figma-outline.js';
