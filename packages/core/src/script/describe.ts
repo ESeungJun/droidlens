@@ -113,3 +113,12 @@ export function stepReport(step: ScriptStep, title: string): StepReport {
         : { actions: [{ at: Date.now(), text: reportTitle }] },
   };
 }
+
+/** 화면을 바꾸지 않는 단계(대기·검사·캡처·쉬기). 경로 기록이 탭과 그 도착 화면 사이에 끼어도 연결을 끊지 않는다 (#147) */
+const KEEPS_SCREEN = new Set(['wait', 'assert', 'screenshot', 'matchScreenshot', 'sleep']);
+
+export function stepKeepsScreen(step: ScriptStep): boolean {
+  if (typeof step !== 'object' || step === null) return false;
+  const keys = Object.keys(step);
+  return keys.length === 1 && KEEPS_SCREEN.has(keys[0]);
+}

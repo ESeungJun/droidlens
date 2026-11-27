@@ -189,6 +189,8 @@ export function register(server: McpServer): void {
           last = h;
           const found = dl.findNodes(h.root, sel);
           if (a.gone ? found.length === 0 : found.length > 0) {
+            // 기다린 화면이 앞 탭의 도착 화면 후보가 된다 (#147). 대기는 조작 번호를 올리지 않는다
+            await pathSee(dev, h);
             recordStep(
               { wait: { ...cleanSelector(sel), ...(a.gone ? { gone: true } : {}), ...(a.timeoutMs ? { timeout: a.timeoutMs } : {}) } } as dl.ScriptStep,
               `기다림: ${dl.selectorLabel(sel)} ${a.gone ? '사라짐' : '나타남'}`,

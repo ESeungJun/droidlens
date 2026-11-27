@@ -102,7 +102,7 @@ export function register(server: McpServer): void {
       const dev = await device(serial);
       const { result, files } = await dl.compareDesignOnDevice(dev, p, c, r);
       const n = result.items.length;
-      logAction(`design_compare ${c}: 차이 ${n}건 (높음 ${result.counts.high})`);
+      logAction(`design_compare ${c}: 차이 ${n}건 (높음 ${result.counts.high})`, { keepsScreen: true });
       const found = result.matched.exact + result.matched.normalized + result.matched.similar + result.matched.position;
       const lines = [
         `${c} 디자인 비교: 차이 ${n}건 · 높음 ${result.counts.high} · 중간 ${result.counts.medium} · 낮음 ${result.counts.low}`,

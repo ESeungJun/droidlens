@@ -121,7 +121,6 @@ export function register(server: McpServer): void {
         // 새 시나리오 시작이 실패해도 앞 TC 의 녹화·허용 상태가 남지 않게 먼저 비운다
         recorder.active = false;
         recorder.tc = undefined;
-        recorder.relink = undefined;
         await recorder.path?.finish(prevTc, 'blocked').catch(() => undefined);
         recorder.path = undefined;
         const html = await prev.finish('blocked', '끝내지 않은 채 다음 시나리오를 시작해 중단됨', recorder.actions).catch(() => undefined);
@@ -144,7 +143,6 @@ export function register(server: McpServer): void {
       recorder.steps = [];
       recorder.mocks = new Map();
       recorder.actions = [];
-      recorder.relink = undefined;
       recorder.tc = tc && tcCase ? { plan: tc.plan, case: tc.case, fingerprint: dl.dangerFingerprint(tcCase), ...(tc.run ? { run: tc.run } : {}) } : undefined;
       // 온디바이스 에이전트를 지금 띄워 둔다. 단계 도중에 처음 설치되면 Play 프로텍트 창이 앱을 가린 채 스크린샷에 찍힌다
       const agent = await dl.ensureAgent(dev).catch(() => undefined);
@@ -321,7 +319,6 @@ export function register(server: McpServer): void {
             const linked = await dl.linkQaCaseScript(tc.plan, tc.case, basename(p, '.yaml'), { hash, fingerprint: tc.fingerprint }).then(
               () => {
                 savedScript = basename(p, '.yaml');
-                recorder.relink = { plan: tc.plan, case: tc.case, script: savedScript, fingerprint: tc.fingerprint };
                 return `${tc.case} 에 스크립트를 이었습니다`;
               },
               (e) => `${tc.case} 에 스크립트를 잇지 못했습니다: ${(e as Error).message.split('\n')[0]}`,
@@ -435,21 +432,6 @@ export function register(server: McpServer): void {
           if (e.status !== 'running') lines.push(`${e.index + 1}/${e.total} ${e.status.toUpperCase()} ${e.title}${e.detail && e.status === 'fail' ? `\n    ${e.detail.replace(/\n/g, '\n    ')}` : ''}`);
         },
       });
-      // 방금 끝낸 TC 의 스크립트를 같은 TC 안에서 고쳐 통과하면 다시 잇는다 (#140). 다른 TC·시나리오 중이면 잇지 않는다
-      const rl = recorder.relink;
-      if (
-        r.verdict === 'pass' && rl && !recorder.active && loaded.tc?.plan === rl.plan && loaded.tc.case === rl.case &&
-        p === (await scriptPath(rl.script, true)) // 같은 이름의 다른 폴더 파일이 아니라 스크립트 폴더의 그 파일
-      )
-        lines.push(
-          await dl.linkQaCaseScript(rl.plan, rl.case, rl.script, { hash: dl.sha256(bytes), fingerprint: rl.fingerprint, relink: true }).then(
-            () => `${rl.case} 에 고친 스크립트를 다시 이었습니다`,
-            (e) => `${rl.case} 에 고친 스크립트를 다시 잇지 못했습니다: ${(e as Error).message.split('\n')[0]}`,
-          ).finally(
-            // 다시 잇기는 한 번만 한다
-            () => (recorder.relink = undefined),
-          ),
-        );
       return text([`판정: ${r.verdict.toUpperCase()} (${r.passed} 통과 · ${r.failed} 실패 · ${r.skipped} 건너뜀, ${(r.durationMs / 1000).toFixed(1)}초)`, ...lines, `리포트: ${r.report}`].join('\n'));
     },
   );

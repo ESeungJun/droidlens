@@ -259,11 +259,6 @@ export const recorder: {
   /** TC 를 실행하는 시나리오. run 이 있으면 scenario_finish 가 그 회차에 결과를 적는다 (#76) */
   tc?: { plan: string; case: string; fingerprint: string; run?: string };
   /**
-   * 방금 끝낸 TC 에 이은 스크립트 (#140). 다음 scenario_start 전까지 그 스크립트를 고쳐 script_run 이 통과하면 해시를 다시 잇는다.
-   * 다른 TC 를 돌리는 중에 고친 스크립트는 다시 잇지 않아서, 다음 회차가 돌리지 않고 에이전트로 넘긴다
-   */
-  relink?: { plan: string; case: string; script: string; fingerprint: string };
-  /**
    * 시나리오가 tap 으로 지난 화면 이동을 앱 지도에 남기는 경로 (#131). 온디바이스 에이전트가 있고 앱을 아는 시나리오에서만 만든다
    * (화면 확인이 느리면 조작마다 1~2초씩 늦어지므로)
    */
@@ -272,9 +267,12 @@ export const recorder: {
   seq: number;
 } = { active: false, steps: [], mocks: new Map(), actions: [], seq: 0 };
 
-/** 시나리오 진행 중이면 조작 로그를 남긴다 (스크립트로 녹화되지 않는 조작도 포함: 좌표 스와이프·앱 종료·목·Prefs 변경 등) */
-export function logAction(text: string): void {
-  recorder.seq++;
+/**
+ * 시나리오 진행 중이면 조작 로그를 남긴다 (스크립트로 녹화되지 않는 조작도 포함: 좌표 스와이프·앱 종료·목·Prefs 변경 등).
+ * keepsScreen: 대기·검사처럼 화면을 바꾸지 않는 조작. 조작 번호를 올리지 않아 탭과 그 도착 화면 사이를 끊지 않는다 (#147)
+ */
+export function logAction(text: string, opts: { keepsScreen?: boolean } = {}): void {
+  if (!opts.keepsScreen) recorder.seq++;
   if (recorder.active) recorder.actions.push({ at: Date.now(), text });
 }
 
@@ -303,7 +301,7 @@ export function pathNote(action: dl.TcPathAction): void {
 export function recordStep(step: dl.ScriptStep, label?: string): void {
   if (!recorder.active) return;
   recorder.steps.push(step);
-  logAction(label ?? dl.describeStep(step));
+  logAction(label ?? dl.describeStep(step), { keepsScreen: dl.stepKeepsScreen(step) });
 }
 
 /** 요소를 사람이 읽는 짧은 말로: "상점정보/후기" (#tab_store) */

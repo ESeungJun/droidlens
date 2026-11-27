@@ -64,8 +64,6 @@ export const QA_RUN_TOOLS: readonly string[] = [
   'scenario_finish',
   'script_list',
   'script_read',
-  'script_write',
-  'script_run',
   // 판정 (계획은 읽기만, 결과는 돌리지 못한 TC 의 skip·blocked 만 적힌다)
   'qa_plan_get',
   'qa_case_result',
@@ -88,6 +86,9 @@ export const QA_RUN_DENIED_TOOLS: readonly string[] = [
   // TC 와 상관없는 계획 목록·원문 읽기
   'qa_plan_list',
   'qa_source_read',
+  // 저장한 스크립트 고치기·다시 돌리기: 회차의 스크립트 실행은 앱이 한다. 통과 뒤 다시 돌리면 TC 마다 앱 재시작과 7~20초가 더 든다 (#148)
+  'script_write',
+  'script_run',
   // 기기에 앱 설치, 저장된 시나리오 전부 돌리기: 회차의 TC 범위를 넘는다
   'install_apk',
   'suite_run',
