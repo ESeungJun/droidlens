@@ -202,6 +202,7 @@ export function RunDetail({ g, onOpenRecord }: { g: RunGroup; onOpenRecord: (s: 
             .join(', ')}
         </div>
       )}
+      {view?.summary.metrics && <RunMetrics m={view.summary.metrics} />}
       {view && (
         <table className="qa-table">
           <thead>
@@ -244,6 +245,31 @@ export function RunDetail({ g, onOpenRecord }: { g: RunGroup; onOpenRecord: (s: 
           </tbody>
         </table>
       )}
+    </div>
+  );
+}
+
+/** 실행 측정값 (#141): 회차마다 실행 비용을 비교한다 */
+function RunMetrics({ m }: { m: NonNullable<QaRunView['summary']['metrics']> }) {
+  const t = useT();
+  // 초로 먼저 반올림한다 (59.5초가 "60초"로 나오지 않게)
+  const sec = (ms: number) => {
+    const s = Math.round(ms / 1000);
+    return s < 60 ? t('{n}초', { n: s }) : t('{m}분 {s}초', { m: Math.floor(s / 60), s: s % 60 });
+  };
+  return (
+    <div className="qa-tally" style={{ marginBottom: 8 }} title={t('이 회차를 돌리는 데 든 비용입니다')}>
+      <span className="rv-chip mute">
+        {t('대화')} <b>{t('{n}번', { n: m.conversations })}</b>
+      </span>
+      {m.cases > 0 && (
+        <span className="rv-chip mute">
+          {t('TC 당 평균')} <b>{sec(m.avgCaseMs)}</b> ({t('{n}개, 합 {total}', { n: m.cases, total: sec(m.totalCaseMs) })})
+        </span>
+      )}
+      <span className="rv-chip mute">
+        {t('앱 강제 종료')} <b>{t('{n}번', { n: m.forceStops })}</b>
+      </span>
     </div>
   );
 }

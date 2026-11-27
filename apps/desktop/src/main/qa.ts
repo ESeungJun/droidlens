@@ -393,7 +393,8 @@ export function runQaPlan(planId: string, opts: QaRunOptions, dev: dl.DeviceAdb,
         // 새 대화의 첫 TC 는 늘 새로 띄운다 (앞 대화가 시간 제한으로 끊겼으면 앱 상태를 모른다)
         const restart = !agentRun.alive || dl.needsRestart(prev, { preconditions: c.preconditions, changesData: false });
         // 재시작은 에이전트에게 맡기지 않고 앱이 한다. 따르지 않아도 앞 TC 상태가 섞이지 않게 (스크립트 keepProcess 와 같은 규칙)
-        if (restart && plan.app) await dl.stopApp(dev, plan.app).catch(() => undefined);
+        const stopped = restart && plan.app ? await dl.stopApp(dev, plan.app).then(() => true, () => false) : false;
+        const newConversation = !agentRun.alive;
         // 에이전트를 띄우지 못해도(설정 파일·claude 문제) 회차를 끊지 않고 그 TC 를 막힘으로 적고 다음으로 간다
         const r = await agentRun.turn(
           c.id,
@@ -408,6 +409,14 @@ export function runQaPlan(planId: string, opts: QaRunOptions, dev: dl.DeviceAdb,
           ].join('\n'),
           timeoutMs,
         );
+        // 실행 측정값 (#141): 새로 연 대화, 강제 종료, 이 TC 에 걸린 시간
+        await dl
+          .addQaRunMetrics(planId, run.id, {
+            conversations: newConversation && !r.notStarted ? 1 : 0,
+            forceStops: stopped ? 1 : 0,
+            ...(signal.aborted ? {} : { caseMs: { [c.id]: Date.now() - t0 } }),
+          })
+          .catch(() => undefined);
         if (signal.aborted) break;
         let mine = (await dl.loadQaRun(planId, run.id)).results.find((x) => x.case === c.id && x.at >= t0);
         // 결과 없이·실패·막힘·오류로 끝났거나 대화가 길어지면 대화를 닫는다. MCP 서버 메모리에 열린 시나리오·앞 TC 맥락을

@@ -234,4 +234,13 @@ export const qa: Record<string, string> = {
   '통과 {p}/{n}': 'Passed {p}/{n}',
   '안 돌림 {n}': 'Not run {n}',
   '모든 갈래': 'All tracks',
+  // 회차 실행 측정값 (#141)
+  '이 회차를 돌리는 데 든 비용입니다': 'What this run cost to execute',
+  '대화': 'Conversations',
+  '{n}번': '{n}',
+  'TC 당 평균': 'Avg per TC',
+  '{n}초': '{n}s',
+  '{m}분 {s}초': '{m}m {s}s',
+  '{n}개, 합 {total}': '{n} TCs, {total} total',
+  '앱 강제 종료': 'App force-stops',
 };
