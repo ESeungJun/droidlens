@@ -304,7 +304,7 @@ export interface AddedQaSource {
   /** TC 표를 알아보고 원문 그대로 가져온 결과 (#129) */
   tcImport?: QaTcImport;
   /** 표는 있는데 머리글을 못 알아봤을 때 열 고르기 후보 (guess: 찾은 열, 화면에 미리 채움). 사람이 열을 고르면 importQaTcTable 로 가져온다 */
-  tcTables?: { sheet: string; headerRow: number; headers: string[]; guess: TcColumnMap }[];
+  tcTables?: { sheet: string; headerRow: number; headers: string[]; guess: TcColumnMap; recognized?: boolean }[];
 }
 
 export interface QaTcImport {
@@ -321,6 +321,7 @@ function importTables(
   tables: QaTable[],
   sourceId: string,
   existingIds: string[],
+  defer = false,
 ): { cases: QaCase[]; tcImport?: QaTcImport; tcTables?: AddedQaSource['tcTables'] } {
   const t0 = performance.now();
   const ids = [...existingIds];
@@ -331,8 +332,9 @@ function importTables(
   for (const t of tables) {
     const found = findTcTable(t);
     if (!found) continue;
-    if (!found.detect.ok) {
-      candidates.push({ sheet: found.sheet, headerRow: found.headerRow, headers: found.headers, guess: found.detect.map });
+    // 미리보기(#153): 알아본 표도 가져오지 않고 열을 채운 후보로 돌려준다. 사람이 미리보기를 보고 확인해야 반영된다
+    if (!found.detect.ok || defer) {
+      candidates.push({ sheet: found.sheet, headerRow: found.headerRow, headers: found.headers, guess: found.detect.map, recognized: found.detect.ok });
       continue;
     }
     const r = importTcRows(t, found.headerRow, found.detect.map, { sourceId, existingIds: ids });
@@ -350,11 +352,11 @@ function importTables(
  * 문서 하나 넣기: 파일은 사본과 글을 저장하고, 링크는 목록에만 적는다.
  * 받은 경로를 그대로 읽으므로 사람이 고른 파일(대화상자·끌어다 놓기)만 넘긴다. 에이전트가 정한 경로는 받지 않는다.
  */
-export function addQaSource(id: string, input: string): Promise<AddedQaSource> {
-  return withPlanLock(id, () => addSource(id, input));
+export function addQaSource(id: string, input: string, opts: { deferTcImport?: boolean } = {}): Promise<AddedQaSource> {
+  return withPlanLock(id, () => addSource(id, input, opts.deferTcImport === true));
 }
 
-async function addSource(id: string, input: string): Promise<AddedQaSource> {
+async function addSource(id: string, input: string, deferTc: boolean): Promise<AddedQaSource> {
   const plan = await loadQaPlan(id);
   const c = classifyQaSource(input);
   const sid = nextId(
@@ -403,6 +405,7 @@ async function addSource(id: string, input: string): Promise<AddedQaSource> {
         f.tables,
         sid,
         plan.cases.map((x) => x.id),
+        deferTc,
       );
   }
   const next = validatePlan({
@@ -415,36 +418,148 @@ async function addSource(id: string, input: string): Promise<AddedQaSource> {
   return { source, duplicate: false, warnings, textLength, tcImport: imported.tcImport, tcTables: imported.tcTables };
 }
 
+/** TC 표 가져오기 결과 (#153): cases 는 반영한(새로 더하거나 고친) TC 수 */
+export interface QaTcTableImport extends QaTcImport {
+  /** 새로 더한 TC 수 */
+  added: number;
+  /** 원본 번호가 같은 TC 를 그 자리에서 고친 수 */
+  changed: number;
+  /** 이미 같은 내용이 있어 다시 넣지 않은 행 수 */
+  same: number;
+}
+
+export interface QaTcPreviewRow {
+  title: string;
+  priority: QaCase['priority'];
+  steps: number;
+  expected: string;
+  status: 'new' | 'changed' | 'same';
+  /** 바뀜·그대로면 맞댄 기존 TC 번호 */
+  target?: string;
+}
+
+export interface QaTcPreview {
+  total: number;
+  added: number;
+  changed: number;
+  same: number;
+  /** 처음 몇 줄 (PREVIEW_ROWS) */
+  rows: QaTcPreviewRow[];
+  warnings: string[];
+}
+
+const PREVIEW_ROWS = 5;
+const ORIG_ID = /^원본 번호: (.+)$/m;
+/** 원본 표가 정하는 칸만 비교한다. 비고·선택·허용 같은 사람 결정은 비교하지 않는다 */
+const tcContent = (c: QaCase) => JSON.stringify([c.title, c.preconditions, c.steps, c.expected, c.priority, c.kind]);
+
 /**
- * 사람이 고른 열로 TC 표를 가져온다 (머리글을 못 알아본 표). 넣어 둔 문서 사본을 다시 읽는다.
- * 사람 전용: 데스크톱 열 고르기 화면에서만 부른다
+ * 표에서 읽은 TC 를 계획의 TC 문서 갈래 TC 와 맞댄다 (#153).
+ * 원본 번호가 같으면 내용이 같을 때 그대로, 다르면 바뀜. 원본 번호가 없거나 맞는 TC 가 없으면 내용이 같은 TC 가 있을 때 그대로, 아니면 새 TC
+ */
+export function classifyTcImport(existing: QaCase[], incoming: QaCase[]): { c: QaCase; status: QaTcPreviewRow['status']; target?: QaCase }[] {
+  const tc = existing.filter((c) => c.track === 'tc');
+  const byOrig = new Map<string, QaCase>();
+  for (const c of tc) {
+    const o = c.notes?.match(ORIG_ID)?.[1].trim();
+    if (o && !byOrig.has(o)) byOrig.set(o, c);
+  }
+  const byContent = new Map(tc.map((c) => [tcContent(c), c]));
+  const used = new Set<string>();
+  return incoming.map((c) => {
+    const o = c.notes?.match(ORIG_ID)?.[1].trim();
+    const prev = o ? byOrig.get(o) : undefined;
+    if (prev && !used.has(prev.id)) {
+      used.add(prev.id);
+      return { c, status: tcContent(prev) === tcContent(c) ? 'same' : 'changed', target: prev };
+    }
+    const twin = byContent.get(tcContent(c));
+    return twin ? { c, status: 'same', target: twin } : { c, status: 'new' };
+  });
+}
+
+/** 넣어 둔 문서 사본에서 고른 시트·열로 TC 를 읽는다 (미리보기·가져오기 공용) */
+async function readPickedTable(plan: QaPlan, sourceId: string, pick: { sheet: string; headerRow: number; map: TcColumnMap }) {
+  const s = plan.sources.find((x) => x.id === sourceId);
+  if (!s) throw new Error(`문서가 없습니다: ${sourceId}`);
+  if (s.kind !== 'csv' && s.kind !== 'xlsx') throw new Error('TC 표는 CSV·엑셀 문서에서만 가져올 수 있어요');
+  if (plan.cases.some((c) => c.track === 'tc' && c.source?.source === sourceId)) throw new Error(`${sourceId} 는 이미 TC 를 가져온 문서예요`);
+  const extra = Object.keys(pick.map).filter((k) => !(TC_FIELDS as readonly string[]).includes(k));
+  if (extra.length) throw new Error(`모르는 칸입니다: ${extra.join(', ')}`);
+  const ext = s.ref.slice(s.ref.lastIndexOf('.')).toLowerCase();
+  const f = await readQaSourceFile(join(qaPlanDir(plan.id), 'sources', `${s.id}${ext}`));
+  const t = f.tables?.find((x) => x.sheet === pick.sheet);
+  if (!t) throw new Error(`시트를 찾지 못했어요: ${pick.sheet || '(CSV)'}`);
+  if (!Number.isInteger(pick.headerRow) || pick.headerRow < 0 || pick.headerRow >= t.rows.length) throw new Error('머리줄 위치가 표 밖입니다');
+  const r = importTcRows(t, pick.headerRow, pick.map, { sourceId, existingIds: plan.cases.map((c) => c.id) });
+  if (!r.cases.length) throw new Error('가져올 행이 없어요. 고른 열을 확인해 주세요');
+  return { t, r, rows: classifyTcImport(plan.cases, r.cases) };
+}
+
+/**
+ * 가져오기 미리보기 (#153): 고른 열로 읽으면 새로 생기는·바뀌는·그대로인 TC 수와 처음 몇 줄. 계획은 바꾸지 않는다
+ */
+export async function previewQaTcTable(id: string, sourceId: string, pick: { sheet: string; headerRow: number; map: TcColumnMap }): Promise<QaTcPreview> {
+  const plan = await loadQaPlan(id);
+  const { r, rows } = await readPickedTable(plan, sourceId, pick);
+  const n = (st: QaTcPreviewRow['status']) => rows.filter((x) => x.status === st).length;
+  return {
+    total: rows.length,
+    added: n('new'),
+    changed: n('changed'),
+    same: n('same'),
+    rows: rows.slice(0, PREVIEW_ROWS).map(({ c, status, target }) => ({
+      title: c.title,
+      priority: c.priority,
+      steps: c.steps.length,
+      expected: c.expected[0] ?? '',
+      status,
+      ...(target ? { target: target.id } : {}),
+    })),
+    warnings: r.warnings,
+  };
+}
+
+/**
+ * 사람이 고른 열로 TC 표를 가져온다. 넣어 둔 문서 사본을 다시 읽는다.
+ * 새 TC 는 더하고, 원본 번호가 같은 TC 는 표의 칸만 고치고(선택은 그대로, 내용이 바뀌면 확인 필수 허용은 다시 받는다), 같은 TC 는 다시 넣지 않는다 (#153).
+ * 사람 전용: 데스크톱 미리보기에서 확인한 뒤에만 부른다
  */
 export function importQaTcTable(
   id: string,
   sourceId: string,
   pick: { sheet: string; headerRow: number; map: TcColumnMap },
-): Promise<QaTcImport> {
+): Promise<QaTcTableImport> {
   return withPlanLock(id, async () => {
     const t0 = performance.now();
     const plan = await loadQaPlan(id);
-    const s = plan.sources.find((x) => x.id === sourceId);
-    if (!s) throw new Error(`문서가 없습니다: ${sourceId}`);
-    if (s.kind !== 'csv' && s.kind !== 'xlsx') throw new Error('TC 표는 CSV·엑셀 문서에서만 가져올 수 있어요');
-    if (plan.cases.some((c) => c.track === 'tc' && c.source?.source === sourceId)) throw new Error(`${sourceId} 는 이미 TC 를 가져온 문서예요`);
-    const extra = Object.keys(pick.map).filter((k) => !(TC_FIELDS as readonly string[]).includes(k));
-    if (extra.length) throw new Error(`모르는 칸입니다: ${extra.join(', ')}`);
-    const ext = s.ref.slice(s.ref.lastIndexOf('.')).toLowerCase();
-    const f = await readQaSourceFile(join(qaPlanDir(id), 'sources', `${s.id}${ext}`));
-    const t = f.tables?.find((x) => x.sheet === pick.sheet);
-    if (!t) throw new Error(`시트를 찾지 못했어요: ${pick.sheet || '(CSV)'}`);
-    if (!Number.isInteger(pick.headerRow) || pick.headerRow < 0 || pick.headerRow >= t.rows.length) throw new Error('머리줄 위치가 표 밖입니다');
-    const r = importTcRows(t, pick.headerRow, pick.map, { sourceId, existingIds: plan.cases.map((c) => c.id) });
-    if (!r.cases.length) throw new Error('가져올 행이 없어요. 고른 열을 확인해 주세요');
-    const next = validatePlan({ ...plan, cases: [...plan.cases, ...r.cases], updatedAt: Date.now() });
+    const { t, r, rows } = await readPickedTable(plan, sourceId, pick);
+    const patch = new Map(rows.filter((x) => x.status === 'changed').map((x) => [x.target!.id, x.c]));
+    // 새 TC 번호는 더할 것만 이어서 다시 붙인다 (그대로·바뀜 행이 번호를 차지하지 않게)
+    const ids = plan.cases.map((c) => c.id);
+    const added = rows
+      .filter((x) => x.status === 'new')
+      .map(({ c }) => {
+        const nid = nextId(ids, 'TC-');
+        ids.push(nid);
+        return { ...c, id: nid };
+      });
+    const cases = plan.cases.map((c) => {
+      const n = patch.get(c.id);
+      if (!n) return c;
+      const content = { title: n.title, preconditions: n.preconditions, steps: n.steps, expected: n.expected, priority: n.priority, kind: n.kind, notes: n.notes, source: n.source };
+      const moved = caseContentHash({ ...c, ...content }) !== caseContentHash(c);
+      return { ...c, ...content, ...(moved ? { allowDanger: false } : {}) };
+    });
+    const next = validatePlan({ ...plan, cases: [...cases, ...added], updatedAt: Date.now() });
     await writeJson(planFile(id), next);
+    const changed = patch.size;
     return {
-      cases: r.cases.length,
-      sheets: [{ sheet: t.sheet, cases: r.cases.length, columns: pick.map }],
+      cases: added.length + changed,
+      added: added.length,
+      changed,
+      same: rows.length - added.length - changed,
+      sheets: [{ sheet: t.sheet, cases: added.length + changed, columns: pick.map }],
       warnings: r.warnings,
       ms: Math.round(performance.now() - t0),
     };

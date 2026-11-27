@@ -153,7 +153,16 @@ export interface QaSourceAdded {
   /** TC 표를 알아보고 원문 그대로 가져온 결과 (#129) */
   tcImport?: { cases: number; warnings: string[] };
   /** 머리글을 못 알아본 표: 열 고르기 후보 */
-  tcTables?: { sheet: string; headerRow: number; headers: string[]; guess: Record<string, number | undefined> }[];
+  tcTables?: { sheet: string; headerRow: number; headers: string[]; guess: Record<string, number | undefined>; recognized?: boolean }[];
+}
+/** TC 표 가져오기 미리보기 (#153) */
+export interface QaTcPreview {
+  total: number;
+  added: number;
+  changed: number;
+  same: number;
+  rows: { title: string; priority: string; steps: number; expected: string; status: 'new' | 'changed' | 'same'; target?: string }[];
+  warnings: string[];
 }
 export type QaJobKind = 'extract' | 'run';
 export type QaEvent =
@@ -290,7 +299,9 @@ export const api = {
   qaSourcePick: (id: string) => call<QaSourceAdded[]>('qaSourcePick', id),
   qaSourceLink: (id: string, url: string) => call<QaSourceAdded>('qaSourceLink', id, url),
   qaTcImport: (id: string, source: string, pick: { sheet: string; headerRow: number; map: Record<string, number> }) =>
-    call<{ cases: number; warnings: string[] }>('qaTcImport', id, source, pick),
+    call<{ cases: number; added: number; changed: number; same: number; warnings: string[] }>('qaTcImport', id, source, pick),
+  qaTcPreview: (id: string, source: string, pick: { sheet: string; headerRow: number; map: Record<string, number> }) =>
+    call<QaTcPreview>('qaTcPreview', id, source, pick),
   qaCaseUpdate: (id: string, caseId: string, patch: Partial<Omit<QaCase, 'suggested'>> & { suggested?: boolean }) => call<QaPlan>('qaCaseUpdate', id, caseId, patch),
   qaSelect: (id: string, caseIds: string[], on: boolean) => call<QaPlan>('qaSelect', id, caseIds, on),
   /** shown: 사람이 보고 허용한 TC 내용 (그사이 바뀌었으면 허용하지 않는다) */
