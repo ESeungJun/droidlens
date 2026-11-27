@@ -86,6 +86,8 @@ export const QA_RUN_DENIED_TOOLS: readonly string[] = [
   // TC 와 상관없는 계획 목록·원문 읽기
   'qa_plan_list',
   'qa_source_read',
+  // Claude Code 가 저장한 Figma 응답 파일 읽기: TC 뽑기(계획 에이전트)용. 회차는 파일을 읽을 일이 없다 (#156)
+  'figma_outline',
   // 저장한 스크립트 고치기·다시 돌리기: 회차의 스크립트 실행은 앱이 한다. 통과 뒤 다시 돌리면 TC 마다 앱 재시작과 7~20초가 더 든다 (#148)
   'script_write',
   'script_run',
