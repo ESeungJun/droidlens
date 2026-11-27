@@ -188,9 +188,9 @@ test('runQaScripts: 통과 뒤에는 재시작하지 않고, 실패·조건 변�
     out.ran.map((x) => [x.case, x.status]),
     [['TC-001', 'pass'], ['TC-002', 'fail'], ['TC-003', 'pass'], ['TC-004', 'pass'], ['TC-005', 'pass']],
   );
-  // TC-001 처음 · TC-003 실패 뒤 · TC-005 조건 바뀜 = 3번. (예전에는 TC 마다 5번)
-  assert.equal(forceStops(f), 3);
-  assert.equal(out.restarts, 3);
+  // TC-001 처음 · TC-002 이어 가서 실패해 새로 띄워 한 번 더 확인(#159) · TC-003 실패 뒤 · TC-005 조건 바뀜 = 4번. (예전에는 TC 마다 5번)
+  assert.equal(forceStops(f), 4);
+  assert.equal(out.restarts, 4);
 });
 
 test('runQaScripts: 설치 버전이 사전 조건과 안 맞는 TC 는 돌리지 않고 막힘(코드 값)', async () => {

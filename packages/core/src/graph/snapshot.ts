@@ -7,8 +7,8 @@
 import { createHash } from 'node:crypto';
 import { DeviceAdb, sleep } from '../adb.js';
 import { ensureAgent } from '../agent.js';
-import { assertPackage, currentScreen, launchApp, type CurrentScreen } from '../app.js';
-import { screenshot, tap } from '../device.js';
+import { assertPackage, bringToFront, currentScreen, isAppRunning, launchApp, type CurrentScreen } from '../app.js';
+import { pressKey, screenshot, tap } from '../device.js';
 import {
   center,
   dumpHierarchy,
@@ -128,6 +128,80 @@ export async function launchAndSettle(dev: DeviceAdb, pkg: string, opts: { resta
     if (drawn && s.screen.packageName === pkg && s.screen.activity !== '' && candidateActions(s, pkg).length > 0) break;
   }
   return waitForSettle(dev);
+}
+
+/** 앞 TC 가 끝난 뒤 돌아갈 시작 화면. 앱을 첫 화면부터 띄웠을 때 본 화면이다 (#159) */
+export interface StartScreen {
+  activity: string;
+  /** screenId (Activity@구조 시그니처) */
+  id: string;
+}
+
+/** 앱 안의 화면일 때만 시작 화면으로 쓴다 (시간 제한으로 남의 앱이 앞에 있으면 undefined: 다음에도 처음부터 띄운다) */
+export function resumeStartOf(s: Snapshot, pkg: string): StartScreen | undefined {
+  if (s.screen.packageName !== pkg || !s.screen.activity) return undefined;
+  return { activity: s.screen.activity, id: screenId(s) };
+}
+
+export interface ReturnToStartResult {
+  snapshot: Snapshot;
+  /** true: 태스크를 비우지 않고 시작 화면으로 돌아감. false: 돌아가지 못해 예전처럼 첫 화면부터 다시 띄움 */
+  resumed: boolean;
+  /** 누른 뒤로 가기 수 */
+  backs: number;
+}
+
+/**
+ * 앞 TC 에 이어 갈 때 앱을 시작 화면으로 돌려 놓는다 (#159).
+ * launchApp 은 CLEAR_TASK 라 프로세스가 살아 있어도 화면을 스플래시부터 다시 만든다. 여기서는 태스크를 비우지 않고
+ * 앱을 앞으로 가져온 뒤(런처와 같은 인텐트) 시작 화면이 나올 때까지 뒤로 가기를 누른다.
+ * 멈추는 조건: 시작 화면(screenId 일치)이 나오면 끝. 다른 앱이 앞에 있으면 한 번만 다시 앞으로 가져온다.
+ * 뒤로 가기로 앱 밖에 나왔으면(루트 화면인데 시작 화면과 다름) 다시 가져와 시작 화면일 때만 이어 간다.
+ * Android 11 이하·종료 확인 앱은 이때 Activity 를 새로 만들어 스플래시가 보일 수 있어서, Activity 이름만으로는 이어 가지 않는다.
+ * 시작 화면을 모르거나, 프로세스가 없거나, 시스템 오류 창이 뜨거나, maxBack 번 안에 못 돌아오면 예전처럼 첫 화면부터 띄운다
+ */
+export async function returnToStart(
+  dev: DeviceAdb,
+  pkg: string,
+  start: StartScreen | undefined,
+  opts: { maxBack?: number; timeoutMs?: number } = {},
+): Promise<ReturnToStartResult> {
+  assertPackage(pkg);
+  let backs = 0;
+  const fresh = async (restart = false): Promise<ReturnToStartResult> => ({
+    snapshot: await launchAndSettle(dev, pkg, { restart, timeoutMs: opts.timeoutMs }),
+    resumed: false,
+    backs,
+  });
+  if (!start || !(await isAppRunning(dev, pkg))) return fresh();
+  const maxBack = opts.maxBack ?? 6;
+  await bringToFront(dev, pkg);
+  let fronts = 1;
+  let s = await waitForSettle(dev);
+  for (;;) {
+    // ANR·크래시 창이 떴으면 앱 상태를 믿지 않고 강제 종료 후 새로 띄운다
+    if (await dismissSystemDialog(dev, s)) return fresh(true);
+    if (fixPackage(s).screen.packageName !== pkg) {
+      // 뒤로 가기로 앱 밖에 나왔거나 다른 앱(외부 결제 창 등)이 앞에 있다. 앞으로 가져오기는 두 번까지만
+      if (fronts >= 2) return fresh();
+      await bringToFront(dev, pkg);
+      fronts++;
+      s = await waitForSettle(dev);
+      // 루트에서 뒤로 가기로 나왔다 돌아온 경우: 시작 화면과 정확히 같을 때만 이어 간다
+      if (backs > 0) return s.screen.packageName === pkg && screenId(s) === start.id ? { snapshot: s, resumed: true, backs } : fresh();
+      continue;
+    }
+    if (screenId(s) === start.id) return { snapshot: s, resumed: true, backs };
+    if (backs >= maxBack) return fresh();
+    // 화면을 읽은 뒤 다른 앱(결제 창·권한 창)이 늦게 떴으면 그 앱에 뒤로 가기를 보내지 않는다
+    if ((await currentScreen(dev)).packageName !== pkg) {
+      s = await waitForSettle(dev);
+      continue;
+    }
+    await pressKey(dev, 'back');
+    backs++;
+    s = await waitForSettle(dev);
+  }
 }
 
 /**

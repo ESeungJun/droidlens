@@ -358,6 +358,7 @@ export function runQaPlan(planId: string, opts: QaRunOptions, dev: dl.DeviceAdb,
       stream: true,
       context: [
         '이 실행은 DroidLens 데스크톱 앱 QA 탭의 회차 실행이다. 사용자는 실행 중에 대답할 수 없다: 로그인 정보가 없거나 막히면 blocked 로 끝내고 이유를 적는다.',
+        'blocked 로 끝낼 때는 scenario_finish 의 blockedBy 로 이유를 나눈다. app: 크래시·멈춤·다른 앱이 앞에 있음·사전 조건을 못 맞춤 (다음 TC 는 앱을 다시 띄운다). judgment: 앱은 정상인데 판정할 정보가 없거나 기대 결과가 모호함 (다음 TC 는 앱을 그대로 두고 이어 간다). 확인 필수 동작 직전에서 멈췄거나 입력·저장 도중에 멈췄으면 app.',
         '이 대화에서 TC 를 하나씩 차례로 받는다. 앞 TC 에서 알아낸 화면 위치·이동 경로는 다시 써도 되지만, 판정은 그 TC 에서 새로 본 화면으로만 한다.',
         `연결된 기기 serial: ${opts.serial}`,
         plan.app ? `대상 앱: ${plan.app}` : '',
@@ -401,7 +402,7 @@ export function runQaPlan(planId: string, opts: QaRunOptions, dev: dl.DeviceAdb,
             `QA 계획 "${planId}" 회차 "${run.id}" 의 TC 하나만 실행한다: ${c.id}.`,
             restart
               ? '시작 상태: 앱을 강제 종료해 두었다. launch_app 으로 첫 화면부터 시작한다.'
-              : '시작 상태: 앞 TC 가 통과해 앱 프로세스는 그대로 둔다. launch_app(restart=false) 로 첫 화면부터 시작한다.',
+              : '시작 상태: 앞 TC 가 통과(또는 판정만 못 한 막힘)해 앱을 그대로 둔다. launch_app(resume=true) 로 시작 화면으로 돌아가 시작한다. 다시 띄우지 않는다(restart·resume 없는 launch_app 은 화면을 처음부터 다시 만든다).',
             `scenario_start(name, tc: {plan: "${planId}", case: "${c.id}", run: "${run.id}"}) 로 시작해 TC 모드 절차대로 기대 결과마다 판정하고 scenario_finish 로 끝낸다.`,
             '앞 TC 의 판정·관찰은 이 TC 판정의 근거로 쓰지 않는다.',
             'qa_run_scripts·qa_report 는 부르지 않는다. 다른 TC 는 실행하지 않는다. scenario_finish 뒤 짧게 보고하고 다음 TC 를 기다린다.',
@@ -410,9 +411,13 @@ export function runQaPlan(planId: string, opts: QaRunOptions, dev: dl.DeviceAdb,
         );
         if (signal.aborted) break;
         let mine = (await dl.loadQaRun(planId, run.id)).results.find((x) => x.case === c.id && x.at >= t0);
-        // 결과 없이·실패·막힘·오류로 끝났거나 대화가 길어지면 대화를 닫는다. MCP 서버 메모리에 열린 시나리오·앞 TC 맥락을
-        // 다음 TC 로 넘기지 않으려고. 다음 TC 는 새 대화(와 앱 재시작)로 시작한다
-        if (r.ok && (!mine || mine.status !== 'pass' || r.error || agentRun.turns >= QA_TURNS_PER_CONVERSATION)) await agentRun.close();
+        // 결과 없이·실패·앱 문제 막힘·오류로 끝났거나 대화가 길어지면 대화를 닫는다. MCP 서버 메모리에 열린 시나리오·앞 TC 맥락을
+        // 다음 TC 로 넘기지 않으려고. 다음 TC 는 새 대화(와 앱 재시작)로 시작한다. 판정만 못 한 막힘은 통과처럼 이어 간다 (#159)
+        // 허용 없는 확인 필수 동작 직전에서 멈춘 TC 는 결제·삭제 확인 화면까지 진행된 상태라 판정 불가로 보지 않는다
+        // qa_case_result(manual) 로 적은 막힘은 시나리오가 열려 있을 수 있어 이어 가지 않는다
+        const blockedBy = mine?.status === 'blocked' && ((c.danger && !c.allowDanger) || mine.mode !== 'agent') ? undefined : mine?.blockedBy;
+        const keeps = !!mine && dl.keepsAppState({ status: mine.status, blockedBy });
+        if (r.ok && (!keeps || r.error || agentRun.turns >= QA_TURNS_PER_CONVERSATION)) await agentRun.close();
         if (!mine) {
           // 에이전트가 scenario_finish 없이 끝났으면 열린 기록을 막힘으로 마무리한다 (#101). 대화를 닫은 뒤라 MCP 서버가 다시 쓰지 않는다
           const closed = await dl
@@ -431,7 +436,7 @@ export function runQaPlan(planId: string, opts: QaRunOptions, dev: dl.DeviceAdb,
             await dl.recordQaResult(planId, run.id, { case: c.id, status: 'blocked', mode: 'manual', note: why, ...(report ? { report } : {}) }).catch(() => undefined);
           }
         }
-        prev = { status: mine?.status ?? 'blocked', preconditions: c.preconditions, changedData: r.changedData };
+        prev = { status: mine?.status ?? 'blocked', preconditions: c.preconditions, changedData: r.changedData, ...(blockedBy ? { blockedBy } : {}) };
       }
     } finally {
       await agentRun.close();

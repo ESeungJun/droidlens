@@ -3,7 +3,7 @@ import { DeviceAdb } from '../adb.js';
 import { ensureAgent } from '../agent.js';
 import { clearAppData, currentScreen, deviceTime, type CurrentScreen } from '../app.js';
 import { screenshot } from '../device.js';
-import { FlowCollector, launchAndSettle } from '../graph.js';
+import { FlowCollector, launchAndSettle, resumeStartOf, returnToStart, type StartScreen } from '../graph.js';
 import { resetFrameStats } from '../perf.js';
 import { Scenario } from '../scenario.js';
 import { tcName, type ScenarioAction, type ScenarioData, type ScenarioStep } from '../scenario-view.js';
@@ -32,10 +32,13 @@ export interface ScriptRunOptions {
   /** QA 회차에서 돌리면 그 회차 id. 기록의 tc.run 에 적어 검증 기록이 회차로 묶인다 (#105) */
   qaRun?: string;
   /**
-   * 앱을 강제 종료하지 않고 첫 화면부터 시작한다 (프로세스는 그대로, 화면 스택만 비움).
-   * QA 회차에서 앞 TC 가 통과해 이어 갈 때 쓴다 (#130). 준비가 데이터를 바꾸면(clearData·prefs·mocks) 무시하고 재시작한다
+   * 앱을 강제 종료하지 않고 이어 간다. QA 회차에서 앞 TC 가 통과해 이어 갈 때 쓴다 (#130).
+   * start 를 주면 태스크를 비우지 않고 그 시작 화면으로 돌아간다 (#159). 못 돌아가거나 start 가 없으면 첫 화면부터 다시 띄운다.
+   * 준비가 데이터를 바꾸면(clearData·prefs·mocks) 무시하고 재시작한다
    */
   keepProcess?: boolean;
+  /** keepProcess 일 때 돌아갈 시작 화면 (앞 실행 결과의 start) */
+  start?: StartScreen;
 }
 
 export interface RunResult {
@@ -48,6 +51,10 @@ export interface RunResult {
   scenario: ScenarioData;
   /** 준비 단계에서 앱을 강제 종료하고 새로 띄웠는지 */
   restarted: boolean;
+  /** 이 실행이 시작한 화면. 다음 TC 를 이어 갈 때 opts.start 로 넘긴다 (#159) */
+  start?: StartScreen;
+  /** 다시 띄우지 않고 앞 TC 가 남긴 앱에서 시작 화면으로 돌아가 시작했는지 */
+  resumed?: boolean;
 }
 
 /** 지금 앞 화면이 대상 앱이 아니면 그 패키지 이름 (런처로 나간 경우 포함). 같거나 모르면 undefined */
@@ -66,6 +73,9 @@ class ScriptRun {
   private skipped = 0;
   /** 준비 단계에서 앱을 강제 종료하고 새로 띄웠는지 (기록·회차 재시작 횟수) */
   private restarted = false;
+  private start?: StartScreen;
+  /** 태스크를 비우지 않고 시작 화면으로 돌아갔는지 */
+  private resumed = false;
   private stopped = false;
   /** 단계가 직접 만든 이미지 (스크린샷 비교의 차이 이미지). 있으면 새로 찍지 않고 이것을 남긴다 */
   private readonly out: StepOutput = {};
@@ -147,7 +157,18 @@ class ScriptRun {
   }
 
   private result(verdict: RunResult['verdict'], report: string, failed = this.failed): RunResult {
-    return { verdict, passed: this.passed, failed, skipped: this.skipped, durationMs: Date.now() - this.t0, report, scenario: this.scenario.data, restarted: this.restarted };
+    return {
+      verdict,
+      passed: this.passed,
+      failed,
+      skipped: this.skipped,
+      durationMs: Date.now() - this.t0,
+      report,
+      scenario: this.scenario.data,
+      restarted: this.restarted,
+      ...(this.start ? { start: this.start } : {}),
+      ...(this.resumed ? { resumed: true } : {}),
+    };
   }
 
   /** 준비 단계. 실패하면 blocked 결과를 돌려준다 (단계는 돌리지 않는다) */
@@ -167,12 +188,22 @@ class ScriptRun {
       }
       if (script.setup?.restart !== false) {
         this.restarted = !this.opts.keepProcess || scriptSetupChangesData(script.setup);
-        await launchAndSettle(dev, app, { restart: this.restarted });
+        if (this.restarted) this.start = resumeStartOf(await launchAndSettle(dev, app, { restart: true }), app);
+        else {
+          const r = await returnToStart(dev, app, this.opts.start);
+          this.resumed = r.resumed;
+          this.start = r.resumed ? this.opts.start : resumeStartOf(r.snapshot, app);
+        }
       }
       // 버벅인 프레임 비율 assert 가 준비 단계를 빼고 스크립트 단계만 보게 한다
       await resetFrameStats(dev, app).catch(() => undefined);
       const seen = await this.flow?.observe();
-      const kept = script.setup?.restart !== false && !this.restarted ? '앞 TC 에 이어 앱을 끄지 않고 첫 화면부터 시작' : undefined;
+      const kept =
+        script.setup?.restart !== false && !this.restarted
+          ? this.resumed
+            ? '앞 TC 에 이어 앱을 다시 띄우지 않고 시작 화면으로 돌아가 시작'
+            : '앞 TC 에 이어 앱을 끄지 않고 첫 화면부터 시작'
+          : undefined;
       const setupText = [describeSetup(kept ? { ...script.setup, restart: false } : script.setup), kept].filter(Boolean).join('\n') || undefined;
       await this.record('준비: 앱 실행', 'info', setupText, script.screenshots === 'all', seen?.screen);
       return undefined;

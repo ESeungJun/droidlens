@@ -7,6 +7,10 @@ import { homedir } from 'node:os';
 import { extname, resolve } from 'node:path';
 import { device, text, json, serialArg, appArg, readOnly, acts, recordStep, logAction, recorder, confirmDestructive, capList, within, isProjectDir } from '../common.js';
 
+/** 기기·앱마다 첫 화면부터 띄웠을 때 본 시작 화면. launch_app(resume) 이 돌아갈 곳 (#159) */
+const startScreens = new Map<string, dl.StartScreen>();
+const rememberStart = (key: string, start: dl.StartScreen | undefined) => (start ? startScreens.set(key, start) : startScreens.delete(key));
+
 export function register(server: McpServer): void {
   // ---------- 앱 ----------
 
@@ -53,17 +57,39 @@ export function register(server: McpServer): void {
   server.registerTool(
     'launch_app',
     {
-      description: '앱 실행하고 화면이 멈출 때까지 기다린 뒤 도착한 Activity 를 반환. restart=true면 강제 종료 후 첫 화면부터',
+      description:
+        '앱 실행하고 화면이 멈출 때까지 기다린 뒤 도착한 Activity 를 반환. restart=true면 강제 종료 후 첫 화면부터. ' +
+        'resume=true 면 화면을 다시 만들지 않고 앱을 앞으로 가져와 이 서버에서 앞서 띄웠을 때의 시작 화면으로 뒤로 가기로 돌아간다 (못 돌아가면 첫 화면부터 다시 띄운다)',
       inputSchema: {
         ...serialArg,
         ...appArg,
         activity: z.string().optional().describe('런처 화면 대신 띄울 Activity (exported 여야 한다). 예: .ui.DetailActivity'),
         restart: z.boolean().optional().describe('강제 종료 후 실행'),
+        resume: z
+          .boolean()
+          .optional()
+          .describe('앞 TC 에 이어 갈 때: 태스크를 비우지 않고 시작 화면으로 돌아간다. restart·activity 와 같이 쓰지 않는다'),
       },
       annotations: acts,
     },
-    async ({ serial, packageName, activity, restart }) => {
+    async ({ serial, packageName, activity, restart, resume }) => {
       const dev = await device(serial);
+      const key = `${dev.serial}/${packageName}`;
+      if (resume && !restart && !activity) {
+        // 앞 TC 가 남긴 화면에서 시작 화면으로 돌아간다. 처음부터 띄우는 CLEAR_TASK 는 화면을 스플래시부터 다시 만든다 (#159)
+        const r = await dl.returnToStart(dev, packageName, startScreens.get(key));
+        if (!r.resumed) rememberStart(key, dl.resumeStartOf(r.snapshot, packageName));
+        const at = r.snapshot.screen.activity;
+        recordStep(
+          { launch: null },
+          r.resumed ? `앱 이어 가기 ${packageName} → 시작 화면 ${at.split('.').pop()} (뒤로 ${r.backs}번)` : `앱 실행 ${packageName} → ${at.split('.').pop()}`,
+        );
+        return text(
+          r.resumed
+            ? `resumed ${packageName} at the start screen ${at} (back ×${r.backs}, not relaunched)`
+            : `launched ${packageName} → ${at} (could not return to the start screen, relaunched from the first screen)`,
+        );
+      }
       let s: dl.Snapshot;
       if (activity) {
         if (restart) await dl.stopApp(dev, packageName);
@@ -71,6 +97,7 @@ export function register(server: McpServer): void {
         s = await dl.waitForSettle(dev, { timeoutMs: 8000 });
       } else {
         s = await dl.launchAndSettle(dev, packageName, { restart });
+        rememberStart(key, dl.resumeStartOf(s, packageName));
       }
       recordStep({ launch: restart ? { restart: true } : null }, `앱 ${restart ? '재시작' : '실행'} ${packageName}${activity ? ` (${activity})` : ''} → ${s.screen.activity.split('.').pop()}`);
       return text(`launched ${packageName} → ${s.screen.activity}`);
