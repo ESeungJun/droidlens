@@ -1,7 +1,7 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import * as dl from '@droidlens/core';
-import { device, text, json, appArg, serialArg, selectorShape, pickSelector, describeNode, readOnly, acts, imageContent, recordStep, cleanSelector, capLines, hasSelector } from '../common.js';
+import { device, text, json, appArg, serialArg, selectorShape, pickSelector, describeNode, readOnly, acts, imageContent, recordStep, cleanSelector, capLines, hasSelector, externalRead } from '../common.js';
 
 export function register(server: McpServer): void {
   // ---------- 화면 / 뷰 계층 ----------
@@ -38,7 +38,11 @@ export function register(server: McpServer): void {
       annotations: readOnly,
     },
     async ({ serial, maxDepth, maxLines, interactiveOnly, stats }) => {
-      const h = await dl.dumpHierarchy(await device(serial));
+      const dev = await device(serial);
+      const h = await dl.dumpHierarchy(dev);
+      // 외부 결제 창은 정리한 글자 묶음만 (#155)
+      const ext = await externalRead(dev, h.root);
+      if (ext) return text(ext);
       let out = capLines(
         dl.toCompactText(h.root, { maxDepth, interactiveOnly }),
         maxLines ?? 300,
@@ -60,7 +64,10 @@ export function register(server: McpServer): void {
     async (a) => {
       const sel = pickSelector(a);
       if (!hasSelector(sel)) throw new Error('셀렉터(id·text·textContains·desc·descContains·className 중 하나)가 필요합니다. 화면 전체는 view_hierarchy 로 봅니다');
-      const h = await dl.dumpHierarchy(await device(a.serial));
+      const dev = await device(a.serial);
+      const h = await dl.dumpHierarchy(dev);
+      const ext = await externalRead(dev, h.root);
+      if (ext) return text(ext);
       const found = dl.findNodes(h.root, sel);
       if (!found.length) {
         const near = dl.similarLabels(h.root, sel);
@@ -121,6 +128,9 @@ export function register(server: McpServer): void {
     async ({ serial, limit }) => {
       const dev = await device(serial);
       const [h, info, screen] = await Promise.all([dl.dumpHierarchy(dev), dl.getDeviceInfo(dev).catch(() => undefined), dl.screenSize(dev).catch(() => undefined)]);
+      // 결제 창은 요소 설명 대신 정리한 묶음만 (#155)
+      const ext = await externalRead(dev, h.root);
+      if (ext) return text(ext);
       const density = info?.screen.density || 0;
       const issues = dl.auditA11y(h.root, { density: density || 420, screen });
       if (!issues.length) return text(`접근성 문제를 찾지 못했습니다 (누를 수 있는 요소 기준, 색 대비 제외)${density ? '' : '\n화면 밀도를 읽지 못해 420dpi 로 가정했습니다'}`);

@@ -1,3 +1,4 @@
+import { isPaymentSnapshot, KNOWN_PAYMENT_PACKAGES } from '../qa/payment.js';
 /**
  * TC 실행 경로 TcPath (#131): QA TC 를 돌리는 에이전트가 tap 으로 지난 화면 이동을 앱 지도에 연결로 남기고,
  * TC 가 끝나면 지난 연결에 그 TC 와 판정을 붙인다. MCP 의 tap·scenario_step·scenario_finish 가 쓴다.
@@ -39,7 +40,9 @@ export class TcPath {
    * 다른 앱 화면이면 지도에 올리지 않고 undefined (그 앞의 행동도 잇지 않는다)
    */
   async see(s: Snapshot | undefined, mark: number): Promise<ScreenNode | undefined> {
-    if (!s || s.screen.packageName !== this.graph.packageName) {
+    // 다른 앱 화면, 앞 창이 결제 창인 화면(#155)은 지도에 올리지 않는다
+    const pay = s && isPaymentSnapshot(s, (await this.dev?.paymentPackages?.().catch(() => undefined)) ?? KNOWN_PAYMENT_PACKAGES);
+    if (!s || s.screen.packageName !== this.graph.packageName || pay) {
       this.forget();
       return undefined;
     }

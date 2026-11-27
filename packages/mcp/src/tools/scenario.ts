@@ -5,7 +5,7 @@ import { homedir } from 'node:os';
 import { basename, dirname, extname, join, resolve } from 'node:path';
 import { z } from 'zod';
 import * as dl from '@droidlens/core';
-import { device, text, serialArg, acts, readOnly, recorder, allowDangerArg, dangerAllowed, within, isProjectDir, pathSee } from '../common.js';
+import { device, externalRead, text, serialArg, acts, readOnly, recorder, allowDangerArg, dangerAllowed, within, isProjectDir, pathSee } from '../common.js';
 
 /** 시나리오를 마칠 때 그 경로로 지금 화면을 한 번 더 본다 (recorder.path 를 비운 뒤라 pathSee 대신) */
 async function pathSeeWith(path: dl.TcPath): Promise<void> {
@@ -195,18 +195,20 @@ export function register(server: McpServer): void {
         const parsed = dl.stepSchema.parse({ assert });
         if (!('assert' in parsed)) throw new Error('assert 형식이 올바르지 않습니다');
         check = { by: 'assert', expect: dl.describeAssertion(parsed.assert) };
+        // 결제 창: 허용 없으면 던지고, 허용되면 검사 근거(화면 글자) 대신 정리한 묶음을 남긴다 (#155)
+        const ext = await externalRead(dev, (await dl.dumpHierarchy(dev)).root);
         try {
           const evidence = await dl.evaluateAssertion(dev, app, parsed.assert, { since });
           finalStatus = 'pass';
-          finalDetail = [detail, evidence].filter(Boolean).join('\n');
-          check.actual = evidence;
+          finalDetail = [detail, ext ?? evidence].filter(Boolean).join('\n');
+          check.actual = ext ? '결제 창 (글자는 정리한 묶음으로만)' : evidence;
           // 통과한 검사만 녹화한다 (실패한 기대를 스크립트에 넣으면 회귀 테스트가 항상 실패한다)
           if (recorder.active) recorder.steps.push(parsed);
         } catch (e) {
           finalStatus = 'fail';
-          const msg = (e as Error).message;
+          const msg = ext ? `기대한 요소가 없어요\n${ext}` : (e as Error).message;
           finalDetail = [detail, msg].filter(Boolean).join('\n');
-          check.actual = /실제:\s*(.+)$/m.exec(msg)?.[1] ?? msg.split('\n')[0];
+          check.actual = ext ? '결제 창 (글자는 정리한 묶음으로만)' : /실제:\s*(.+)$/m.exec(msg)?.[1] ?? msg.split('\n')[0];
         }
       }
       if (!finalStatus) throw new Error('status 또는 assert가 필요합니다');

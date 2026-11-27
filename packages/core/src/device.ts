@@ -126,10 +126,12 @@ export async function screenshot(dev: DeviceAdb): Promise<Buffer> {
 // ---------- 입력 ----------
 
 export async function tap(dev: DeviceAdb, x: number, y: number): Promise<void> {
+  await dev.inputGuard?.('tap');
   await dev.shell(`input tap ${Math.round(x)} ${Math.round(y)}`);
 }
 
 export async function longPress(dev: DeviceAdb, x: number, y: number, durationMs = 800): Promise<void> {
+  await dev.inputGuard?.('tap');
   const xi = Math.round(x);
   const yi = Math.round(y);
   await dev.shell(`input swipe ${xi} ${yi} ${xi} ${yi} ${Math.round(durationMs) || 800}`);
@@ -143,6 +145,7 @@ export async function swipe(
   y2: number,
   durationMs = 300,
 ): Promise<void> {
+  await dev.inputGuard?.('swipe');
   await dev.shell(
     `input swipe ${Math.round(x1)} ${Math.round(y1)} ${Math.round(x2)} ${Math.round(y2)} ${Math.round(durationMs) || 300}`,
   );
@@ -153,6 +156,7 @@ export async function swipe(
  * 에이전트가 있으면 ACTION_SET_TEXT(유니코드 지원), 없으면 adb input text(ASCII만, 공백은 %s).
  */
 export async function typeText(dev: DeviceAdb, text: string): Promise<void> {
+  await dev.inputGuard?.('text');
   // 이어 붙이기는 두 번 실행되면 글자가 겹치므로 연결이 끊겨도 다시 보내지 않는다
   if (await withAgent(dev, (a) => a.setText(text, true), { retry: false })) return;
   if (/[^\x20-\x7e]/.test(text)) {
@@ -163,6 +167,7 @@ export async function typeText(dev: DeviceAdb, text: string): Promise<void> {
 
 /** 포커스된 입력창의 내용을 통째로 바꾼다 (에이전트 필요) */
 export async function replaceText(dev: DeviceAdb, text: string): Promise<void> {
+  await dev.inputGuard?.('text');
   if (!(await withAgent(dev, (a) => a.setText(text, false)))) throw new Error('텍스트 교체에는 온디바이스 에이전트가 필요합니다');
 }
 
@@ -181,6 +186,7 @@ export const KEYCODES = {
 } as const;
 
 export async function pressKey(dev: DeviceAdb, key: keyof typeof KEYCODES | number): Promise<void> {
+  await dev.inputGuard?.('key');
   const code = typeof key === 'number' ? key : KEYCODES[key];
   await dev.shell(`input keyevent ${code}`);
 }

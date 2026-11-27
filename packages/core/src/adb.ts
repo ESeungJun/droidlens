@@ -145,8 +145,20 @@ export class Adb {
   }
 }
 
+/** 기기 입력 종류 (입력 관문이 무엇을 막는지 알리는 데 쓴다) */
+export type InputKind = 'tap' | 'swipe' | 'key' | 'text';
+
 export class DeviceAdb {
   constructor(readonly adb: Adb, readonly serial: string) {}
+
+  /**
+   * 기기 입력(누르기·밀기·키·글자) 직전에 부르는 관문 (#155). 던지면 입력을 보내지 않는다.
+   * 에이전트·회차가 쓰는 기기에만 건다(사람이 데스크톱에서 하는 조작에는 걸지 않는다)
+   */
+  inputGuard?: (kind: InputKind) => Promise<void>;
+
+  /** 이 기기에서 결제 창으로 볼 패키지 (알려진 결제 앱 + 지금 계획의 결제 앱). 화면 지도가 결제 창을 담지 않는 데 쓴다 (#155) */
+  paymentPackages?: () => Promise<string[]>;
 
   raw(args: string[], opts?: RunOptions): Promise<Buffer> {
     return this.adb.raw(['-s', this.serial, ...args], opts);

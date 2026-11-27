@@ -11,13 +11,29 @@ export const adb = new dl.Adb();
 
 export async function device(serial?: string): Promise<dl.DeviceAdb> {
   const s = serial ?? process.env.DROIDLENS_SERIAL;
-  if (s) return adb.device(s);
+  if (s) return guarded(adb.device(s));
   const online = (await dl.listDevices(adb)).filter((d) => d.state === 'device');
   if (online.length === 0) throw new Error('연결된 기기가 없습니다. USB 디버깅을 켜거나 에뮬레이터를 실행하세요.');
   if (online.length > 1) {
     throw new Error(`기기가 여러 대입니다. serial을 지정하세요: ${online.map((d) => d.serial).join(', ')}`);
   }
-  return adb.device(online[0].serial);
+  return guarded(adb.device(online[0].serial));
+}
+
+/**
+ * 이 서버가 기기에 보내는 모든 입력(tap·swipe·press_key·type_text, explore·script_run·suite_run·graph_navigate 포함)은
+ * core 입력 함수의 관문을 거친다 (#155): 결제 창이면 지금 TC 시나리오의 계획·TC 가 다뤄도 될 때만 보낸다. 허용은 매번 계획 파일에서 다시 읽는다
+ */
+function guarded(dev: dl.DeviceAdb): dl.DeviceAdb {
+  dev.inputGuard = dl.externalInputGuard(dev, planCtx);
+  dev.paymentPackages = async () => dl.paymentPackages((await planCtx()).plan);
+  return dev;
+}
+
+/** 지금 TC 시나리오의 계획·TC (TC 밖이면 비어 있다). 허용은 매번 계획 파일에서 다시 읽는다 */
+async function planCtx(): Promise<{ plan?: dl.QaPlan; caseId?: string }> {
+  const tc = recorder.active ? recorder.tc : undefined;
+  return { plan: tc ? await dl.loadQaPlan(tc.plan).catch(() => undefined) : undefined, caseId: tc?.case };
 }
 
 export const text = (t: string) => ({ content: [{ type: 'text' as const, text: t }] });
@@ -219,11 +235,44 @@ export async function guardRisky(
   tree: dl.ViewNode | undefined,
   tool: string,
 ): Promise<void> {
+  // 외부 결제 창(#155)은 결제 시험을 켠 계획의 허용된 확인 필수 TC 만 누른다
+  const g = await externalGate(dev, tree);
+  if (!g.access.allowed) throw new Error(`${g.access.reason}. 누르지 말고 이 단계를 막힘(blocked)으로 남기세요`);
+  tree = g.tree;
   if (!(await dangerAllowed(requested))) return refuseRisky(dev, x, y, node, tree);
   // 대화창에서는 TC 허용이 있어도 누를 버튼마다 묻는다 (TC 허용이 그 시나리오의 다른 확인 필수 버튼까지 열지 않게)
   if (process.env.DROIDLENS_CONFIRM !== '1') return;
   const risky = dl.riskyTapLabel(tree ?? (await dl.dumpHierarchy(dev)).root, x, y, node);
   if (risky) await askConfirm(`확인 필수 버튼 "${risky.replace(/\s+/g, ' ').slice(0, 100)}" 실제로 누르기`, tool);
+}
+
+/**
+ * 앞 화면(활성 창)의 패키지가 외부 결제 창인지와 이 시나리오가 그 창을 다뤄도 되는지 (#155).
+ * TC 를 실행하는 시나리오면 그 계획·TC 로, 아니면(대화창 등) 계획 없이 본다(결제 창은 막힘). 허용은 매번 계획 파일에서 다시 읽는다
+ */
+export async function externalGate(dev: dl.DeviceAdb, tree?: dl.ViewNode): Promise<{ tree: dl.ViewNode; pkg?: string; access: { allowed: boolean; payment: boolean; reason?: string } }> {
+  const t = tree ?? (await dl.dumpHierarchy(dev)).root;
+  // 포커스 창과 트리 루트를 둘 다 보는 core 판정 하나를 쓴다 (입력 관문·화면 지도와 같은 판정)
+  const a = await dl.paymentScreen(dev, await planCtx(), t);
+  return { tree: t, pkg: a.pkg, access: { allowed: a.allowed, payment: a.payment, reason: a.reason } };
+}
+
+/**
+ * 화면을 읽는 도구가 외부 결제 창을 만났을 때: 허용되지 않으면 던지고, 허용되면 글자를 데이터 묶음(정리·길이 제한)으로 돌려준다.
+ * 결제 창이 아니면 undefined (평소처럼 읽는다)
+ */
+export async function externalRead(dev: dl.DeviceAdb, tree: dl.ViewNode): Promise<string | undefined> {
+  const g = await externalGate(dev, tree);
+  if (!g.access.payment) return undefined;
+  if (!g.access.allowed) throw new Error(`${g.access.reason}. 화면을 읽지 않았어요`);
+  const labels = dl
+    .flatten(tree)
+    .filter((n) => (n.text || n.contentDesc) && n.bounds[2] > n.bounds[0])
+    .map((n) => {
+      const c = dl.center(n);
+      return `@${Math.round(c.x)},${Math.round(c.y)}${n.clickable ? ' [누름]' : ''} ${n.text || n.contentDesc}`;
+    });
+  return dl.externalScreenData(g.pkg!, labels);
 }
 
 /**

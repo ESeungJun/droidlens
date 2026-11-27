@@ -304,6 +304,8 @@ export const api = {
     call<QaTcPreview>('qaTcPreview', id, source, pick),
   qaTcImportBackup: (id: string) => call<{ at: number; cases: number } | undefined>('qaTcImportBackup', id),
   qaTcUndo: (id: string) => call<QaPlan>('qaTcUndo', id),
+  /** 결제 시험 스위치 (#155). 켤 때 confirmed: 실결제 주의 안내를 사람이 확인함 */
+  qaPaymentTest: (id: string, opts: { enabled: boolean; packages: string[]; confirmed: boolean }) => call<QaPlan>('qaPaymentTest', id, opts),
   qaCaseUpdate: (id: string, caseId: string, patch: Partial<Omit<QaCase, 'suggested'>> & { suggested?: boolean }) => call<QaPlan>('qaCaseUpdate', id, caseId, patch),
   qaSelect: (id: string, caseIds: string[], on: boolean) => call<QaPlan>('qaSelect', id, caseIds, on),
   /** shown: 사람이 보고 허용한 TC 내용 (그사이 바뀌었으면 허용하지 않는다) */

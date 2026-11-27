@@ -154,6 +154,18 @@ export const qaPlanSchema = z
     sources: z.array(qaSourceSchema).default([]),
     requirements: z.array(qaRequirementSchema).default([]),
     cases: z.array(qaCaseSchema).default([]),
+    /**
+     * 결제 시험 (#155): 켜면 허용한 확인 필수 TC 가 Play 결제 창과 packages 의 결제 앱 화면을 읽고 누를 수 있다.
+     * 기본 꺼짐. setQaPaymentTest(사람 전용, 실결제 주의 확인)로만 바꾼다
+     */
+    paymentTest: z
+      .object({
+        enabled: z.boolean(),
+        packages: z.array(z.string().regex(/^[a-zA-Z][\w]*(\.[\w]+)+$/, '패키지 이름 형식이 아닙니다')).max(8).default([]),
+        at: z.number().int().optional(),
+      })
+      .strict()
+      .optional(),
   })
   .strict()
   .superRefine((p, ctx) => {

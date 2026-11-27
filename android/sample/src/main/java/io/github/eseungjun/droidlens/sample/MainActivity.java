@@ -74,6 +74,8 @@ public class MainActivity extends Activity {
         root.addView(button("Prefs 저장", "btn_prefs", this::savePrefs));
         root.addView(button("웹뷰 화면", "btn_web", () -> startActivity(new android.content.Intent(this, WebActivity.class))));
         root.addView(button("Compose 화면", "btn_compose", () -> startActivity(new android.content.Intent(this, ComposeActivity.class))));
+        // 결제 시험(#155): 다른 패키지의 가짜 결제 앱을 연다. 실제 결제는 없다
+        root.addView(button("구독하기 (가짜 결제)", "btn_pay", this::openFakePay));
         root.addView(button("커스텀 이벤트", "btn_event", () -> {
             try {
                 DroidLens.event("button_clicked", new JSONObject().put("screen", "main").put("count", 1));
@@ -82,6 +84,27 @@ public class MainActivity extends Activity {
             status.setText("이벤트 기록됨");
         }));
         setContentView(root);
+    }
+
+    private static final int REQ_PAY = 155;
+
+    private void openFakePay() {
+        android.content.Intent i = new android.content.Intent()
+                .setClassName("io.github.eseungjun.droidlens.fakepay", "io.github.eseungjun.droidlens.fakepay.PayActivity")
+                .putExtra("item", "월 구독")
+                .putExtra("amount", 1000L);
+        try {
+            startActivityForResult(i, REQ_PAY);
+        } catch (android.content.ActivityNotFoundException e) {
+            status.setText("가짜 결제 앱이 없어요 (fakepay 설치 필요)");
+        }
+    }
+
+    @Override
+    protected void onActivityResult(int requestCode, int resultCode, android.content.Intent data) {
+        super.onActivityResult(requestCode, resultCode, data);
+        if (requestCode != REQ_PAY) return;
+        status.setText(resultCode == RESULT_OK ? "결제 완료 (가짜)" : "결제 취소");
     }
 
     private Button button(String label, String tag, Runnable action) {

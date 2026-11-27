@@ -77,6 +77,13 @@ export function register(handle: Handle): void {
   // 가져오기 되돌리기 (#154): 보관본이 있는지, 되돌리기
   handle('qaTcImportBackup', (id: string) => dl.qaTcImportBackup(String(id)));
   handle('qaTcUndo', (id: string) => dl.undoQaTcImport(String(id)));
+  // 결제 시험 스위치 (#155): 켤 때는 화면에서 실결제 주의 안내를 확인했을 때만(confirmed) 받는다
+  handle('qaPaymentTest', (id: string, opts: { enabled: boolean; packages: string[]; confirmed: boolean }) => {
+    if (!opts || typeof opts !== 'object' || !Array.isArray(opts.packages)) throw new Error('잘못된 요청입니다');
+    const packages = opts.packages.map((p) => String(p).trim()).filter(Boolean);
+    if (packages.some((p) => !/^[A-Za-z][\w]*(\.[A-Za-z][\w]*)+$/.test(p))) throw new Error('패키지 이름 형식이 아니에요 (예: com.example.pay)');
+    return dl.setQaPaymentTest(String(id), { enabled: opts.enabled === true, packages, ack: opts.confirmed === true ? dl.PAYMENT_TEST_ACK : undefined });
+  });
   // 가져오기 미리보기 (#153): 계획을 바꾸지 않는다
   handle('qaTcPreview', async (id: string, source: string, pick: { sheet: string; headerRow: number; map: Record<string, number> }) => {
     if (!pick || typeof pick !== 'object' || typeof pick.sheet !== 'string' || !pick.map || typeof pick.map !== 'object') throw new Error('잘못된 요청입니다');

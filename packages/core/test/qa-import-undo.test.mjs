@@ -81,3 +81,13 @@ test('가져오기를 다시 하면 보관본은 그 직전 계획 하나만 남
   assert.deepEqual(back.cases, after1.cases.map((c) => back.cases.find((x) => x.id === c.id)), '두 번째 가져오기 직전으로');
   assert.equal(back.cases.length, after1.cases.length);
 });
+
+test('되돌려도 결제 시험 스위치는 지금 값을 둔다 (가져오기 뒤에 끈 스위치가 되살아나지 않게, #155)', async () => {
+  const { id, source, pick } = await setup();
+  await qa.setQaPaymentTest(id, { enabled: true, packages: ['com.example.fakepay'], ack: qa.PAYMENT_TEST_ACK });
+  await qa.importQaTcTable(id, source, pick);
+  await qa.setQaPaymentTest(id, { enabled: false });
+  const restored = await qa.undoQaTcImport(id);
+  assert.equal(restored.paymentTest.enabled, false);
+  assert.equal((await qa.loadQaPlan(id)).paymentTest.enabled, false);
+});

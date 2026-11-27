@@ -27,6 +27,7 @@ import {
 } from '../graph-model.js';
 import { flatten, screenSignature } from '../hierarchy.js';
 import { CASE_ID, PLAN_ID } from '../qa/plan.js';
+import { isPaymentSnapshot, KNOWN_PAYMENT_PACKAGES } from '../qa/payment.js';
 import { droidlensHome, ensureDir, readJson, safeName, writeFileAtomic, writeJson } from '../workspace.js';
 import { bundleSchema, clean, edgeSchema, MAP_FORMAT, MAP_LIMITS, nodeSchema, type MapBundle } from './bundle.js';
 import { candidateActions, elementLabel, screenId, shortName, type Snapshot } from './snapshot.js';
@@ -216,6 +217,9 @@ export class ScreenGraph {
    * dev를 주면 새 화면일 때만 Fragment 목록을 조회해 라벨에 붙인다 (느린 조회라 재방문 때는 생략).
    */
   async addSnapshot(s: Snapshot, dev?: DeviceAdb): Promise<ScreenNode> {
+    // 결제 창은 지도에 담지 않는다: 글자가 지도에 남아 나중에 그대로 읽힌다 (#155). 탐색·지도 이동·경로 기록이 모두 여기를 지난다
+    const pay = isPaymentSnapshot(s, (await dev?.paymentPackages?.().catch(() => undefined)) ?? KNOWN_PAYMENT_PACKAGES);
+    if (pay) throw new Error(`결제 창(${pay})은 화면 지도에 기록하지 않아요`);
     const id = screenId(s);
     let node = this.nodes.get(id);
     if (!node && dev && !s.screen.fragments.length && s.screen.packageName === this.packageName) {

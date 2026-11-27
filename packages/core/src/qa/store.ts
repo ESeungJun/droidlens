@@ -99,6 +99,8 @@ async function writeHumanPlan(plan: QaPlan): Promise<QaPlan> {
     ...plan,
     createdAt: prev.createdAt,
     sources: prev.sources,
+    // 결제 시험 스위치는 setQaPaymentTest 로만 바꾼다 (#155)
+    paymentTest: prev.paymentTest,
     updatedAt: Date.now(),
   });
   await writeJson(planFile(plan.id), next);
@@ -596,7 +598,9 @@ export function undoQaTcImport(id: string): Promise<QaPlan> {
   return withPlanLock(id, async () => {
     const b = await readBackup(id);
     if (!b) throw new Error('되돌릴 가져오기가 없어요');
-    const plan = { ...b.plan, updatedAt: Date.now() };
+    // 결제 시험 스위치는 지금 값을 둔다: 가져온 뒤 끈 스위치가 보관본으로 되살아나지 않게 (#155)
+    const cur = await loadQaPlan(id);
+    const plan = { ...b.plan, ...(cur.paymentTest ? { paymentTest: cur.paymentTest } : {}), updatedAt: Date.now() };
     await writeJson(planFile(id), plan);
     await rm(backupFile(id), { force: true });
     return plan;
@@ -610,4 +614,23 @@ export async function readQaSourceText(id: string, sourceId: string): Promise<st
   if (!s) throw new Error(`문서가 없습니다: ${sourceId}`);
   if (s.kind === 'confluence' || s.kind === 'figma') return undefined;
   return readFile(join(qaPlanDir(id), 'sources', `${s.id}.md`), 'utf8');
+}
+
+/** 결제 시험을 켤 때 화면이 보여 준 확인 문구의 표식 (#155). 이 값 없이는 켜지 않는다 */
+export const PAYMENT_TEST_ACK = 'real-payment-warning-v1';
+
+/**
+ * 계획의 결제 시험 스위치 (#155). 켤 때는 실결제 주의·테스트 계정/카드 안내를 본 확인(ack)이 있어야 한다. 끌 때는 묻지 않는다.
+ * 사람 전용: 데스크톱 QA 탭 확인 창에서만 부른다 (MCP 도구로 내지 않는다)
+ */
+export function setQaPaymentTest(id: string, opts: { enabled: boolean; packages?: string[]; ack?: string }): Promise<QaPlan> {
+  return withPlanLock(id, async () => {
+    const plan = await loadQaPlan(id);
+    if (opts.enabled && opts.ack !== PAYMENT_TEST_ACK) throw new Error('결제 시험을 켜려면 실결제 주의 안내를 확인해야 해요');
+    const packages = [...new Set((opts.packages ?? plan.paymentTest?.packages ?? []).map((p) => p.trim()).filter(Boolean))];
+    if (plan.app && packages.includes(plan.app)) throw new Error('대상 앱은 결제 앱 목록에 넣지 않아요 (대상 앱은 원래 다룰 수 있어요)');
+    const next = validatePlan({ ...plan, paymentTest: { enabled: opts.enabled, packages, at: Date.now() }, updatedAt: Date.now() });
+    await writeJson(planFile(id), next);
+    return next;
+  });
 }

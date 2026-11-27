@@ -1,7 +1,7 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import * as dl from '@droidlens/core';
-import { device, hasSelector, resolveNode, recordStep, logAction, nodeLabel, recorder, cleanSelector, pathSee, pathNote, text, serialArg, selectorShape, pickSelector, describeNode, readOnly, acts, allowDangerArg, guardRisky, PIXELS } from '../common.js';
+import { device, hasSelector, resolveNode, recordStep, logAction, nodeLabel, recorder, cleanSelector, pathSee, pathNote, text, serialArg, selectorShape, pickSelector, describeNode, readOnly, acts, allowDangerArg, guardRisky, externalGate, externalRead, PIXELS } from '../common.js';
 
 export function register(server: McpServer): void {
   // ---------- 조작 ----------
@@ -32,9 +32,16 @@ export function register(server: McpServer): void {
       if (hasSelector(sel)) {
         dumped = await dl.dumpHierarchy(dev);
         tree = dumped.root;
-        node = await resolveNode(dev, sel, tree);
+        // 결제 창이면 허용 없을 때 여기서 막고, 허용돼도 요소 설명 대신 정리한 묶음만 돌려준다 (#155)
+        const ext = await externalRead(dev, tree);
+        try {
+          node = await resolveNode(dev, sel, tree);
+        } catch (e) {
+          if (ext) throw new Error(`${(e as Error).message.split('\n')[0]}\n${ext}`);
+          throw e;
+        }
         ({ x, y } = dl.center(node));
-        what = describeNode(node);
+        what = ext ? `@${Math.round(x)},${Math.round(y)}` : describeNode(node);
       }
       if (x === undefined || y === undefined) throw new Error('셀렉터나 x/y 중 하나가 필요합니다');
       await guardRisky(a.allowDanger, dev, x, y, node, tree, 'tap');
@@ -99,6 +106,9 @@ export function register(server: McpServer): void {
     },
     async (a) => {
       const dev = await device(a.serial);
+      // 결제 창에는 허용된 결제 TC 여도 글자를 넣지 않는다: 계정·카드 입력은 사람이 미리 해 둔다 (#155)
+      const pay = await externalGate(dev);
+      if (pay.access.payment) throw new Error(`결제 창에는 글자를 넣지 않아요 (계정·카드 입력은 하지 않아요). 이 단계를 막힘(blocked)으로 남기세요`);
       const sel = pickSelector(a);
       let into: dl.ViewNode | undefined;
       if (hasSelector(sel)) {
@@ -188,6 +198,12 @@ export function register(server: McpServer): void {
         if (h) {
           last = h;
           const found = dl.findNodes(h.root, sel);
+          // 결제 창: 허용 없으면 던지고, 허용되면 원문 대신 정리한 묶음 (#155)
+          const ext = await externalRead(dev, h.root);
+          if (ext && (a.gone ? found.length === 0 : found.length > 0)) {
+            await pathSee(dev, h);
+            return text(`${a.gone ? '사라짐 확인' : '발견'}\n${ext}`);
+          }
           if (a.gone ? found.length === 0 : found.length > 0) {
             // 기다린 화면이 앞 탭의 도착 화면 후보가 된다 (#147). 대기는 조작 번호를 올리지 않는다
             await pathSee(dev, h);
@@ -203,7 +219,9 @@ export function register(server: McpServer): void {
       } while (Date.now() < deadline);
       const lines = [`${timeout}ms 안에 ${a.gone ? '사라지지 않음' : '나타나지 않음'}: ${JSON.stringify(cleanSelector(sel))}`];
       if (!last) lines.push(`화면을 한 번도 읽지 못했습니다${lastError ? `: ${lastError}` : ''}`);
-      else {
+      else if (await externalRead(dev, last.root).then(Boolean)) {
+        lines.push((await externalRead(dev, last.root))!);
+      } else {
         const screen = await dl.currentScreen(dev).catch(() => undefined);
         if (screen?.activity) lines.push(`지금 화면: ${screen.activity}`);
         const near = a.gone ? [] : dl.similarLabels(last.root, sel);
