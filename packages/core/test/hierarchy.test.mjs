@@ -98,6 +98,36 @@ test('시그니처: 깊은 곳의 드로어를 열면 다른 화면, 같은 드�
   assert.equal(screenSignature(drawerScreen(false)), screenSignature(closed), '닫힌 화면은 그대로');
 });
 
+// Compose 의 ModalNavigationDrawer 는 DrawerLayout 이 아니라 ComposeView 아래 View 몇 겹이라, 연 드로어(ComposeView 기준 3겹 아래)가
+// 뼈대 깊이 제한에 잘려 시그니처가 그대로였다 (#126, Galaxy Z Flip3 샘플 앱 Compose 화면 덤프와 같은 모양)
+const composeScreen = (open) => {
+  const V = (attrs, kids = '') => node({ cls: 'android.view.View', ...attrs }, kids);
+  const T = (text) => node({ text });
+  const body = open
+    ? V({}, T('메뉴') + V({ selected: true }, T('홈') + V()) + V({ clickable: true }, T('알림') + V()) + V({ clickable: true }, T('설정') + V()))
+    : T('지금 메뉴: 홈') + V({ clickable: true }, T('메뉴 열기') + node({ cls: 'android.widget.Button' })) + V({}, T('Compose 화면'));
+  const compose = node({ cls: 'androidx.compose.ui.platform.ComposeView', bounds: '[0,94][1080,2496]' }, V({}, V({}, body)));
+  const content = node({ cls: 'android.widget.FrameLayout', bounds: '[0,94][1080,2496]' }, compose);
+  return parseHierarchyXml(xml(node({ cls: 'android.widget.LinearLayout', bounds: '[0,0][1080,2496]' }, content))).root;
+};
+
+test('시그니처: Compose 드로어를 열면 다른 화면, 닫힌 화면은 같은 화면끼리 같다 (#126)', () => {
+  const closed = composeScreen(false);
+  const open = composeScreen(true);
+  assert.equal(findNodes(closed, { className: 'ComposeView' })[0].depth, 4, '기기 덤프와 같은 깊이');
+  assert.notEqual(screenSignature(open), screenSignature(closed));
+  assert.notEqual(structureSignature(open), structureSignature(closed));
+  assert.equal(screenSignature(composeScreen(true)), screenSignature(open));
+  assert.equal(screenSignature(composeScreen(false)), screenSignature(closed));
+});
+
+test('시그니처: ComposeView 가 없는 화면은 #126 전과 같다 (저장된 지도의 화면 id 유지)', () => {
+  // #126 전 dist 로 구한 값
+  assert.equal(screenSignature(drawerScreen(false)), 'cb05490050c7');
+  assert.equal(screenSignature(drawerScreen(true)), '1cc7d261c992');
+  assert.equal(structureSignature(drawerScreen(true)), '3d745eefa305');
+});
+
 test('isRiskyLabel: 한글·영문·붙여 쓴 이름', () => {
   for (const s of ['삭제', '계정 삭제하기', '로그아웃', '결제하기', '송금', 'Delete', 'Log out', 'sign out', 'btnDelete', 'ic_trash', 'action.send', 'Place order', 'BUY']) {
     assert.equal(isRiskyLabel(s), true, s);

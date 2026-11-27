@@ -1,6 +1,9 @@
 plugins {
     id 'com.android.application' version '8.5.2' apply false
     id 'com.android.library' version '8.5.2' apply false
+    // 샘플 앱의 Compose 화면용 (#126). SDK·에이전트 모듈은 쓰지 않는다
+    id 'org.jetbrains.kotlin.android' version '2.0.21' apply false
+    id 'org.jetbrains.kotlin.plugin.compose' version '2.0.21' apply false
 }
 
 ext {
