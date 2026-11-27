@@ -18,6 +18,7 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -197,7 +198,7 @@ final class AgentServer {
                 AccessibilityNodeInfo root = windows.get(i).getRoot();
                 if (root != null) appendNode(sb, root, 0);
             }
-        } else {
+        } else if (!appendActiveWithPopups(sb)) {
             AccessibilityNodeInfo root = null;
             for (int i = 0; i < 10 && root == null; i++) {
                 root = ui.getRootInActiveWindow();
@@ -208,6 +209,34 @@ final class AgentServer {
         }
         sb.append("</hierarchy>");
         return sb.toString();
+    }
+
+    /**
+     * 활성 창과 그 위 같은 앱의 포커스 없는 팝업 창을 함께 적는다 (#127, PopupWindows).
+     * 팝업이 없으면 활성 창 하나만이라 지금까지와 같은 덤프다. 창 목록·활성 창을 못 얻으면 false(예전 방식으로)
+     */
+    private boolean appendActiveWithPopups(StringBuilder sb) {
+        List<AccessibilityWindowInfo> windows;
+        try {
+            windows = ui.getWindows();
+        } catch (RuntimeException e) {
+            return false;
+        }
+        if (windows == null || windows.isEmpty()) return false;
+        List<PopupWindows.Win> wins = new ArrayList<>(windows.size());
+        List<AccessibilityNodeInfo> roots = new ArrayList<>(windows.size());
+        for (AccessibilityWindowInfo w : windows) {
+            // 상태 표시줄·키보드 같은 창은 고르지 않으므로 루트를 읽지 않는다
+            boolean candidate = w.isActive() || w.getType() == PopupWindows.TYPE_APPLICATION;
+            AccessibilityNodeInfo r = candidate ? w.getRoot() : null;
+            roots.add(r);
+            CharSequence pkg = r == null ? null : r.getPackageName();
+            wins.add(new PopupWindows.Win(w.getType(), w.isActive() && r != null, pkg == null ? null : pkg.toString()));
+        }
+        List<Integer> pick = PopupWindows.pick(wins);
+        if (pick.isEmpty()) return false;
+        for (int i : pick) appendNode(sb, roots.get(i), 0);
+        return true;
     }
 
     private final Rect rect = new Rect();

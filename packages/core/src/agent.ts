@@ -13,7 +13,7 @@ import { droidlensHome } from './workspace.js';
 
 export const AGENT_PACKAGE = 'io.github.eseungjun.droidlens.agent';
 /** android/agent/build.gradle 의 versionCode, AgentInstrumentation.VERSION 과 같아야 한다 (test/agent-version.test.mjs 가 확인) */
-export const AGENT_VERSION = 6;
+export const AGENT_VERSION = 7;
 /** 에이전트는 TCP가 아닌 abstract 유닉스 소켓으로 열고 adb(shell) 연결만 받는다 */
 const AGENT_REMOTE = 'localabstract:droidlens_agent';
 const INSTRUMENT = `${AGENT_PACKAGE}/.AgentInstrumentation`;
