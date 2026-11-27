@@ -1,7 +1,7 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import * as dl from '@droidlens/core';
-import { device, text, json, appArg, serialArg, selectorShape, pickSelector, describeNode, readOnly, acts, imageContent, recordStep, cleanSelector, capLines, hasSelector } from '../common.js';
+import { device, text, json, appArg, serialArg, selectorShape, pickSelector, describeNode, readOnly, acts, imageContent, recordStep, cleanSelector, capLines, hasSelector, externalRead } from '../common.js';
 
 export function register(server: McpServer): void {
   // ---------- 화면 / 뷰 계층 ----------
@@ -38,7 +38,11 @@ export function register(server: McpServer): void {
       annotations: readOnly,
     },
     async ({ serial, maxDepth, maxLines, interactiveOnly, stats }) => {
-      const h = await dl.dumpHierarchy(await device(serial));
+      const dev = await device(serial);
+      const h = await dl.dumpHierarchy(dev);
+      // 외부 결제 창은 정리한 글자 묶음만 (#155)
+      const ext = await externalRead(dev, h.root);
+      if (ext) return text(ext);
       let out = capLines(
         dl.toCompactText(h.root, { maxDepth, interactiveOnly }),
         maxLines ?? 300,
@@ -60,7 +64,10 @@ export function register(server: McpServer): void {
     async (a) => {
       const sel = pickSelector(a);
       if (!hasSelector(sel)) throw new Error('셀렉터(id·text·textContains·desc·descContains·className 중 하나)가 필요합니다. 화면 전체는 view_hierarchy 로 봅니다');
-      const h = await dl.dumpHierarchy(await device(a.serial));
+      const dev = await device(a.serial);
+      const h = await dl.dumpHierarchy(dev);
+      const ext = await externalRead(dev, h.root);
+      if (ext) return text(ext);
       const found = dl.findNodes(h.root, sel);
       if (!found.length) {
         const near = dl.similarLabels(h.root, sel);

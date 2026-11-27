@@ -1,7 +1,7 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import * as dl from '@droidlens/core';
-import { device, hasSelector, resolveNode, recordStep, logAction, nodeLabel, recorder, cleanSelector, pathSee, pathNote, text, serialArg, selectorShape, pickSelector, describeNode, readOnly, acts, allowDangerArg, guardRisky, PIXELS } from '../common.js';
+import { device, hasSelector, resolveNode, recordStep, logAction, nodeLabel, recorder, cleanSelector, pathSee, pathNote, text, serialArg, selectorShape, pickSelector, describeNode, readOnly, acts, allowDangerArg, guardRisky, externalGate, PIXELS } from '../common.js';
 
 export function register(server: McpServer): void {
   // ---------- 조작 ----------
@@ -99,6 +99,9 @@ export function register(server: McpServer): void {
     },
     async (a) => {
       const dev = await device(a.serial);
+      // 결제 창에는 허용된 결제 TC 여도 글자를 넣지 않는다: 계정·카드 입력은 사람이 미리 해 둔다 (#155)
+      const pay = await externalGate(dev);
+      if (pay.access.payment) throw new Error(`결제 창에는 글자를 넣지 않아요 (계정·카드 입력은 하지 않아요). 이 단계를 막힘(blocked)으로 남기세요`);
       const sel = pickSelector(a);
       let into: dl.ViewNode | undefined;
       if (hasSelector(sel)) {

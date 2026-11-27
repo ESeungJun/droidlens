@@ -219,11 +219,45 @@ export async function guardRisky(
   tree: dl.ViewNode | undefined,
   tool: string,
 ): Promise<void> {
+  // 외부 결제 창(#155)은 결제 시험을 켠 계획의 허용된 확인 필수 TC 만 누른다
+  const g = await externalGate(dev, tree);
+  if (!g.access.allowed) throw new Error(`${g.access.reason}. 누르지 말고 이 단계를 막힘(blocked)으로 남기세요`);
+  tree = g.tree;
   if (!(await dangerAllowed(requested))) return refuseRisky(dev, x, y, node, tree);
   // 대화창에서는 TC 허용이 있어도 누를 버튼마다 묻는다 (TC 허용이 그 시나리오의 다른 확인 필수 버튼까지 열지 않게)
   if (process.env.DROIDLENS_CONFIRM !== '1') return;
   const risky = dl.riskyTapLabel(tree ?? (await dl.dumpHierarchy(dev)).root, x, y, node);
   if (risky) await askConfirm(`확인 필수 버튼 "${risky.replace(/\s+/g, ' ').slice(0, 100)}" 실제로 누르기`, tool);
+}
+
+/**
+ * 앞 화면(활성 창)의 패키지가 외부 결제 창인지와 이 시나리오가 그 창을 다뤄도 되는지 (#155).
+ * TC 를 실행하는 시나리오면 그 계획·TC 로, 아니면(대화창 등) 계획 없이 본다(결제 창은 막힘). 허용은 매번 계획 파일에서 다시 읽는다
+ */
+export async function externalGate(dev: dl.DeviceAdb, tree?: dl.ViewNode): Promise<{ tree: dl.ViewNode; pkg?: string; access: ReturnType<typeof dl.externalPackageAccess> }> {
+  const t = tree ?? (await dl.dumpHierarchy(dev)).root;
+  const pkg = t.children[0]?.packageName || undefined;
+  const tc = recorder.active ? recorder.tc : undefined;
+  const plan = tc ? await dl.loadQaPlan(tc.plan).catch(() => undefined) : undefined;
+  return { tree: t, pkg, access: dl.externalPackageAccess(plan, tc?.case, pkg) };
+}
+
+/**
+ * 화면을 읽는 도구가 외부 결제 창을 만났을 때: 허용되지 않으면 던지고, 허용되면 글자를 데이터 묶음(정리·길이 제한)으로 돌려준다.
+ * 결제 창이 아니면 undefined (평소처럼 읽는다)
+ */
+export async function externalRead(dev: dl.DeviceAdb, tree: dl.ViewNode): Promise<string | undefined> {
+  const g = await externalGate(dev, tree);
+  if (!g.access.payment) return undefined;
+  if (!g.access.allowed) throw new Error(`${g.access.reason}. 화면을 읽지 않았어요`);
+  const labels = dl
+    .flatten(tree)
+    .filter((n) => (n.text || n.contentDesc) && n.bounds[2] > n.bounds[0])
+    .map((n) => {
+      const c = dl.center(n);
+      return `@${Math.round(c.x)},${Math.round(c.y)}${n.clickable ? ' [누름]' : ''} ${n.text || n.contentDesc}`;
+    });
+  return dl.externalScreenData(g.pkg!, labels);
 }
 
 /**

@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <application android:label="Fake Pay" android:theme="@android:style/Theme.Material.Light.Dialog">
+        <!-- 샘플 앱이 명시적 인텐트로 연다. 결과만 돌려주고 네트워크·결제 API 는 쓰지 않는다 -->
+        <activity android:name=".PayActivity" android:exported="true" />
+    </application>
+</manifest>

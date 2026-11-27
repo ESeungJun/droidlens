@@ -1,0 +1,22 @@
+// 결제 시험(#155)용 가짜 결제 앱. 돈이 오가지 않고, 계정·카드 입력도 없다. 샘플 앱과 다른 패키지로 떠서 "외부 결제 창"을 흉내 낸다
+plugins {
+    id 'com.android.application'
+}
+
+android {
+    namespace 'io.github.eseungjun.droidlens.fakepay'
+    compileSdk 34
+
+    defaultConfig {
+        applicationId 'io.github.eseungjun.droidlens.fakepay'
+        minSdk 24
+        targetSdk 34
+        versionCode 1
+        versionName '1.0'
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+}

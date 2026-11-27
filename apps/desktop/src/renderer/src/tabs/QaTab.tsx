@@ -322,7 +322,7 @@ export function QaTab() {
           <div className="qa-body">
             {step === 'docs' && <DocsStep key={plan.id} view={view!} reload={reload} onNext={() => setStep('review')} />}
             {step === 'review' && <ReviewStep key={plan.id} view={view!} setView={setView} onNext={() => setStep('run')} />}
-            {step === 'run' && <RunStep key={plan.id} view={view!} />}
+            {step === 'run' && <RunStep key={plan.id} view={view!} setView={setView} />}
           </div>
         </section>
       )}
@@ -1345,7 +1345,7 @@ function CaseEditor({
 
 // ---------- 3. 실행·결과 ----------
 
-function RunStep({ view }: { view: QaPlanView }) {
+function RunStep({ view, setView }: { view: QaPlanView; setView: (v: QaPlanView) => void }) {
   const { run, serial, devices, toast } = useApp();
   const t = useT();
   const qa = useQaState();
@@ -1531,6 +1531,8 @@ function RunStep({ view }: { view: QaPlanView }) {
         )}
       </div>
 
+      <PaymentTestCard view={view} setView={setView} locked={busy} />
+
       <div className="card">
         <div className="qa-row">
           <h5 style={{ margin: 0 }}>{t('결과')}</h5>
@@ -1584,6 +1586,80 @@ function RunStep({ view }: { view: QaPlanView }) {
           />
         )}
       </div>
+    </div>
+  );
+}
+
+/**
+ * 결제 시험 스위치 (#155). 계획 단위로 두고 기본은 꺼짐. 켜면 Play 결제와 적어 둔 결제 앱 창을,
+ * 사람이 허용한 확인 필수 TC 에서만 다룬다. 켜기 전에 실결제 주의 안내를 보여 주고 확인받는다
+ */
+function PaymentTestCard({ view, setView, locked }: { view: QaPlanView; setView: (v: QaPlanView) => void; locked: boolean }) {
+  const { run, toast } = useApp();
+  const t = useT();
+  const { plan } = view;
+  const cur = plan.paymentTest ?? { enabled: false, packages: [] };
+  const [pkgs, setPkgs] = useState(cur.packages.join('\n'));
+  const [asking, setAsking] = useState(false);
+  const armed = plan.cases.filter((c) => c.danger && c.allowDanger);
+  const list = pkgs.split(/[\s,]+/).map((p) => p.trim()).filter(Boolean);
+  const save = async (enabled: boolean, confirmed: boolean) => {
+    if ((await run(api.qaPaymentTest(plan.id, { enabled, packages: list, confirmed }))) === undefined) return;
+    setAsking(false);
+    setView(await api.qaPlanGet(plan.id));
+    toast(enabled ? t('결제 시험을 켰어요') : t('결제 시험을 껐어요'));
+  };
+  return (
+    <div className="card">
+      <h5>{t('결제 시험')}</h5>
+      <div className="qa-row">
+        <span className={`rv-chip ${cur.enabled ? 'fail' : 'mute'}`}>{cur.enabled ? t('켜짐') : t('꺼짐')}</span>
+        <span className="faint">
+          {cur.enabled
+            ? t('허용한 확인 필수 TC {n}개가 Play 결제와 아래 결제 앱 창을 다뤄요.', { n: armed.length })
+            : t('꺼져 있으면 결제 창이 뜨는 순간 누르지 않고 막힘으로 남겨요.')}
+        </span>
+      </div>
+      <label className="qa-field" style={{ marginTop: 8 }}>
+        <span>{t('함께 다룰 결제 앱 (패키지 이름, 한 줄에 하나)')}</span>
+        <textarea className="input" rows={2} value={pkgs} disabled={locked || asking} placeholder="com.example.pay" onChange={(e) => setPkgs(e.target.value)} />
+      </label>
+      {asking ? (
+        <div className="qa-ask">
+          <b>{t('실제 결제가 일어날 수 있어요. 켜기 전에 확인해 주세요.')}</b>
+          <ul>
+            <li>{t('기기에는 시험 계정과 시험 카드(Play 라이선스 테스터 등)만 둬요.')}</li>
+            <li>{t('DroidLens 는 계정·카드 정보를 입력하지 않아요. 로그인·카드 등록은 미리 해 두세요.')}</li>
+            <li>{t('결제 창 글자는 정리해서 데이터로만 에이전트에 넘겨요.')}</li>
+            <li>{t('켜도 사람이 허용한 확인 필수 TC 에서만 결제 창을 다뤄요.')}</li>
+          </ul>
+          <div className="qa-row">
+            <button className="btn sm danger" disabled={locked} onClick={() => save(true, true)}>
+              {cur.enabled ? t('확인했어요, 저장') : t('확인했어요, 켜기')}
+            </button>
+            <button className="btn sm" onClick={() => setAsking(false)}>
+              {t('취소')}
+            </button>
+          </div>
+        </div>
+      ) : (
+        <div className="qa-row" style={{ marginTop: 8 }}>
+          {cur.enabled ? (
+            <>
+              <button className="btn sm" disabled={locked} onClick={() => save(false, false)}>
+                {t('끄기')}
+              </button>
+              <button className="btn sm" disabled={locked || list.join('\n') === cur.packages.join('\n')} onClick={() => setAsking(true)}>
+                {t('결제 앱 목록 저장…')}
+              </button>
+            </>
+          ) : (
+            <button className="btn sm" disabled={locked} onClick={() => setAsking(true)}>
+              {t('결제 시험 켜기…')}
+            </button>
+          )}
+        </div>
+      )}
     </div>
   );
 }
