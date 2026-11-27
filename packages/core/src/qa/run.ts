@@ -280,7 +280,7 @@ export async function runQaScripts(
       result = { case: c.id, status: 'blocked', mode: 'script', script: c.script, note: s?.note ?? { code: 'scriptNone' } };
     } else if (s.changed && c.scriptCase) {
       // 이은 순간의 해시와 다르다: 누가(에이전트가 다른 TC 를 돌리다가 포함) 고쳤는지 모르므로 통과를 믿지 않는다 (#140).
-      // 같은 TC 안에서 고쳐 통과한 것은 MCP script_run 이 해시를 다시 잇는다. 해시를 모르는 옛 연결은 아래처럼 돌리되 누르지 않는다
+      // 다시 잇는 길은 에이전트가 그 TC 를 다시 확인해 통과시키는 것(scenario_finish)뿐이다 (#148). 해시를 모르는 옛 연결은 아래처럼 돌리되 누르지 않는다
       result = { case: c.id, status: 'blocked', mode: 'script', script: c.script, note: { code: 'scriptChanged' } };
       changed.push(c);
     } else {

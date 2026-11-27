@@ -259,11 +259,6 @@ export const recorder: {
   /** TC 를 실행하는 시나리오. run 이 있으면 scenario_finish 가 그 회차에 결과를 적는다 (#76) */
   tc?: { plan: string; case: string; fingerprint: string; run?: string };
   /**
-   * 방금 끝낸 TC 에 이은 스크립트 (#140). 다음 scenario_start 전까지 그 스크립트를 고쳐 script_run 이 통과하면 해시를 다시 잇는다.
-   * 다른 TC 를 돌리는 중에 고친 스크립트는 다시 잇지 않아서, 다음 회차가 돌리지 않고 에이전트로 넘긴다
-   */
-  relink?: { plan: string; case: string; script: string; fingerprint: string };
-  /**
    * 시나리오가 tap 으로 지난 화면 이동을 앱 지도에 남기는 경로 (#131). 온디바이스 에이전트가 있고 앱을 아는 시나리오에서만 만든다
    * (화면 확인이 느리면 조작마다 1~2초씩 늦어지므로)
    */
