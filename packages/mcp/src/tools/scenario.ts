@@ -250,14 +250,21 @@ export function register(server: McpServer): void {
         '시나리오 종료 및 HTML 리포트 생성. verdict: pass | fail | blocked. 통과(pass)하고 녹화된 조작이 있으면 ' +
         'YAML 스크립트로 저장해 script_run으로 다시 돌릴 수 있게 한다 (saveScript=false로 끔).',
       inputSchema: {
-        verdict: z.enum(['pass', 'fail', 'blocked']).describe('전체 판정. blocked = 앱·환경 문제로 끝까지 가지 못함'),
+        verdict: z.enum(['pass', 'fail', 'blocked']).describe('전체 판정. blocked = 앱·환경 문제로 끝까지 가지 못했거나 판정하지 못함'),
+        blockedBy: z
+          .enum(dl.QA_BLOCKED_BY)
+          .optional()
+          .describe(
+            'verdict=blocked 일 때 이유. app: 크래시·멈춤·다른 앱이 앞에 있음·사전 조건을 못 맞춤 (다음 TC 는 앱을 다시 띄운다). ' +
+              'judgment: 앱은 정상인데 판정할 정보가 없거나 기대 결과가 모호함 (다음 TC 는 앱을 그대로 두고 이어 간다). 모르면 app',
+          ),
         summary: z.string().describe('결과 요약 (리포트 맨 위에 나온다)'),
         saveScript: z.boolean().optional().describe('false 면 통과해도 스크립트로 저장하지 않는다 (기본 true)'),
         scriptName: z.string().optional().describe('저장할 스크립트 이름 (기본: 시나리오 이름)'),
       },
       annotations: acts,
     },
-    async ({ verdict, summary, saveScript, scriptName }) => {
+    async ({ verdict, summary, saveScript, scriptName, blockedBy }) => {
       if (!scenario) throw new Error('진행 중인 시나리오가 없습니다');
       const html = await scenario.finish(verdict, summary, recorder.actions);
       recorder.actions = [];
@@ -336,6 +343,14 @@ export function register(server: McpServer): void {
           .recordQaResult(tc.plan, tc.run, {
             case: tc.case,
             status: noEvidence ? 'blocked' : verdict,
+            // 통과 근거(assert)만 빠진 막힘은 앱 상태가 멀쩡하다. 실패로 남은 단계가 있으면 이유를 비워 재시작하게 둔다
+            ...(noEvidence
+              ? dl.passEvidenceOnlyMissing(d)
+                ? { blockedBy: 'judgment' as const }
+                : {}
+              : verdict === 'blocked' && blockedBy
+                ? { blockedBy }
+                : {}),
             mode: 'agent',
             report: html,
             detail: (noEvidence ? `통과 근거 없음: ${noEvidence} · ${summary}` : summary).slice(0, 2000) || undefined,

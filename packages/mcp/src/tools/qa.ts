@@ -389,11 +389,15 @@ export function register(server: McpServer): void {
         case: z.string().regex(dl.CASE_ID).describe('TC 번호 (TC-001)'),
         status: z.enum(['skip', 'blocked']).describe('skip: 이번에 하지 않음 · blocked: 환경·앱 문제로 끝까지 못 감'),
         reason: z.string().trim().min(1).max(500).describe('왜 돌리지 못했는지 (결과표에 나온다)'),
+        blockedBy: z
+          .enum(dl.QA_BLOCKED_BY)
+          .optional()
+          .describe('status=blocked 일 때 이유. app: 앱·환경 문제(다음 TC 는 앱을 다시 띄운다). judgment: 앱은 정상인데 판정할 정보가 없음'),
       },
       annotations: acts,
     },
-    async ({ plan, run, case: caseId, status, reason }) => {
-      await dl.recordQaResult(plan, run, { case: caseId, status, mode: 'manual', detail: reason });
+    async ({ plan, run, case: caseId, status, reason, blockedBy }) => {
+      await dl.recordQaResult(plan, run, { case: caseId, status, mode: 'manual', detail: reason, ...(blockedBy ? { blockedBy } : {}) });
       return text(`회차 ${run} 에 ${caseId} ${dl.QA_STATUS_LABEL[status]} 를 적었습니다`);
     },
   );

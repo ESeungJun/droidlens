@@ -6,6 +6,7 @@ import type { DeviceAdb } from '../adb.js';
 import { parseScript, scriptsDir, type Script } from '../script/schema.js';
 import { runScript, type ScriptRunOptions } from '../script/run.js';
 import { appInfo } from '../app.js';
+import type { StartScreen } from '../graph.js';
 import { needsRestart, scriptSetupChangesData, unmetVersionCondition, type PrevCaseRun } from './continuity.js';
 import { readJson, timestamp, writeJson } from '../workspace.js';
 import { CASE_ID, PLAN_ID, PRIORITIES, caseContentHash, caseTrack, type QaCase, type QaPlan, type QaTrack } from './plan.js';
@@ -24,6 +25,12 @@ export const QA_RUN_VERSION = 1;
 export const RUN_ID = /^\d{8}-\d{6}(_\d{1,2})?$/;
 export const QA_STATUSES = ['pass', 'fail', 'blocked', 'skip'] as const;
 export type QaStatus = (typeof QA_STATUSES)[number];
+/**
+ * 막힘의 이유 (#159). app: 앱·환경 문제(크래시·멈춤·다른 앱·사전 조건 실패)라 다음 TC 는 앱을 다시 띄운다.
+ * judgment: 앱은 멀쩡한데 판정할 정보가 없거나 기대 결과가 모호하다. 다음 TC 는 앱과 대화를 그대로 두고 이어 간다
+ */
+export const QA_BLOCKED_BY = ['app', 'judgment'] as const;
+export type QaBlockedBy = (typeof QA_BLOCKED_BY)[number];
 export const QA_STATUS_LABEL: Record<QaStatus | 'not-run', string> = {
   pass: '통과',
   fail: '실패',
@@ -51,6 +58,8 @@ export const qaCaseResultSchema = z
       .strict()
       .optional(),
     durationMs: z.number().int().nonnegative().optional(),
+    /** 막힘일 때만: 앱 문제인지 판정만 못 한 것인지 (#159) */
+    blockedBy: z.enum(QA_BLOCKED_BY).optional(),
     at: z.number().int(),
     /** 같은 회차에서 이 결과로 바뀐 앞 실행 결과 (최근 5개). 스크립트 실패 → 에이전트 재확인 통과 같은 흐름을 결과표에 남긴다 */
     history: z
@@ -167,8 +176,10 @@ export function recordQaResult(planId: string, runId: string, result: Omit<QaCas
         : prev?.history;
     const note = result.note && maskNote(result.note, c.data);
     const detail = result.detail ?? (note ? qaNoteText(note, 'ko').slice(0, 2000) : undefined);
+    const { blockedBy, ...rest } = result;
     const r = qaCaseResultSchema.parse({
-      ...result,
+      ...rest,
+      ...(blockedBy && result.status === 'blocked' ? { blockedBy } : {}),
       ...(note ? { note } : {}),
       ...(detail ? { detail: maskCaseData(detail, c.data) } : {}),
       at: Date.now(),
@@ -265,6 +276,8 @@ export async function runQaScripts(
   const installed = scripted.length && plan.app ? (await appInfo(dev, plan.app).catch(() => undefined))?.versionName : undefined;
   // 바로 앞에서 실제로 돌린 TC. 통과했고 조건이 같으면 앱을 끄지 않고 이어 간다 (#130)
   let prev: PrevCaseRun | undefined;
+  // 앱을 처음부터 띄웠을 때 본 첫 화면. 이어 가는 TC 는 태스크를 비우지 않고 여기로 돌아간다 (#159)
+  let start: StartScreen | undefined;
   let restarts = 0;
   let i = 0;
   for (; i < scripted.length; i++) {
@@ -289,15 +302,14 @@ export async function runQaScripts(
       const setupData = scriptSetupChangesData(s.script.setup);
       const keepProcess = !needsRestart(prev, { preconditions: c.preconditions, changesData: setupData });
       try {
-        const r = await runScript(dev, s.script, {
-          sourcePath: s.path,
-          signal: opts.signal,
-          onStep: opts.onStep,
-          guardDanger,
-          qaRun: run.id,
-          keepProcess,
-        });
+        const go = (keep: boolean) =>
+          runScript(dev, s.script, { sourcePath: s.path, signal: opts.signal, onStep: opts.onStep, guardDanger, qaRun: run.id, keepProcess: keep, start });
+        let r = await go(keepProcess);
+        // 이어 간 화면에는 앞 TC 의 스크롤·입력 상태가 남을 수 있다. 처음부터 띄운 상태로 녹화한 스크립트가 그 때문에
+        // 거짓 실패하지 않게, 이어 가서 통과하지 못했으면 한 번만 새로 띄워 다시 돌린다 (#159)
+        if (r.resumed && r.verdict !== 'pass' && !opts.signal?.aborted) r = await go(false);
         if (r.restarted) restarts++;
+        start = r.start ?? start;
         // 확인 필수 동작을 누르지 않은 까닭은 앱 메모(코드 값), 시나리오 요약은 에이전트·스크립트 글이라 그대로 뒤에 붙인다
         const summary = r.scenario.summary?.slice(0, 1500);
         const note: QaNote | undefined =
@@ -405,12 +417,23 @@ export function maskCaseData(text: string, data?: string): string {
  * 정정 뒤에도 실패로 남은 단계가 없어야 한다. 근거가 없으면 그 이유 (회차에는 막힘으로 적고 스크립트도 잇지 않는다)
  */
 export function missingPassEvidence(d: Pick<ScenarioData, 'steps'>): string | undefined {
-  const final = new Map<number, string>();
-  for (const s of d.steps) if (s.corrects === undefined) final.set(s.index, s.status);
-  for (const s of d.steps) if (s.corrects !== undefined) final.set(s.corrects, s.status);
-  const base = d.steps.filter((s) => s.corrects === undefined);
+  const { final, base } = finalSteps(d);
   if (base.some((s) => final.get(s.index) === 'fail')) return '실패로 남은 단계가 있습니다';
   if (!base.some((s) => s.check?.by === 'assert' && s.status === 'pass' && final.get(s.index) === 'pass'))
     return 'DroidLens 가 직접 검사(assert)해 통과한 단계가 없습니다';
   return undefined;
+}
+
+/** 정정을 반영한 단계별 최종 상태 */
+function finalSteps(d: Pick<ScenarioData, 'steps'>) {
+  const final = new Map<number, string>();
+  for (const s of d.steps) if (s.corrects === undefined) final.set(s.index, s.status);
+  for (const s of d.steps) if (s.corrects !== undefined) final.set(s.corrects, s.status);
+  return { final, base: d.steps.filter((s) => s.corrects === undefined) };
+}
+
+/** 통과 근거가 없는 까닭이 assert 가 없는 것뿐인지 (실패로 남은 단계는 없음). 그때만 앱 상태를 믿고 이어 간다 (#159) */
+export function passEvidenceOnlyMissing(d: Pick<ScenarioData, 'steps'>): boolean {
+  const { final, base } = finalSteps(d);
+  return !base.some((s) => final.get(s.index) === 'fail') && missingPassEvidence(d) !== undefined;
 }

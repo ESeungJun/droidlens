@@ -60,5 +60,8 @@ if (mode === 'hang') {
   else if (cmd.startsWith('logcat') || cmd.includes('logcat')) process.stdout.write(read('logcat.txt'));
   // 웹뷰 디버깅 소켓 찾기 (#132): unix.txt 에 '/proc/net/unix 줄들\n--\npidof 결과' 를 둔다
   else if (cmd.includes('/proc/net/unix')) process.stdout.write(read('unix.txt') || '--\n');
+  // 앱 이어 가기 (#159): pidof.txt 가 있으면 앱이 떠 있는 것으로, launcher.txt 는 런처 Activity(패키지/클래스)
+  else if (cmd.startsWith('pidof ')) process.stdout.write(read('pidof.txt'));
+  else if (cmd.startsWith('cmd package resolve-activity')) process.stdout.write(read('launcher.txt'));
   else if (cmd.startsWith('getprop')) process.stdout.write('Fake\nPhone\n14\n34\narm64-v8a\nPhysical size: 1080x2400\nPhysical density: 420\n');
 }

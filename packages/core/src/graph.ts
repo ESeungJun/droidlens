@@ -18,11 +18,15 @@ export {
   captureSnapshot,
   dismissSystemDialog,
   launchAndSettle,
+  returnToStart,
   screenId,
+  resumeStartOf,
   targetAt,
   waitForSettle,
   type Candidate,
+  type ReturnToStartResult,
   type Snapshot,
+  type StartScreen,
 } from './graph/snapshot.js';
 export { MAP_LIMITS, type MapBundle } from './graph/bundle.js';
 export { ScreenGraph } from './graph/store.js';

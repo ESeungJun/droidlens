@@ -319,6 +319,11 @@ async function pidOf(dev: DeviceAdb, pkg: string): Promise<number | undefined> {
   return Number(out.trim().split(/\s+/)[0]) || undefined;
 }
 
+/** 앱 프로세스가 떠 있는지 */
+export async function isAppRunning(dev: DeviceAdb, pkg: string): Promise<boolean> {
+  return (await pidOf(dev, pkg)) !== undefined;
+}
+
 /** 최근 로그 덤프 (-d) */
 export async function readLogcat(
   dev: DeviceAdb,

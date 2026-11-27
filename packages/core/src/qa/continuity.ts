@@ -1,5 +1,5 @@
 import type { Script } from '../script/schema.js';
-import type { QaStatus } from './run.js';
+import type { QaBlockedBy, QaStatus } from './run.js';
 
 /**
  * QA 회차를 빨리 돌리는 판단 (#130). 기기를 건드리지 않는 순수 함수만 둔다.
@@ -15,6 +15,8 @@ export interface PrevCaseRun {
   preconditions: readonly string[];
   /** 앱 데이터를 바꾸는 조작을 했는지 (데이터 지우기·Prefs·DB 쓰기·목·확인 필수 동작) */
   changedData: boolean;
+  /** 막힘의 이유 (#159). judgment 면 앱 상태는 멀쩡해 통과처럼 이어 간다 */
+  blockedBy?: QaBlockedBy;
 }
 
 /** 이제 실행할 TC */
@@ -29,12 +31,20 @@ const condKey = (xs: readonly string[]) => JSON.stringify(xs.map((x) => x.trim()
 /**
  * 앱을 강제 종료하고 새로 띄워야 하는지.
  * 앞 TC 가 통과했고, 사전 조건이 같고, 앞 TC 와 이 TC 준비가 데이터를 바꾸지 않았을 때만 프로세스를 유지한다.
- * 실패·막힘 뒤에는 앞 TC 의 상태가 다음 판정에 섞이지 않게 늘 새로 띄운다
+ * 판정만 못 한 막힘도 통과처럼 이어 간다 (#159). 실패·앱 문제 막힘 뒤에는 앞 TC 의 상태가 다음 판정에 섞이지 않게 늘 새로 띄운다
  */
 export function needsRestart(prev: PrevCaseRun | undefined, next: NextCaseRun): boolean {
-  if (!prev || prev.status !== 'pass') return true;
+  if (!prev || !keepsAppState(prev)) return true;
   if (prev.changedData || next.changesData) return true;
   return condKey(prev.preconditions) !== condKey(next.preconditions);
+}
+
+/**
+ * 이 결과 뒤에 앱 상태(와 에이전트 대화)를 그대로 두고 이어 가도 되는지 (#159).
+ * 통과, 또는 앱은 멀쩡한데 판정만 못 한 막힘(blockedBy: judgment). 앱 문제 막힘·이유 모르는 막힘·실패는 아니다
+ */
+export function keepsAppState(r: { status: QaStatus; blockedBy?: QaBlockedBy }): boolean {
+  return r.status === 'pass' || (r.status === 'blocked' && r.blockedBy === 'judgment');
 }
 
 /** 스크립트 준비 단계가 앱 데이터를 바꾸는지. 목은 앱 안에 저장되고 재시작해야 적용된다 */
