@@ -448,6 +448,7 @@ function DocsStep({ view, reload, onNext }: { view: QaPlanView; reload: () => Pr
             </tbody>
           </table>
         )}
+        <TcImportUndo planId={plan.id} updatedAt={plan.updatedAt} busy={mine} reload={reload} />
         <div className="qa-add">
           <span className="qa-add-k">{t('파일')}</span>
           <button
@@ -572,6 +573,54 @@ const TC_PICK_FIELDS = [
 ] as const;
 
 /** 머리글을 못 알아본 표에서 사람이 열을 골라 TC 로 가져온다 (#129) */
+/** 마지막 TC 표 가져오기 되돌리기 (#154). 보관본이 없으면 숨는다 */
+function TcImportUndo({ planId, updatedAt, busy, reload }: { planId: string; updatedAt: number; busy: boolean; reload: () => Promise<void> }) {
+  const { run, toast } = useApp();
+  const t = useT();
+  const [backup, setBackup] = useState<{ at: number; cases: number } | undefined>();
+  const [asking, setAsking] = useState(false);
+  useEffect(() => {
+    let alive = true;
+    api
+      .qaTcImportBackup(planId)
+      .then((b) => alive && setBackup(b ?? undefined))
+      .catch(() => alive && setBackup(undefined));
+    return () => {
+      alive = false;
+    };
+  }, [planId, updatedAt]);
+  useEffect(() => setAsking(false), [planId]);
+  if (!backup) return null;
+  return (
+    <div className="qa-row" style={{ margin: '8px 0', flexWrap: 'wrap' }}>
+      {asking ? (
+        <>
+          <span>{t('{time} 가져오기 전으로 되돌려요 (TC {n}개). 가져온 뒤 고친 것도 함께 사라져요.', { time: shortTime(backup.at), n: backup.cases })}</span>
+          <button
+            className="btn sm primary"
+            disabled={busy}
+            onClick={async () => {
+              setAsking(false);
+              if ((await run(api.qaTcUndo(planId))) === undefined) return;
+              toast(t('TC 표 가져오기를 되돌렸어요'));
+              await reload();
+            }}
+          >
+            {t('되돌리기')}
+          </button>
+          <button className="btn sm" onClick={() => setAsking(false)}>
+            {t('취소')}
+          </button>
+        </>
+      ) : (
+        <button className="btn sm" disabled={busy} onClick={() => setAsking(true)} title={t('마지막 TC 표 가져오기 직전 계획으로 돌아가요')}>
+          {t('가져오기 되돌리기…')}
+        </button>
+      )}
+    </div>
+  );
+}
+
 function TcColumnPicker({
   planId,
   source,
