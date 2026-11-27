@@ -74,6 +74,9 @@ export function register(handle: Handle): void {
     const r = await dl.importQaTcTable(String(id), String(source), { sheet: pick.sheet, headerRow: Number(pick.headerRow), map: pick.map });
     return { cases: r.cases, added: r.added, changed: r.changed, same: r.same, warnings: r.warnings };
   });
+  // 가져오기 되돌리기 (#154): 보관본이 있는지, 되돌리기
+  handle('qaTcImportBackup', (id: string) => dl.qaTcImportBackup(String(id)));
+  handle('qaTcUndo', (id: string) => dl.undoQaTcImport(String(id)));
   // 가져오기 미리보기 (#153): 계획을 바꾸지 않는다
   handle('qaTcPreview', async (id: string, source: string, pick: { sheet: string; headerRow: number; map: Record<string, number> }) => {
     if (!pick || typeof pick !== 'object' || typeof pick.sheet !== 'string' || !pick.map || typeof pick.map !== 'object') throw new Error('잘못된 요청입니다');

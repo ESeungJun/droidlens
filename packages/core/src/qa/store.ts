@@ -1,5 +1,5 @@
 import { existsSync } from 'node:fs';
-import { mkdir, readdir, readFile, writeFile } from 'node:fs/promises';
+import { mkdir, readdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { droidlensHome, ensureDir, readJson, safeName, timestamp, writeFileAtomic, writeJson } from '../workspace.js';
 import {
@@ -552,6 +552,8 @@ export function importQaTcTable(
       return { ...c, ...content, ...(moved ? { allowDanger: false } : {}) };
     });
     const next = validatePlan({ ...plan, cases: [...cases, ...added], updatedAt: Date.now() });
+    // 되돌리기(#154)용으로 가져오기 직전 계획을 한 단계 보관한다. 보관이 끝난 뒤에 바꾼다
+    await writeJson(backupFile(id), { at: Date.now(), plan });
     await writeJson(planFile(id), next);
     const changed = patch.size;
     return {
@@ -563,6 +565,41 @@ export function importQaTcTable(
       warnings: r.warnings,
       ms: Math.round(performance.now() - t0),
     };
+  });
+}
+
+/** 가져오기 직전 계획 보관본 (#154). 한 단계만 둔다 */
+const backupFile = (id: string) => join(qaPlanDir(id), 'plan.before-import.json');
+
+async function readBackup(id: string): Promise<{ at: number; plan: QaPlan } | undefined> {
+  const raw = await readJson<{ at?: unknown; plan?: unknown }>(backupFile(id));
+  if (!raw || typeof raw.at !== 'number' || !raw.plan) return undefined;
+  try {
+    const plan = validatePlan(raw.plan);
+    return plan.id === id ? { at: raw.at, plan } : undefined;
+  } catch {
+    return undefined; // 깨진 보관본은 없는 것으로 본다
+  }
+}
+
+/** 되돌릴 수 있는 가져오기가 있으면 보관한 시각과 그때 TC 수 */
+export async function qaTcImportBackup(id: string): Promise<{ at: number; cases: number } | undefined> {
+  const b = await readBackup(id);
+  return b && { at: b.at, cases: b.plan.cases.length };
+}
+
+/**
+ * 마지막 TC 표 가져오기를 되돌린다 (#154): 가져오기 직전 계획(선택·허용 같은 사람 결정 포함)으로 바꾸고 보관본을 지운다.
+ * 가져온 뒤 고친 것도 함께 사라진다. 사람 전용: 데스크톱 QA 탭 버튼에서만 부른다
+ */
+export function undoQaTcImport(id: string): Promise<QaPlan> {
+  return withPlanLock(id, async () => {
+    const b = await readBackup(id);
+    if (!b) throw new Error('되돌릴 가져오기가 없어요');
+    const plan = { ...b.plan, updatedAt: Date.now() };
+    await writeJson(planFile(id), plan);
+    await rm(backupFile(id), { force: true });
+    return plan;
   });
 }
 

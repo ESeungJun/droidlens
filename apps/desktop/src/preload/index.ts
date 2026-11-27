@@ -10,7 +10,7 @@ const INVOKE = new Set([
   'explore', 'exploreStop', 'graphChecks', 'graphExport', 'graphGet', 'graphImage', 'graphImport', 'graphNavigate', 'graphRecord', 'graphRecordHere',
   'graphReset', 'home', 'installAgents', 'integration', 'key', 'launch', 'logcatStart', 'logcatStop', 'longPress', 'mirrorStart',
   'mirrorStop', 'openExternal', 'openPath', 'packages', 'perfResetFrames',
-  'qaCaseAllow', 'qaCaseUpdate', 'qaConfirm', 'qaExtract', 'qaJob', 'qaPlanCreate', 'qaPlanDelete', 'qaPlanDeleteInfo', 'qaPlanGet', 'qaPlanRename', 'qaPlans', 'qaReport', 'qaRun', 'qaRunExport', 'qaRunGet', 'qaRunIndex', 'qaRunPreview', 'qaTcImport', 'qaTcPreview',
+  'qaCaseAllow', 'qaCaseUpdate', 'qaConfirm', 'qaExtract', 'qaJob', 'qaPlanCreate', 'qaPlanDelete', 'qaPlanDeleteInfo', 'qaPlanGet', 'qaPlanRename', 'qaPlans', 'qaReport', 'qaRun', 'qaRunExport', 'qaRunGet', 'qaRunIndex', 'qaRunPreview', 'qaTcImport', 'qaTcImportBackup', 'qaTcPreview', 'qaTcUndo',
   'qaSelect', 'qaSourceLink', 'qaSourcePick', 'qaStop', 'perfSample', 'perfStartup', 'platform', 'recordStart', 'recordStatus', 'recordStop', 'registerMcp', 'reveal',
   'saveScreenshot', 'scenarioDelete', 'scenarioImage', 'scenarios', 'screenshot', 'screenshotPng', 'scriptDelete', 'scriptRead',
   'scriptRun', 'scriptsList', 'scriptStop', 'scriptWrite', 'sdk', 'sdkApps', 'setAdbPath', 'setClaudeConfigDir', 'setTheme', 'snapshot', 'stop', 'swipe', 'tap',

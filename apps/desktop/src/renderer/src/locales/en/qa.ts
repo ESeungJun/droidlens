@@ -257,4 +257,11 @@ export const qa: Record<string, string> = {
   '바뀌는 TC': 'Changed',
   '모두 {n}줄 중 처음 {k}줄': 'First {k} of {n} rows',
   '바뀌는 TC 는 그 자리에서 표의 내용으로 고쳐요. 고른 것은 그대로 두고, 내용이 바뀐 확인 필수 TC 는 허용을 다시 받아요.': 'Changed TCs are updated in place from the sheet. Selections stay; confirm-required TCs whose content changed need approval again.',
+  // TC 표 가져오기 되돌리기 (#154)
+  '{time} 가져오기 전으로 되돌려요 (TC {n}개). 가져온 뒤 고친 것도 함께 사라져요.': 'Go back to before the {time} import ({n} TCs). Edits made after the import are lost too.',
+  '되돌리기': 'Undo',
+  '취소': 'Cancel',
+  'TC 표 가져오기를 되돌렸어요': 'Undid the TC sheet import',
+  '마지막 TC 표 가져오기 직전 계획으로 돌아가요': 'Return to the plan as it was right before the last TC sheet import',
+  '가져오기 되돌리기…': 'Undo import…',
 };
