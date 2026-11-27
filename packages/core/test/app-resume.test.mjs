@@ -50,6 +50,18 @@ test('returnToStart: 시작 화면이 알려져 있으면 뒤로 가기로 돌�
   assert.equal(forceStops(f), 0);
 });
 
+test('launchApp 은 런처 인텐트로 띄워, 뒤에 앞으로 가져와도 첫 화면을 하나 더 만들지 않는다 (#159 실기기 회귀)', async () => {
+  const f = fakeDevice(appDef, 'resume-1b');
+  await g.launchAndSettle(f.dev, PKG);
+  assert.ok(f.commands().some((c) => c.includes(CLEAR_TASK) && c.includes('-a android.intent.action.MAIN -c android.intent.category.LAUNCHER')));
+  const start = g.resumeStartOf(await g.waitForSettle(f.dev), PKG);
+  await f.dev.shell('input tap 540 145');
+  assert.equal(f.screen, 'detail');
+  const r = await g.returnToStart(f.dev, PKG, start);
+  assert.equal(r.resumed, true);
+  assert.equal(f.depth, 1, '태스크에 첫 화면 하나만 남음 (새로 만든 화면이 쌓이지 않음)');
+});
+
 test('returnToStart: 이미 시작 화면이면 아무것도 누르지 않는다', async () => {
   const f = fakeDevice(appDef, 'resume-2');
   const start = await startOf(f);
