@@ -69,6 +69,17 @@ export const qaCaseResultSchema = z
   })
   .strict();
 
+const count = z.number().int().nonnegative();
+/** 회차 실행 측정값 (#141): 에이전트 대화를 새로 연 수, 앱을 강제 종료한 수, TC 마다 걸린 시간(같은 TC 를 다시 돌리면 마지막 값) */
+export const qaRunMetricsSchema = z
+  .object({
+    conversations: count,
+    forceStops: count,
+    caseMs: z.record(z.string().regex(CASE_ID), count),
+  })
+  .strict();
+export type QaRunMetrics = z.infer<typeof qaRunMetricsSchema>;
+
 export const qaRunSchema = z
   .object({
     version: z.literal(QA_RUN_VERSION),
@@ -77,6 +88,8 @@ export const qaRunSchema = z
     startedAt: z.number().int(),
     /** 같은 TC 를 다시 돌리면 마지막 결과가 남는다 */
     results: z.array(qaCaseResultSchema).default([]),
+    /** 실행 측정값 (#141). 옛 회차에는 없다 */
+    metrics: qaRunMetricsSchema.optional(),
   })
   .strict();
 
@@ -186,6 +199,29 @@ export function recordQaResult(planId: string, runId: string, result: Omit<QaCas
       ...(history?.length ? { history } : {}),
     });
     const next: QaRun = { ...run, results: [...run.results.filter((x) => x.case !== r.case), r] };
+    await writeJson(runFile(planId, runId), next);
+    return next;
+  });
+}
+
+/**
+ * 회차 측정값을 더한다 (#141). 대화 수·강제 종료 수는 더하고, TC 시간은 그 TC 의 마지막 값으로 둔다.
+ * 회차를 돌리는 쪽(데스크톱 앱·스크립트 실행)이 부른다
+ */
+export function addQaRunMetrics(
+  planId: string,
+  runId: string,
+  add: { conversations?: number; forceStops?: number; caseMs?: Record<string, number> },
+): Promise<QaRun> {
+  return withPlanLock(planId, async () => {
+    const run = await loadQaRun(planId, runId);
+    const m = run.metrics ?? { conversations: 0, forceStops: 0, caseMs: {} };
+    const metrics = qaRunMetricsSchema.parse({
+      conversations: m.conversations + (add.conversations ?? 0),
+      forceStops: m.forceStops + (add.forceStops ?? 0),
+      caseMs: { ...m.caseMs, ...add.caseMs },
+    });
+    const next: QaRun = { ...run, metrics };
     await writeJson(runFile(planId, runId), next);
     return next;
   });
@@ -343,6 +379,9 @@ export async function runQaScripts(
     run = await recordQaResult(planId, run.id, result);
     ran.push(run.results.find((x) => x.case === c.id)!);
   }
+  // 스크립트로 돌린 TC 의 시간과 강제 종료 횟수를 회차 측정값에 더한다 (#141)
+  const caseMs = Object.fromEntries(ran.filter((r) => r.durationMs !== undefined).map((r) => [r.case, r.durationMs!]));
+  if (restarts || Object.keys(caseMs).length) run = await addQaRunMetrics(planId, run.id, { forceStops: restarts, caseMs }).catch(() => run);
   return { run, ran, pending: [...pending, ...changed], needsReview, remaining: scripted.slice(i), restarts, installed };
 }
 
@@ -359,6 +398,8 @@ export interface QaRunSummary {
   byTrack: Partial<Record<QaTrack, Record<QaStatus | 'not-run', number> & { total: number }>>;
   /** 요구사항별: 덮는 고른 TC 가 모두 통과면 pass, 하나라도 실패·막힘이면 fail, 아니면 not-run */
   requirements: { id: string; text: string; status: 'pass' | 'fail' | 'not-run'; cases: string[] }[];
+  /** 실행 측정값 (#141). 측정값이 없는 옛 회차는 없다 */
+  metrics?: { conversations: number; forceStops: number; cases: number; totalCaseMs: number; avgCaseMs: number };
 }
 
 /** 회차 결과를 계획의 고른 TC 와 맞대어 집계 (결과표·CLI·MCP 공용) */
@@ -391,7 +432,13 @@ export function qaRunSummary(plan: QaPlan, run: QaRun): QaRunSummary {
         : 'not-run';
     return { id: req.id, text: req.text, status: s, cases };
   });
-  return { rows, counts, byTrack, requirements };
+  return { rows, counts, byTrack, requirements, ...(run.metrics ? { metrics: summarizeMetrics(run.metrics) } : {}) };
+}
+
+function summarizeMetrics(m: QaRunMetrics): NonNullable<QaRunSummary['metrics']> {
+  const ms = Object.values(m.caseMs);
+  const totalCaseMs = ms.reduce((a, b) => a + b, 0);
+  return { conversations: m.conversations, forceStops: m.forceStops, cases: ms.length, totalCaseMs, avgCaseMs: ms.length ? Math.round(totalCaseMs / ms.length) : 0 };
 }
 
 /**
