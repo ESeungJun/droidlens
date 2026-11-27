@@ -185,8 +185,14 @@ test('결제 창 판정은 포커스 창·트리 루트를 둘 다 보고, 포�
     assert.match(k.text, /결제 창\(com\.android\.vending\)/);
     assert.deepEqual(sent(), []);
 
-    // 포커스는 대상 앱인데 트리 루트가 결제 창(어긋남): 검사 근거를 원문으로 내지 않는다
+    // 포커스는 대상 앱인데 트리 맨 위가 결제 창(포커스 없는 팝업): 입력을 보내지 않는다
     s.setFile('focus.txt', 'com.example.app/com.example.app.MainActivity');
+    s.clearLog();
+    const k2 = await s.call('press_key', { key: 'back' });
+    assert.equal(k2.isError, true, k2.text);
+    assert.match(k2.text, /결제 창\(com\.android\.vending\)/);
+    assert.deepEqual(sent(), []);
+    // 검사 근거도 원문으로 내지 않는다
     const st = await s.call('scenario_start', { name: '어긋남' });
     assert.equal(st.isError, false, st.text);
     const step = await s.call('scenario_step', { title: '결제 창', assert: { visible: { textContains: 'ignore' } }, screenshot: false });

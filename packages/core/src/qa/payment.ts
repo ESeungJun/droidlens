@@ -86,7 +86,7 @@ type PlanCtx = { plan?: Pick<QaPlan, 'app' | 'paymentTest' | 'cases'>; caseId?: 
 /**
  * 앞 화면이 결제 창인지와 이 계획·TC 가 다뤄도 되는지 (#155). 입력·읽기·기록이 모두 이 판정 하나를 쓴다.
  * 포커스 창 패키지와 화면 트리 루트 패키지를 둘 다 보고, 하나라도 결제 창이면 결제 창이다(허용도 둘 다 돼야).
- * 포커스를 못 읽었고 트리도 없으면 트리를 덤프해 본다. 둘 다 못 읽으면 결제 창으로 보고 막는다(닫힌 쪽)
+ * 트리를 받지 않았으면 포커스가 결제 창일 때만 덤프 없이 판정하고, 아니면 늘 트리를 덤프해 둘 다 본다. 둘 다 못 읽으면 막는다(닫힌 쪽)
  */
 export async function paymentScreen(
   dev: DeviceAdb,
@@ -94,8 +94,14 @@ export async function paymentScreen(
   root?: ViewNode,
 ): Promise<{ payment: boolean; allowed: boolean; pkg?: string; reason?: string; root?: ViewNode }> {
   const focus = (await currentScreen(dev).catch(() => undefined))?.packageName || undefined;
+  // 포커스가 이미 결제 창이면 덤프 없이 바로 판정한다
+  if (focus && !root) {
+    const a = externalPackageAccess(ctx.plan, ctx.caseId, focus);
+    if (a.payment) return { ...a, pkg: focus };
+  }
+  // 아니면 트리 맨 위도 본다: 포커스를 받지 않는 결제 팝업(#127 꼴)이 대상 앱 위에 떠 있을 수 있다
   let tree = root;
-  if (!tree && !focus) tree = (await dumpHierarchy(dev).catch(() => undefined))?.root;
+  if (!tree) tree = (await dumpHierarchy(dev).catch(() => undefined))?.root;
   const pkgs = [...new Set([focus, rootPackage(tree)].filter((p): p is string => !!p))];
   if (!pkgs.length) return { payment: true, allowed: false, reason: '앞 화면을 읽지 못해 결제 창인지 알 수 없어요', root: tree };
   let paid: string | undefined;
