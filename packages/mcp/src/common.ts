@@ -25,11 +25,15 @@ export async function device(serial?: string): Promise<dl.DeviceAdb> {
  * core 입력 함수의 관문을 거친다 (#155): 결제 창이면 지금 TC 시나리오의 계획·TC 가 다뤄도 될 때만 보낸다. 허용은 매번 계획 파일에서 다시 읽는다
  */
 function guarded(dev: dl.DeviceAdb): dl.DeviceAdb {
-  dev.inputGuard = dl.externalInputGuard(dev, async () => {
-    const tc = recorder.active ? recorder.tc : undefined;
-    return { plan: tc ? await dl.loadQaPlan(tc.plan).catch(() => undefined) : undefined, caseId: tc?.case };
-  });
+  dev.inputGuard = dl.externalInputGuard(dev, planCtx);
+  dev.paymentPackages = async () => dl.paymentPackages((await planCtx()).plan);
   return dev;
+}
+
+/** 지금 TC 시나리오의 계획·TC (TC 밖이면 비어 있다). 허용은 매번 계획 파일에서 다시 읽는다 */
+async function planCtx(): Promise<{ plan?: dl.QaPlan; caseId?: string }> {
+  const tc = recorder.active ? recorder.tc : undefined;
+  return { plan: tc ? await dl.loadQaPlan(tc.plan).catch(() => undefined) : undefined, caseId: tc?.case };
 }
 
 export const text = (t: string) => ({ content: [{ type: 'text' as const, text: t }] });
@@ -246,21 +250,11 @@ export async function guardRisky(
  * 앞 화면(활성 창)의 패키지가 외부 결제 창인지와 이 시나리오가 그 창을 다뤄도 되는지 (#155).
  * TC 를 실행하는 시나리오면 그 계획·TC 로, 아니면(대화창 등) 계획 없이 본다(결제 창은 막힘). 허용은 매번 계획 파일에서 다시 읽는다
  */
-export async function externalGate(dev: dl.DeviceAdb, tree?: dl.ViewNode): Promise<{ tree: dl.ViewNode; pkg?: string; access: ReturnType<typeof dl.externalPackageAccess> }> {
+export async function externalGate(dev: dl.DeviceAdb, tree?: dl.ViewNode): Promise<{ tree: dl.ViewNode; pkg?: string; access: { allowed: boolean; payment: boolean; reason?: string } }> {
   const t = tree ?? (await dl.dumpHierarchy(dev)).root;
-  const pkg = t.children[0]?.packageName || undefined;
-  const tc = recorder.active ? recorder.tc : undefined;
-  const plan = tc ? await dl.loadQaPlan(tc.plan).catch(() => undefined) : undefined;
-  return { tree: t, pkg, access: dl.externalPackageAccess(plan, tc?.case, pkg) };
-}
-
-/** 앞 화면(포커스 창)이 결제 창이면 그 패키지 (트리를 덤프하지 않는 가벼운 확인, #155) */
-export async function paymentFront(dev: dl.DeviceAdb): Promise<string | undefined> {
-  const pkg = (await dl.currentScreen(dev).catch(() => undefined))?.packageName || undefined;
-  if (!pkg) return undefined;
-  const tc = recorder.active ? recorder.tc : undefined;
-  const plan = tc ? await dl.loadQaPlan(tc.plan).catch(() => undefined) : undefined;
-  return dl.paymentPackages(plan).includes(pkg) ? pkg : undefined;
+  // 포커스 창과 트리 루트를 둘 다 보는 core 판정 하나를 쓴다 (입력 관문·화면 지도와 같은 판정)
+  const a = await dl.paymentScreen(dev, await planCtx(), t);
+  return { tree: t, pkg: a.pkg, access: { allowed: a.allowed, payment: a.payment, reason: a.reason } };
 }
 
 /**

@@ -14,7 +14,7 @@ import type { ScenarioData } from '../scenario-view.js';
 import { QA_NOTE_CODES, qaNoteText, type QaNote } from '../qa-note.js';
 import { sha256 } from './sources.js';
 import { loadQaPlan, qaPlanDir, withPlanLock } from './store.js';
-import { externalInputGuard } from './payment.js';
+import { externalInputGuard, paymentPackages } from './payment.js';
 
 /**
  * QA 회차 (#76): 고른 TC 를 우선순위 순서로 돌리고 TC 마다 결과를 남긴다.
@@ -340,7 +340,9 @@ export async function runQaScripts(
       const keepProcess = !needsRestart(prev, { preconditions: c.preconditions, changesData: setupData });
       // 결제 창은 이 TC 가 다뤄도 될 때만 누른다 (#155). 회차 시작 때 읽은 계획을 쓴다
       const prevGuard = dev.inputGuard;
+      const prevPay = dev.paymentPackages;
       dev.inputGuard = externalInputGuard(dev, async () => ({ plan, caseId: c.id }));
+      dev.paymentPackages = async () => paymentPackages(plan);
       try {
         const go = (keep: boolean) =>
           runScript(dev, s.script, { sourcePath: s.path, signal: opts.signal, onStep: opts.onStep, guardDanger, qaRun: run.id, keepProcess: keep, start });
@@ -376,6 +378,7 @@ export async function runQaScripts(
         };
       } finally {
         dev.inputGuard = prevGuard;
+        dev.paymentPackages = prevPay;
       }
       // 확인 필수 동작은 guardDanger 가 꺼졌을 때만 실제로 누른다
       prev = { status: result.status, preconditions: c.preconditions, changedData: setupData || (!guardDanger && !!c.danger) };

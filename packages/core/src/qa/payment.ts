@@ -1,6 +1,7 @@
 import { clipLabel } from '../graph-model.js';
 import type { DeviceAdb, InputKind } from '../adb.js';
 import { currentScreen } from '../app.js';
+import { dumpHierarchy, type ViewNode } from '../hierarchy.js';
 import type { QaPlan } from './plan.js';
 
 /**
@@ -75,22 +76,53 @@ export function paymentReturn(seen: string[], app: string): { visited: string[];
   return { visited, returned: seen.slice(first).some((p) => p === app) };
 }
 
+/** 화면 트리에서 앞 창(첫 창)의 패키지 */
+export function rootPackage(root: ViewNode | undefined): string | undefined {
+  return root?.children[0]?.packageName || root?.packageName || undefined;
+}
+
+type PlanCtx = { plan?: Pick<QaPlan, 'app' | 'paymentTest' | 'cases'>; caseId?: string };
+
+/**
+ * 앞 화면이 결제 창인지와 이 계획·TC 가 다뤄도 되는지 (#155). 입력·읽기·기록이 모두 이 판정 하나를 쓴다.
+ * 포커스 창 패키지와 화면 트리 루트 패키지를 둘 다 보고, 하나라도 결제 창이면 결제 창이다(허용도 둘 다 돼야).
+ * 포커스를 못 읽었고 트리도 없으면 트리를 덤프해 본다. 둘 다 못 읽으면 결제 창으로 보고 막는다(닫힌 쪽)
+ */
+export async function paymentScreen(
+  dev: DeviceAdb,
+  ctx: PlanCtx,
+  root?: ViewNode,
+): Promise<{ payment: boolean; allowed: boolean; pkg?: string; reason?: string; root?: ViewNode }> {
+  const focus = (await currentScreen(dev).catch(() => undefined))?.packageName || undefined;
+  let tree = root;
+  if (!tree && !focus) tree = (await dumpHierarchy(dev).catch(() => undefined))?.root;
+  const pkgs = [...new Set([focus, rootPackage(tree)].filter((p): p is string => !!p))];
+  if (!pkgs.length) return { payment: true, allowed: false, reason: '앞 화면을 읽지 못해 결제 창인지 알 수 없어요', root: tree };
+  let paid: string | undefined;
+  for (const pkg of pkgs) {
+    const a = externalPackageAccess(ctx.plan, ctx.caseId, pkg);
+    if (!a.payment) continue;
+    if (!a.allowed) return { ...a, pkg, root: tree };
+    paid ??= pkg;
+  }
+  return paid ? { payment: true, allowed: true, pkg: paid, root: tree } : { payment: false, allowed: true, root: tree };
+}
+
+/** 스냅샷(포커스 창·트리 루트)이 결제 창인지. 화면 지도는 결제 창을 담지 않는다 */
+export function isPaymentSnapshot(s: { screen: { packageName: string }; hierarchy: { root: ViewNode } }, packages: string[] = KNOWN_PAYMENT_PACKAGES): string | undefined {
+  return [s.screen.packageName, rootPackage(s.hierarchy.root)].find((p) => !!p && packages.includes(p));
+}
+
 const INPUT_WORD: Record<InputKind, string> = { tap: '누르지', swipe: '밀지', key: '키를 보내지', text: '글자를 넣지' };
 
 /**
- * 기기 입력 관문 (DeviceAdb.inputGuard 에 건다, #155). 입력 직전에 앞 화면(포커스 창) 패키지를 보고,
+ * 기기 입력 관문 (DeviceAdb.inputGuard 에 건다, #155). 입력 직전에 paymentScreen 으로 앞 화면을 보고,
  * 결제 창이면 이 계획·TC 가 다뤄도 될 때만 보낸다. 결제 창에는 허용돼도 글자를 넣지 않는다(계정·카드 입력 안 함).
  * ctx 는 입력마다 부른다: 지금 실행 중인 계획·TC (없으면 TC 밖 → 결제 창은 막힘)
  */
-export function externalInputGuard(
-  dev: DeviceAdb,
-  ctx: () => Promise<{ plan?: Pick<QaPlan, 'app' | 'paymentTest' | 'cases'>; caseId?: string }>,
-): (kind: InputKind) => Promise<void> {
+export function externalInputGuard(dev: DeviceAdb, ctx: () => Promise<PlanCtx>): (kind: InputKind) => Promise<void> {
   return async (kind) => {
-    const pkg = (await currentScreen(dev).catch(() => undefined))?.packageName || undefined;
-    if (!pkg) return;
-    const { plan, caseId } = await ctx();
-    const a = externalPackageAccess(plan, caseId, pkg);
+    const a = await paymentScreen(dev, await ctx());
     if (!a.payment) return;
     if (!a.allowed) throw new Error(`${a.reason}. ${INPUT_WORD[kind]} 않았어요. 이 단계를 막힘(blocked)으로 남기세요`);
     if (kind === 'text') throw new Error(`결제 창에는 글자를 넣지 않아요 (계정·카드 입력은 하지 않아요). 이 단계를 막힘(blocked)으로 남기세요`);

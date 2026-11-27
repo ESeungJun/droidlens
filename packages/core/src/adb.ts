@@ -157,6 +157,9 @@ export class DeviceAdb {
    */
   inputGuard?: (kind: InputKind) => Promise<void>;
 
+  /** 이 기기에서 결제 창으로 볼 패키지 (알려진 결제 앱 + 지금 계획의 결제 앱). 화면 지도가 결제 창을 담지 않는 데 쓴다 (#155) */
+  paymentPackages?: () => Promise<string[]>;
+
   raw(args: string[], opts?: RunOptions): Promise<Buffer> {
     return this.adb.raw(['-s', this.serial, ...args], opts);
   }

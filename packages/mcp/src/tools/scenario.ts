@@ -5,7 +5,7 @@ import { homedir } from 'node:os';
 import { basename, dirname, extname, join, resolve } from 'node:path';
 import { z } from 'zod';
 import * as dl from '@droidlens/core';
-import { device, paymentFront, externalRead, text, serialArg, acts, readOnly, recorder, allowDangerArg, dangerAllowed, within, isProjectDir, pathSee } from '../common.js';
+import { device, externalRead, text, serialArg, acts, readOnly, recorder, allowDangerArg, dangerAllowed, within, isProjectDir, pathSee } from '../common.js';
 
 /** 시나리오를 마칠 때 그 경로로 지금 화면을 한 번 더 본다 (recorder.path 를 비운 뒤라 pathSee 대신) */
 async function pathSeeWith(path: dl.TcPath): Promise<void> {
@@ -196,7 +196,7 @@ export function register(server: McpServer): void {
         if (!('assert' in parsed)) throw new Error('assert 형식이 올바르지 않습니다');
         check = { by: 'assert', expect: dl.describeAssertion(parsed.assert) };
         // 결제 창: 허용 없으면 던지고, 허용되면 검사 근거(화면 글자) 대신 정리한 묶음을 남긴다 (#155)
-        const ext = (await paymentFront(dev)) ? await externalRead(dev, (await dl.dumpHierarchy(dev)).root) : undefined;
+        const ext = await externalRead(dev, (await dl.dumpHierarchy(dev)).root);
         try {
           const evidence = await dl.evaluateAssertion(dev, app, parsed.assert, { since });
           finalStatus = 'pass';

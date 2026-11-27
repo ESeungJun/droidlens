@@ -1,3 +1,4 @@
+import { isPaymentSnapshot, KNOWN_PAYMENT_PACKAGES } from '../qa/payment.js';
 /**
  * 흐름 수집 FlowCollector: 시나리오·스크립트 실행처럼 다른 기능이 기기를 조작하는 동안 지나간 화면과 연결을 앱 지도에 모은다.
  * script.ts 의 runScript 가 쓴다. 에이전트가 없으면 만들지 않는다 (화면 확인이 느려 원래 작업을 늦추므로).
@@ -51,7 +52,7 @@ export class FlowCollector {
     this.pending = undefined;
     try {
       const s = await captureSnapshot(this.dev, { screenshot: false });
-      if (s.screen.packageName !== this.graph.packageName) {
+      if (s.screen.packageName !== this.graph.packageName || isPaymentSnapshot(s, (await this.dev.paymentPackages?.().catch(() => undefined)) ?? KNOWN_PAYMENT_PACKAGES)) {
         this.last = undefined;
         return s;
       }

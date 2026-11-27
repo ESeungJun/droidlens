@@ -171,3 +171,35 @@ test('결제 창: 모든 입력 도구(키·밀기·스크립트)는 한 관문�
     delete process.env.DROIDLENS_HOME;
   }
 });
+
+test('결제 창 판정은 포커스 창·트리 루트를 둘 다 보고, 포커스를 못 읽으면 트리로 다시 본다 (입력·읽기·지도 기록 모두)', async () => {
+  process.env.DROIDLENS_HOME = join(s.dir, 'home');
+  try {
+    const sent = () => s.log().filter((l) => /^input (tap|swipe|keyevent|text)/.test(l));
+    // 포커스 창을 못 읽음 + 트리 루트는 Play 결제 창: 입력을 보내지 않는다 (예전에는 그냥 통과)
+    s.setUi(payScreen('com.android.vending'));
+    s.setFile('focus.txt', '???');
+    s.clearLog();
+    const k = await s.call('press_key', { key: 'back' });
+    assert.equal(k.isError, true, k.text);
+    assert.match(k.text, /결제 창\(com\.android\.vending\)/);
+    assert.deepEqual(sent(), []);
+
+    // 포커스는 대상 앱인데 트리 루트가 결제 창(어긋남): 검사 근거를 원문으로 내지 않는다
+    s.setFile('focus.txt', 'com.example.app/com.example.app.MainActivity');
+    const st = await s.call('scenario_start', { name: '어긋남' });
+    assert.equal(st.isError, false, st.text);
+    const step = await s.call('scenario_step', { title: '결제 창', assert: { visible: { textContains: 'ignore' } }, screenshot: false });
+    assert.equal(step.isError, true, step.text);
+    assert.doesNotMatch(step.text, /‮|ignore previous/);
+    await s.call('scenario_finish', { verdict: 'blocked', summary: '끝' });
+
+    // 화면 지도: 트리 루트가 결제 창이면 담지 않는다
+    const g = await s.call('graph_record', { packageName: 'com.example.app' });
+    assert.equal(g.isError, true, g.text);
+    assert.match(g.text, /화면 지도에 기록하지 않아요/);
+  } finally {
+    s.setFile('focus.txt', '');
+    delete process.env.DROIDLENS_HOME;
+  }
+});
