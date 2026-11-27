@@ -167,7 +167,10 @@ export async function launchApp(dev: DeviceAdb, pkg: string, activity?: string):
   const component =
     activity ? `${pkg}/${activity}` : await launcherComponent(dev, pkg);
   if (component) {
-    const out = await dev.shell(`am start -W -f 0x10008000 -n ${quoteShell(component)}`, { timeoutMs: 30_000 });
+    // 런처 화면은 MAIN/LAUNCHER 인텐트로 띄운다. 태스크의 첫 인텐트가 런처 인텐트와 같아야 나중에 bringToFront 가
+    // 그 태스크를 그대로 앞으로 가져온다. 다르면 Android 가 같은 Activity 를 위에 하나 더 만든다 (#159 실기기에서 확인)
+    const launcher = activity ? '' : ' -a android.intent.action.MAIN -c android.intent.category.LAUNCHER';
+    const out = await dev.shell(`am start -W -f 0x10008000${launcher} -n ${quoteShell(component)}`, { timeoutMs: 30_000 });
     if (/Error:/.test(out)) throw new Error(out.trim());
     return;
   }

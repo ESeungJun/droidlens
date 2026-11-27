@@ -40,6 +40,8 @@ export function fakeDevice(app, serial = 'fake-1') {
   /** 뒤로 가기로 앱 밖에 나왔을 때 남아 있는 앱 화면 (앞으로 가져오면 되살린다) */
   let parked = null;
   let alive = false;
+  /** 태스크의 첫 인텐트가 런처 인텐트(MAIN/LAUNCHER)였는지. 아니면 앞으로 가져올 때 실제 Android 처럼 첫 화면을 위에 하나 더 쌓는다 */
+  let launcherRoot = false;
   const log = [];
   /** [명령, 받은 시각(ms)]. 기다림 길이처럼 명령 순서만으로 안 보이는 것을 볼 때 쓴다 */
   const stamps = [];
@@ -97,12 +99,13 @@ export function fakeDevice(app, serial = 'fake-1') {
         while (stack.length && (screens[stack.at(-1).name].pkg ?? app.pkg) !== app.pkg && !screens[stack.at(-1).name].inTask) stack.pop();
         if (!stack.length && parked) stack = parked;
         parked = null;
-        if (!stack.length) push(app.launch);
+        if (!stack.length || !launcherRoot) push(app.launch);
         return 'Status: ok';
       }
       stack = [];
       parked = null;
       alive = true;
+      launcherRoot = cmd.includes('-c android.intent.category.LAUNCHER');
       push(app.launch);
       return 'Status: ok';
     }
@@ -156,6 +159,10 @@ export function fakeDevice(app, serial = 'fake-1') {
     dev,
     log,
     stamps,
+    /** 화면 스택 깊이 (앞으로 가져오기가 화면을 하나 더 쌓았는지 볼 때) */
+    get depth() {
+      return stack.length;
+    },
     /** 지금 화면 이름 */
     get screen() {
       return top().name;
@@ -164,6 +171,7 @@ export function fakeDevice(app, serial = 'fake-1') {
     open(...names) {
       stack = [];
       parked = null;
+      launcherRoot = true;
       alive = names.length > 0;
       for (const n of names) push(n);
     },

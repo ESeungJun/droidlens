@@ -122,7 +122,7 @@ test('launchAndSettle: 다시 시작하면 force-stop 뒤 실행하고 첫 화�
   const s = await launchAndSettle(f.dev, 'com.ex.launch', { restart: true });
   assert.equal(s.screen.activity, 'com.ex.launch.HomeActivity');
   assert.equal(f.commands()[0], 'am force-stop com.ex.launch');
-  assert.ok(f.commands().some((c) => c.startsWith("am start -W -f 0x10008000 -n 'com.ex.launch/com.ex.launch.HomeActivity'")));
+  assert.ok(f.commands().some((c) => c.startsWith("am start -W -f 0x10008000 -a android.intent.action.MAIN -c android.intent.category.LAUNCHER -n 'com.ex.launch/com.ex.launch.HomeActivity'")));
   await assert.rejects(launchAndSettle(f.dev, 'bad pkg'), /잘못된 패키지 이름/);
 });
 
