@@ -1,4 +1,6 @@
 import { clipLabel } from '../graph-model.js';
+import type { DeviceAdb, InputKind } from '../adb.js';
+import { currentScreen } from '../app.js';
 import type { QaPlan } from './plan.js';
 
 /**
@@ -71,4 +73,26 @@ export function paymentReturn(seen: string[], app: string): { visited: string[];
   if (first < 0) return { visited: [], returned: false };
   const visited = [...new Set(seen.slice(first).filter((p) => p && p !== app))];
   return { visited, returned: seen.slice(first).some((p) => p === app) };
+}
+
+const INPUT_WORD: Record<InputKind, string> = { tap: '누르지', swipe: '밀지', key: '키를 보내지', text: '글자를 넣지' };
+
+/**
+ * 기기 입력 관문 (DeviceAdb.inputGuard 에 건다, #155). 입력 직전에 앞 화면(포커스 창) 패키지를 보고,
+ * 결제 창이면 이 계획·TC 가 다뤄도 될 때만 보낸다. 결제 창에는 허용돼도 글자를 넣지 않는다(계정·카드 입력 안 함).
+ * ctx 는 입력마다 부른다: 지금 실행 중인 계획·TC (없으면 TC 밖 → 결제 창은 막힘)
+ */
+export function externalInputGuard(
+  dev: DeviceAdb,
+  ctx: () => Promise<{ plan?: Pick<QaPlan, 'app' | 'paymentTest' | 'cases'>; caseId?: string }>,
+): (kind: InputKind) => Promise<void> {
+  return async (kind) => {
+    const pkg = (await currentScreen(dev).catch(() => undefined))?.packageName || undefined;
+    if (!pkg) return;
+    const { plan, caseId } = await ctx();
+    const a = externalPackageAccess(plan, caseId, pkg);
+    if (!a.payment) return;
+    if (!a.allowed) throw new Error(`${a.reason}. ${INPUT_WORD[kind]} 않았어요. 이 단계를 막힘(blocked)으로 남기세요`);
+    if (kind === 'text') throw new Error(`결제 창에는 글자를 넣지 않아요 (계정·카드 입력은 하지 않아요). 이 단계를 막힘(blocked)으로 남기세요`);
+  };
 }

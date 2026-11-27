@@ -11,13 +11,25 @@ export const adb = new dl.Adb();
 
 export async function device(serial?: string): Promise<dl.DeviceAdb> {
   const s = serial ?? process.env.DROIDLENS_SERIAL;
-  if (s) return adb.device(s);
+  if (s) return guarded(adb.device(s));
   const online = (await dl.listDevices(adb)).filter((d) => d.state === 'device');
   if (online.length === 0) throw new Error('연결된 기기가 없습니다. USB 디버깅을 켜거나 에뮬레이터를 실행하세요.');
   if (online.length > 1) {
     throw new Error(`기기가 여러 대입니다. serial을 지정하세요: ${online.map((d) => d.serial).join(', ')}`);
   }
-  return adb.device(online[0].serial);
+  return guarded(adb.device(online[0].serial));
+}
+
+/**
+ * 이 서버가 기기에 보내는 모든 입력(tap·swipe·press_key·type_text, explore·script_run·suite_run·graph_navigate 포함)은
+ * core 입력 함수의 관문을 거친다 (#155): 결제 창이면 지금 TC 시나리오의 계획·TC 가 다뤄도 될 때만 보낸다. 허용은 매번 계획 파일에서 다시 읽는다
+ */
+function guarded(dev: dl.DeviceAdb): dl.DeviceAdb {
+  dev.inputGuard = dl.externalInputGuard(dev, async () => {
+    const tc = recorder.active ? recorder.tc : undefined;
+    return { plan: tc ? await dl.loadQaPlan(tc.plan).catch(() => undefined) : undefined, caseId: tc?.case };
+  });
+  return dev;
 }
 
 export const text = (t: string) => ({ content: [{ type: 'text' as const, text: t }] });
@@ -240,6 +252,15 @@ export async function externalGate(dev: dl.DeviceAdb, tree?: dl.ViewNode): Promi
   const tc = recorder.active ? recorder.tc : undefined;
   const plan = tc ? await dl.loadQaPlan(tc.plan).catch(() => undefined) : undefined;
   return { tree: t, pkg, access: dl.externalPackageAccess(plan, tc?.case, pkg) };
+}
+
+/** 앞 화면(포커스 창)이 결제 창이면 그 패키지 (트리를 덤프하지 않는 가벼운 확인, #155) */
+export async function paymentFront(dev: dl.DeviceAdb): Promise<string | undefined> {
+  const pkg = (await dl.currentScreen(dev).catch(() => undefined))?.packageName || undefined;
+  if (!pkg) return undefined;
+  const tc = recorder.active ? recorder.tc : undefined;
+  const plan = tc ? await dl.loadQaPlan(tc.plan).catch(() => undefined) : undefined;
+  return dl.paymentPackages(plan).includes(pkg) ? pkg : undefined;
 }
 
 /**

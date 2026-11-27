@@ -56,7 +56,8 @@ if (mode === 'hang') {
   const cmd = args[1] ?? '';
   log(cmd);
   if (cmd.startsWith('dumpsys window displays')) process.stdout.write('  mDisplayId=0\n    cur=1080x2400\n');
-  else if (cmd.startsWith('dumpsys window')) process.stdout.write('  mCurrentFocus=Window{a1 u0 com.example.app/com.example.app.MainActivity}\n');
+  // 앞 화면(포커스 창): focus.txt 에 '패키지/액티비티' 를 두면 그것, 없으면 시험 앱
+  else if (cmd.startsWith('dumpsys window')) process.stdout.write(`  mCurrentFocus=Window{a1 u0 ${read('focus.txt').trim() || 'com.example.app/com.example.app.MainActivity'}}\n`);
   else if (cmd.startsWith('logcat') || cmd.includes('logcat')) process.stdout.write(read('logcat.txt'));
   // 웹뷰 디버깅 소켓 찾기 (#132): unix.txt 에 '/proc/net/unix 줄들\n--\npidof 결과' 를 둔다
   else if (cmd.includes('/proc/net/unix')) process.stdout.write(read('unix.txt') || '--\n');

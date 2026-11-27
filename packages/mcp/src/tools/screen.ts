@@ -128,6 +128,9 @@ export function register(server: McpServer): void {
     async ({ serial, limit }) => {
       const dev = await device(serial);
       const [h, info, screen] = await Promise.all([dl.dumpHierarchy(dev), dl.getDeviceInfo(dev).catch(() => undefined), dl.screenSize(dev).catch(() => undefined)]);
+      // 결제 창은 요소 설명 대신 정리한 묶음만 (#155)
+      const ext = await externalRead(dev, h.root);
+      if (ext) return text(ext);
       const density = info?.screen.density || 0;
       const issues = dl.auditA11y(h.root, { density: density || 420, screen });
       if (!issues.length) return text(`접근성 문제를 찾지 못했습니다 (누를 수 있는 요소 기준, 색 대비 제외)${density ? '' : '\n화면 밀도를 읽지 못해 420dpi 로 가정했습니다'}`);

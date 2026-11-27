@@ -1,7 +1,7 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import * as dl from '@droidlens/core';
-import { device, text, json, serialArg, appArg, PIXELS, selectorShape, pickSelector, readOnly, acts, hasSelector, resolveNode, logAction, allowDangerArg, dangerAllowed, guardRisky } from '../common.js';
+import { device, paymentFront, text, json, serialArg, appArg, PIXELS, selectorShape, pickSelector, readOnly, acts, hasSelector, resolveNode, logAction, allowDangerArg, dangerAllowed, guardRisky } from '../common.js';
 
 /** TC 목록을 짧게: TC-001 통과, TC-002 실패 (10개 넘으면 줄임). 번호·판정은 형식을 검사한 값만 들어온다 */
 function tcList(tcs: { case: string; verdict?: string }[]): string {
@@ -39,6 +39,9 @@ export function register(server: McpServer): void {
     },
     async ({ serial, packageName, action, allowDanger }) => {
       const dev = await device(serial);
+      // 결제 창은 화면 지도에 넣지 않는다 (글자가 지도에 남아 나중에 그대로 읽힌다, #155)
+      const front = await paymentFront(dev);
+      if (front) throw new Error(`결제 창(${front})은 화면 지도에 기록하지 않아요`);
       const graph = await dl.ScreenGraph.open(packageName);
       if (!action) {
         const s = await dl.captureSnapshot(dev);
