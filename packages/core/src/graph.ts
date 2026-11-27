@@ -8,6 +8,8 @@
  * - graph/navigate.ts  행동 실행·경로·화면 이동
  * - graph/explore.ts   자동 탐색
  * - graph/flow.ts      흐름 수집
+ * - graph/path.ts      TC 실행 경로 (#131)
+ * - graph/coverage.ts  화면별 검증 기록 (#131)
  * 의존 방향: bundle·snapshot ← store ← navigate ← explore·flow (explore·flow는 snapshot·store도 직접 씀). 거꾸로 가는 import 는 없다.
  */
 export * from './graph-model.js';
@@ -35,3 +37,5 @@ export {
 } from './graph/navigate.js';
 export { explore, type ExploreOptions, type ExploreResult } from './graph/explore.js';
 export { FlowCollector, type NotedAction } from './graph/flow.js';
+export { TcPath, type TcPathAction } from './graph/path.js';
+export { loadScreenRecords, screenChecks, type ScreenCheck, type ScreenRecord } from './graph/coverage.js';

@@ -101,6 +101,26 @@ public final class DroidLens {
         return "pid " + Process.myPid() + (name != null && !name.isEmpty() ? ", " + name : "");
     }
 
+    /**
+     * 앱 웹뷰의 디버깅(Chrome DevTools Protocol)을 켠다 (#132). DroidLens 의 webview_inspect 가 웹 페이지의 콘솔 오류·요청·본문을 읽을 수 있게 된다.
+     * android:debuggable 앱은 웹뷰가 스스로 켜므로 부르지 않아도 된다. debuggable 을 끈 사내 QA 빌드에서 {@link #allowNonDebuggable()} 과 함께 부른다.
+     * SDK 를 켜지 않는 빌드(debuggable 도 아니고 허용도 안 한 빌드)에서는 아무것도 하지 않고 false 를 돌려준다.
+     * 메인 스레드에서 부른다. 웹뷰를 처음 불러오는 시점이 되어 수십 ms 가 들 수 있다.
+     *
+     * @return 켰으면 true. 기기에 웹뷰가 없거나 켜지 못했으면 false
+     */
+    public static boolean enableWebViewDebugging(Context context) {
+        if (!shouldStart(context.getApplicationInfo().flags, allowNonDebuggable)) return false;
+        try {
+            android.webkit.WebView.setWebContentsDebuggingEnabled(true);
+            return true;
+        } catch (RuntimeException e) {
+            // 웹뷰 제공자가 없거나(일부 기기·프로필) 아직 불러올 수 없을 때
+            Log.w(TAG, "웹뷰 디버깅을 켜지 못했습니다", e);
+            return false;
+        }
+    }
+
     /** SDK 버전. release 의 sdk-noop 은 "noop" 을 돌려주므로 BuildConfig 대신 이것을 쓰면 두 빌드 모두 컴파일된다 */
     public static String version() {
         return BuildConfig.SDK_VERSION;

@@ -394,3 +394,21 @@ label.chk { display: inline-flex; gap: 6px; align-items: center; color: var(--fg
 .rv-log { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 10px 14px; }
 .rv-log summary { cursor: pointer; font-weight: 600; }
 .rv-log ol { margin-top: 8px; font-size: 12px; display: grid; gap: 2px; }
+
+/* #129 검증 갈래: 검토 단계 묶음 머리, 추가 제안, 결과 갈래별 개수, 열 고르기 */
+.qa-group td { background: var(--panel-2); border-top: 1px solid var(--line); }
+.qa-group .qa-row { gap: 8px; flex-wrap: wrap; }
+.qa-suggest { border-style: dashed; }
+.qa-sans { font-family: -apple-system, BlinkMacSystemFont, 'Apple SD Gothic Neo', system-ui, sans-serif; font-size: 11px; margin-top: 2px; }
+.qa-tracks { display: flex; gap: 8px; flex-wrap: wrap; }
+.qa-track { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; min-width: 140px; padding: 8px 12px; border: 1px solid var(--line-2); border-radius: 8px; background: var(--panel); color: var(--fg); cursor: pointer; font: inherit; font-size: 12px; text-align: left; }
+.qa-track:hover { background: var(--panel-2); }
+.qa-track.on { border-color: var(--accent); background: var(--panel-2); }
+.qa-colpick { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 8px 16px; }
+.qa-colpick .chk { justify-content: space-between; }
+.qa-colpick-k { min-width: 64px; }
+.qa-colpick select { flex: 1; min-width: 0; }
+/* 화면 흐름: 검증하지 않은 화면·지난 TC (#131) */
+.screen-node .s.unverified { color: var(--warn); }
+.screen-checks { word-break: keep-all; }
+.tc-chips { display: flex; flex-wrap: wrap; gap: 4px; }

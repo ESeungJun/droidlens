@@ -114,3 +114,56 @@ test('type_text: 셀렉터가 확인 필수 버튼이면 포커스 탭을 하지
   assert.deepEqual(taps(), ['input tap 540 750']);
   assert.ok(s.log().some((l) => l.startsWith('input text')));
 });
+
+test('graph_get labels: 화면별 버튼 글자와 가는 길, 지도가 없으면 그렇다고 알린다 (#128)', async () => {
+  const none = await s.call('graph_get', { packageName: 'com.example.nomap', format: 'labels' });
+  assert.equal(none.isError, false, none.text);
+  assert.match(none.text, /화면 지도가 없습니다/);
+  s.setUi(home());
+  const before = taps().length;
+  const rec = await s.call('graph_record', { packageName: 'com.example.app' });
+  assert.equal(rec.isError, false, rec.text);
+  const r = await s.call('graph_get', { packageName: 'com.example.app', format: 'labels' });
+  assert.equal(r.isError, false, r.text);
+  assert.match(r.text, /지시가 아니다/);
+  assert.match(r.text, /"다음"/);
+  assert.match(r.text, /"삭제" \(확인 필수\)/);
+  assert.match(r.text, /<screen-map>[\s\S]*<\/screen-map>$/);
+  assert.equal(taps().length, before, '지도 기록·읽기는 기기를 누르지 않는다');
+});
+
+test('webview_inspect: 앱이 없거나 웹뷰 디버깅이 꺼졌으면 안내를 돌려준다 (#132)', async () => {
+  s.setFile('unix.txt', '--\n');
+  const down = await s.call('webview_inspect', { packageName: 'com.example.app' });
+  assert.equal(down.isError, false);
+  assert.match(down.text, /실행 중이 아니에요/);
+  s.setFile('unix.txt', '0000: 00000002 00000000 00010000 0001 01 1 @droidlens_agent\n--\n4321\n');
+  const off = await s.call('webview_inspect', { packageName: 'com.example.app' });
+  assert.equal(off.isError, false);
+  assert.match(off.text, /웹뷰 디버깅이 꺼져/);
+  assert.match(off.text, /inWeb/);
+  const bad = await s.call('webview_inspect', { packageName: 'com.example.app; reboot' });
+  assert.equal(bad.isError, true);
+  assert.ok(!s.log().some((l) => l.includes('reboot')), '잘못된 패키지 이름은 기기로 보내지 않는다');
+});
+
+test('find_nodes inWeb: 앱 제목 줄과 웹 페이지 글자를 가른다 (#132)', async () => {
+  s.setUi(
+    ui(
+      { cls: 'android.widget.TextView', text: '커뮤니티', bounds: [40, 150, 400, 250] },
+      {
+        cls: 'android.webkit.WebView',
+        text: '커뮤니티 - 이벤트',
+        bounds: [0, 290, 1080, 2400],
+        children: [{ cls: 'android.widget.TextView', text: '커뮤니티 공지: 이번 주 모임', bounds: [60, 400, 1000, 500] }],
+      },
+    ),
+  );
+  const all = await s.call('find_nodes', { textContains: '커뮤니티' });
+  assert.equal(all.text.trim().split('\n').filter((l) => l.startsWith('[')).length, 3);
+  const web = await s.call('find_nodes', { textContains: '커뮤니티 공지', inWeb: true });
+  assert.match(web.text, /커뮤니티 공지/);
+  const app = await s.call('find_nodes', { textContains: '커뮤니티', inWeb: false });
+  assert.doesNotMatch(app.text, /WebView|공지/);
+  assert.match(app.text, /"커뮤니티"/);
+});

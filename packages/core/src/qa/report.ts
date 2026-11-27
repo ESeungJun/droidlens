@@ -1,7 +1,7 @@
 import { isAbsolute, join, relative } from 'node:path';
 import { writeFileAtomic } from '../workspace.js';
 import { QA_REPORT_TOKENS } from '../report-tokens.js';
-import { CASE_KIND_LABEL, type QaPlan } from './plan.js';
+import { CASE_KIND_LABEL, CASE_TRACK_LABEL, CASE_TRACKS, caseTrack, type QaPlan } from './plan.js';
 import { xmlEscape as xml } from '../report-junit.js';
 import { QA_STATUS_LABEL, qaRunDir, qaRunSummary, type QaRun, type QaRunSummary } from './run.js';
 import { loadDesignSummaries, type DesignRunSummary } from '../design/store.js';
@@ -57,6 +57,17 @@ export function qaReportHtml(
   const counts = (['pass', 'fail', 'blocked', 'skip', 'not-run'] as const)
     .map((k) => `<span class="pill ${STATUS_CLASS[k]}">${QA_STATUS_LABEL[k]} ${s.counts[k]}</span>`)
     .join(' ');
+  // 갈래가 둘 이상이거나 TC 문서 갈래가 있으면 갈래별 개수를 따로 보여 준다 (#129)
+  const tracks = CASE_TRACKS.filter((t) => s.byTrack[t]);
+  const byTrack =
+    tracks.length > 1 || s.byTrack.tc
+      ? `<div class="wrap"><table><thead><tr><th>갈래</th><th>TC</th>${(['pass', 'fail', 'blocked', 'skip', 'not-run'] as const).map((k) => `<th>${QA_STATUS_LABEL[k]}</th>`).join('')}</tr></thead><tbody>${tracks
+          .map((t) => {
+            const b = s.byTrack[t]!;
+            return `<tr><td>${CASE_TRACK_LABEL[t]}</td><td>${b.total}</td>${(['pass', 'fail', 'blocked', 'skip', 'not-run'] as const).map((k) => `<td>${b[k]}</td>`).join('')}</tr>`;
+          })
+          .join('')}</tbody></table></div>`
+      : '';
   const reqRows = s.requirements
     .map(
       (r) =>
@@ -68,7 +79,7 @@ export function qaReportHtml(
       const detail = [r?.detail, designNote(design.get(c.id)), status === 'not-run' && !c.selected ? '이번 회차에 고르지 않음' : '']
         .filter(Boolean)
         .join(' · ');
-      return `<tr><td class="id">${esc(c.id)}</td><td>${esc(c.priority)}</td><td>${esc(CASE_KIND_LABEL[c.kind])}</td><td>${esc(c.title)}${c.danger ? ' <span class="pill warn">확인 필수</span>' : ''}</td><td class="id">${esc(c.requirements.join(', '))}</td><td><span class="pill ${STATUS_CLASS[status]}">${QA_STATUS_LABEL[status]}</span></td><td>${r ? MODE_LABEL[r.mode] : ''}${r?.script ? `<br><code>${esc(r.script)}</code>` : ''}</td><td>${fmtDur(r?.durationMs)}</td><td>${esc(detail)}</td><td>${link(r?.report)}${design.has(c.id) ? ` ${link(design.get(c.id)!.report, '디자인 비교')}` : ''}</td></tr>`;
+      return `<tr><td class="id">${esc(c.id)}</td><td>${esc(c.priority)}</td><td>${esc(CASE_TRACK_LABEL[caseTrack(c)])}<br><span class="sub">${esc(CASE_KIND_LABEL[c.kind])}</span></td><td>${esc(c.title)}${c.danger ? ' <span class="pill warn">확인 필수</span>' : ''}</td><td class="id">${esc(c.requirements.join(', '))}</td><td><span class="pill ${STATUS_CLASS[status]}">${QA_STATUS_LABEL[status]}</span></td><td>${r ? MODE_LABEL[r.mode] : ''}${r?.script ? `<br><code>${esc(r.script)}</code>` : ''}</td><td>${fmtDur(r?.durationMs)}</td><td>${esc(detail)}</td><td>${link(r?.report)}${design.has(c.id) ? ` ${link(design.get(c.id)!.report, '디자인 비교')}` : ''}</td></tr>`;
     })
     .join('');
   return `<!doctype html><html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
@@ -87,10 +98,12 @@ a{color:inherit}
 <h1>${esc(plan.name)} — QA 결과</h1>
 <p class="sub">회차 ${esc(run.id)} · 시작 ${esc(fmtTime(run.startedAt))}${plan.app ? ` · 앱 <code>${esc(plan.app)}</code>` : ''}</p>
 <p>${counts}</p>
+${byTrack ? `<h2>갈래별</h2>
+${byTrack}` : ''}
 <h2>요구사항별</h2>
 <div class="wrap"><table><thead><tr><th>번호</th><th>요구사항</th><th>결과</th><th>TC</th></tr></thead><tbody>${reqRows}</tbody></table></div>
 <h2>TC별</h2>
-<div class="wrap"><table><thead><tr><th>TC</th><th>우선</th><th>종류</th><th>제목</th><th>요구사항</th><th>결과</th><th>방법</th><th>시간</th><th>메모</th><th></th></tr></thead><tbody>${caseRows}</tbody></table></div>
+<div class="wrap"><table><thead><tr><th>TC</th><th>우선</th><th>갈래·종류</th><th>제목</th><th>요구사항</th><th>결과</th><th>방법</th><th>시간</th><th>메모</th><th></th></tr></thead><tbody>${caseRows}</tbody></table></div>
 </main></body></html>`;
 }
 
@@ -101,11 +114,12 @@ export function qaReportCsv(
   s: QaRunSummary = qaRunSummary(plan, run),
   design: Map<string, DesignRunSummary> = new Map(),
 ): string {
-  const head = ['TC', '우선순위', '종류', '제목', '요구사항', '결과', '방법', '스크립트', '시간(초)', '메모', '기록 시각'];
+  const head = ['TC', '우선순위', '갈래', '종류', '제목', '요구사항', '결과', '방법', '스크립트', '시간(초)', '메모', '기록 시각'];
   const rows = s.rows.map(({ case: c, result: r, status }) =>
     [
       c.id,
       c.priority,
+      CASE_TRACK_LABEL[caseTrack(c)],
       CASE_KIND_LABEL[c.kind],
       c.title,
       c.requirements.join(' '),

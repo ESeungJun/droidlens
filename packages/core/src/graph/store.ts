@@ -15,15 +15,18 @@ import { PNG_MAGIC, screenshot } from '../device.js';
 import {
   actionLabel,
   DANGEROUS_LABELS,
+  EDGE_TC_MAX,
   isReplayable,
   shortestPath,
   startScreenOf,
+  type EdgeTc,
   type GraphAction,
   type GraphData,
   type ScreenEdge,
   type ScreenNode,
 } from '../graph-model.js';
 import { flatten, screenSignature } from '../hierarchy.js';
+import { CASE_ID, PLAN_ID } from '../qa/plan.js';
 import { droidlensHome, ensureDir, readJson, safeName, writeFileAtomic, writeJson } from '../workspace.js';
 import { bundleSchema, clean, edgeSchema, MAP_FORMAT, MAP_LIMITS, nodeSchema, type MapBundle } from './bundle.js';
 import { candidateActions, elementLabel, screenId, shortName, type Snapshot } from './snapshot.js';
@@ -177,8 +180,28 @@ export class ScreenGraph {
     }
     for (const e of data.edges) {
       const cur = this.edges.get(e.id);
-      if (cur) cur.count = Math.max(cur.count, e.count);
-      else this.edges.set(e.id, e);
+      if (!cur) {
+        // 파일에서 읽은 TC 도 형식을 다시 본다 (지도 글은 에이전트가 읽는다)
+        if (e.tcs) e.tcs = mergeTcs([], e.tcs);
+        this.edges.set(e.id, e);
+      } else {
+        cur.count = Math.max(cur.count, e.count);
+        if (e.tcs?.length) cur.tcs = mergeTcs(cur.tcs ?? [], e.tcs);
+      }
+    }
+  }
+
+  /**
+   * QA TC 가 지난 연결에 그 TC 와 판정을 붙인다 (#131). 같은 TC 는 최신 판정 하나만, 연결마다 최근 EDGE_TC_MAX 개까지.
+   * TC 번호·계획 id 형식이 아니면 붙이지 않는다 (지도 글은 에이전트가 읽으므로 자유 글을 넣지 않는다)
+   */
+  tagEdges(ids: Iterable<string>, tc: { plan: string; case: string }, verdict: EdgeTc['verdict'], at = Date.now()): void {
+    if (!PLAN_ID.test(tc.plan) || !CASE_ID.test(tc.case)) return;
+    for (const id of ids) {
+      const e = this.edges.get(id);
+      if (!e) continue;
+      e.tcs = mergeTcs(e.tcs ?? [], [{ plan: tc.plan, case: tc.case, verdict, at }]);
+      this.updatedAt = Date.now();
     }
   }
 
@@ -427,4 +450,19 @@ export class ScreenGraph {
     }
     return name;
   }
+}
+
+const VERDICTS: readonly string[] = ['pass', 'fail', 'blocked'];
+
+/** 두 TC 목록을 합친다 (형식이 틀린 항목은 버린다): 같은 계획·TC 는 늦은 쪽, 오래된 것부터 버려 EDGE_TC_MAX 개까지 */
+function mergeTcs(a: EdgeTc[], b: EdgeTc[]): EdgeTc[] {
+  const by = new Map<string, EdgeTc>();
+  for (const t of [...a, ...b]) {
+    if (!t || typeof t.plan !== 'string' || typeof t.case !== 'string' || typeof t.at !== 'number') continue;
+    if (!PLAN_ID.test(t.plan) || !CASE_ID.test(t.case) || !VERDICTS.includes(t.verdict)) continue;
+    const k = `${t.plan}/${t.case}`;
+    const cur = by.get(k);
+    if (!cur || t.at >= cur.at) by.set(k, t);
+  }
+  return [...by.values()].sort((x, y) => x.at - y.at).slice(-EDGE_TC_MAX);
 }

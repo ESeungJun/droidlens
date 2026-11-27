@@ -9,7 +9,7 @@ import { buildScenarioView, HOW_LABEL, STATUS_LABEL, VERDICT_LABEL, type Scenari
 import { qaResultMemo } from '../qa-note.js';
 import { loadQaPlan, qaPlanDir } from './store.js';
 import { listQaRunIds, loadQaRun, maskCaseData, QA_STATUS_LABEL, qaRunDir, qaRunSummary, type QaRun, type QaRunSummary } from './run.js';
-import { PLAN_ID, type QaPlan } from './plan.js';
+import { CASE_TRACK_LABEL, CASE_TRACKS, caseTrack, PLAN_ID, type QaPlan, type QaTrack } from './plan.js';
 import { htmlEscape as esc } from './report.js';
 import { isJpeg, readRegularFile, scenarioDirReal } from './scenario-dir.js';
 
@@ -205,8 +205,10 @@ const TEXT = {
     step: STATUS_LABEL,
     how: HOW_LABEL,
     verdict: VERDICT_LABEL,
-    sheets: ['요약', '단계'],
-    sumHead: ['TC', '우선순위', '제목', '요구사항', '결과', '방식', '시간(초)', '메모', '기록 시각'],
+    sheets: ['요약', '단계', '갈래별'],
+    track: CASE_TRACK_LABEL,
+    trackHead: ['갈래', 'TC'],
+    sumHead: ['TC', '우선순위', '갈래', '제목', '요구사항', '결과', '방식', '시간(초)', '메모', '기록 시각'],
     stepHead: ['TC', '단계', '판정', '방식', '확인', '기대', '실제', '조작', '근거', '시각'],
     tocHead: ['TC', '제목', '결과', '방식', '메모'],
     noSteps: '단계 기록이 없습니다',
@@ -224,8 +226,10 @@ const TEXT = {
     step: { pass: 'Pass', fail: 'Fail', info: 'Note', skip: 'Skipped' } as Record<keyof typeof STATUS_LABEL, string>,
     how: { assert: 'Auto check', agent: 'Judged', record: 'Progress note', action: 'Action' } as Record<keyof typeof HOW_LABEL, string>,
     verdict: { pass: 'Pass', fail: 'Fail', blocked: 'Blocked', running: 'In progress' } as Record<keyof typeof VERDICT_LABEL, string>,
-    sheets: ['Summary', 'Steps'],
-    sumHead: ['TC', 'Priority', 'Title', 'Requirements', 'Result', 'Mode', 'Time (s)', 'Notes', 'Recorded at'],
+    sheets: ['Summary', 'Steps', 'By track'],
+    track: { flow: 'Spec flow', design: 'Design guide', tc: 'TC document' } as Record<QaTrack, string>,
+    trackHead: ['Track', 'TCs'],
+    sumHead: ['TC', 'Priority', 'Track', 'Title', 'Requirements', 'Result', 'Mode', 'Time (s)', 'Notes', 'Recorded at'],
     stepHead: ['TC', 'Step', 'Verdict', 'How', 'Check', 'Expected', 'Actual', 'Actions', 'Evidence', 'Time'],
     tocHead: ['TC', 'Title', 'Result', 'Mode', 'Notes'],
     noSteps: 'No step records',
@@ -248,6 +252,7 @@ export function qaRunXlsx(b: QaRunBundle, lang: ExportLang = 'ko'): Uint8Array {
     b.summary.rows.map(({ case: c, result: r, status }) => [
       c.id,
       c.priority,
+      L.track[caseTrack(c)],
       c.title,
       c.requirements.join(' '),
       L.status[status],
@@ -256,7 +261,16 @@ export function qaRunXlsx(b: QaRunBundle, lang: ExportLang = 'ko'): Uint8Array {
       qaResultMemo(r, lang),
       fmtTime(r?.at, L.locale),
     ]),
-    [10, 9, 40, 14, 9, 10, 9, 60, 20],
+    [10, 9, 12, 40, 14, 9, 10, 9, 60, 20],
+  );
+  const STATUS_KEYS = ['pass', 'fail', 'blocked', 'skip', 'not-run'] as const;
+  const byTrack = sheetXml(
+    [...L.trackHead, ...STATUS_KEYS.map((k) => L.status[k])],
+    CASE_TRACKS.filter((t) => b.summary.byTrack[t]).map((t) => {
+      const x = b.summary.byTrack[t]!;
+      return [L.track[t], x.total, ...STATUS_KEYS.map((k) => x[k])];
+    }),
+    [16, 8, 8, 8, 8, 8, 8],
   );
   const stepRows: Cell[][] = [];
   for (const { case: c } of b.summary.rows) {
@@ -285,6 +299,7 @@ export function qaRunXlsx(b: QaRunBundle, lang: ExportLang = 'ko'): Uint8Array {
         '<Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>' +
         '<Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>' +
         '<Override PartName="/xl/worksheets/sheet2.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>' +
+        '<Override PartName="/xl/worksheets/sheet3.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>' +
         '<Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/></Types>',
     ),
     '_rels/.rels': strToU8(
@@ -293,13 +308,14 @@ export function qaRunXlsx(b: QaRunBundle, lang: ExportLang = 'ko'): Uint8Array {
     ),
     'xl/workbook.xml': strToU8(
       '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">' +
-        `<sheets><sheet name="${L.sheets[0]}" sheetId="1" r:id="rId1"/><sheet name="${L.sheets[1]}" sheetId="2" r:id="rId2"/></sheets></workbook>`,
+        `<sheets><sheet name="${L.sheets[0]}" sheetId="1" r:id="rId1"/><sheet name="${L.sheets[1]}" sheetId="2" r:id="rId2"/><sheet name="${L.sheets[2]}" sheetId="3" r:id="rId4"/></sheets></workbook>`,
     ),
     'xl/_rels/workbook.xml.rels': strToU8(
       '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' +
         '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/>' +
         '<Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet2.xml"/>' +
-        '<Relationship Id="rId3" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>',
+        '<Relationship Id="rId3" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>' +
+        '<Relationship Id="rId4" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet3.xml"/></Relationships>',
     ),
     // 0 기본, 1 머리줄(굵게·배경), 2 본문(위 정렬·줄바꿈)
     'xl/styles.xml': strToU8(
@@ -316,6 +332,7 @@ export function qaRunXlsx(b: QaRunBundle, lang: ExportLang = 'ko'): Uint8Array {
     ),
     'xl/worksheets/sheet1.xml': strToU8(summary),
     'xl/worksheets/sheet2.xml': strToU8(steps),
+    'xl/worksheets/sheet3.xml': strToU8(byTrack),
   };
   return zipSync(files, { level: 6 });
 }
@@ -376,6 +393,17 @@ export async function qaRunStepsHtml(b: QaRunBundle, lang: ExportLang = 'ko'): P
   const c = summary.counts;
   const pill = (tone: string, text: string) => `<span class="pill ${tone}">${esc(text)}</span>`;
   const counts = (['pass', 'fail', 'blocked', 'skip', 'not-run'] as const).map((k) => pill(TONE[k], `${L.status[k]} ${c[k]}`)).join(' ');
+  // 갈래별 개수 (#129): 통과/전체
+  const tracks = CASE_TRACKS.filter((t) => summary.byTrack[t]);
+  const trackLine =
+    tracks.length > 1 || summary.byTrack.tc
+      ? `<div class="faint" style="margin-top:6px">${tracks
+          .map((t) => {
+            const x = summary.byTrack[t]!;
+            return `${esc(L.track[t])} <b>${x.pass}/${x.total}</b>${x.fail + x.blocked ? ` (${esc(L.status.fail)}·${esc(L.status.blocked)} ${x.fail + x.blocked})` : ''}`;
+          })
+          .join('<br>')}</div>`
+      : '';
   const toc = summary.rows
     .map(
       ({ case: tc, result: r, status }) =>
@@ -440,7 +468,7 @@ table{width:100%;border-collapse:collapse}td,th{text-align:left;padding:6px;bord
 </style></head><body><main>
 <h1>${esc(plan.name)}</h1>
 <div class="faint">${plan.app ? `<span class="mono">${esc(plan.app)}</span> · ` : ''}${L.run} ${esc(run.id)} · ${L.started} ${esc(fmtTime(run.startedAt, L.locale))}</div>
-<div class="card"><div>${counts}</div>
+<div class="card"><div>${counts}</div>${trackLine}
 <table style="margin-top:10px"><thead><tr>${L.tocHead.map((h) => `<th>${h}</th>`).join('')}</tr></thead><tbody>${toc}</tbody></table></div>
 ${sections.join('\n')}
 </main>

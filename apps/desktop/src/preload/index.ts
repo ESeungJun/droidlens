@@ -7,10 +7,10 @@ import { contextBridge, ipcRenderer } from 'electron';
 const INVOKE = new Set([
   'adbStatus', 'agentStart', 'agentStatus', 'agentStop', 'analyzeLibraries', 'appInfo', 'appVersion', 'avds', 'avdStart', 'avdStop', 'baselineAccept',
   'bringToFront', 'chatConfirm', 'chatSend', 'chatStatus', 'chatStop', 'copy', 'crashes', 'currentScreen', 'deeplink', 'deviceInfo', 'devices',
-  'explore', 'exploreStop', 'graphExport', 'graphGet', 'graphImage', 'graphImport', 'graphNavigate', 'graphRecord', 'graphRecordHere',
+  'explore', 'exploreStop', 'graphChecks', 'graphExport', 'graphGet', 'graphImage', 'graphImport', 'graphNavigate', 'graphRecord', 'graphRecordHere',
   'graphReset', 'home', 'installAgents', 'integration', 'key', 'launch', 'logcatStart', 'logcatStop', 'longPress', 'mirrorStart',
   'mirrorStop', 'openExternal', 'openPath', 'packages', 'perfResetFrames',
-  'qaCaseAllow', 'qaCaseUpdate', 'qaConfirm', 'qaExtract', 'qaJob', 'qaPlanCreate', 'qaPlanGet', 'qaPlanRename', 'qaPlans', 'qaReport', 'qaRun', 'qaRunExport', 'qaRunGet', 'qaRunIndex', 'qaRunPreview',
+  'qaCaseAllow', 'qaCaseUpdate', 'qaConfirm', 'qaExtract', 'qaJob', 'qaPlanCreate', 'qaPlanDelete', 'qaPlanDeleteInfo', 'qaPlanGet', 'qaPlanRename', 'qaPlans', 'qaReport', 'qaRun', 'qaRunExport', 'qaRunGet', 'qaRunIndex', 'qaRunPreview', 'qaTcImport',
   'qaSelect', 'qaSourceLink', 'qaSourcePick', 'qaStop', 'perfSample', 'perfStartup', 'platform', 'recordStart', 'recordStatus', 'recordStop', 'registerMcp', 'reveal',
   'saveScreenshot', 'scenarioDelete', 'scenarioImage', 'scenarios', 'screenshot', 'screenshotPng', 'scriptDelete', 'scriptRead',
   'scriptRun', 'scriptsList', 'scriptStop', 'scriptWrite', 'sdk', 'sdkApps', 'setAdbPath', 'setClaudeConfigDir', 'setTheme', 'snapshot', 'stop', 'swipe', 'tap',

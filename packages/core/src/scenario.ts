@@ -38,6 +38,7 @@ export class Scenario {
       detail?: string;
       png?: Buffer;
       screen?: string;
+      screenId?: string;
       foreign?: string;
       actions?: ScenarioAction[];
       check?: ScenarioStep['check'];
@@ -66,6 +67,7 @@ export class Scenario {
       detail: opts.detail,
       screenshot,
       screen: opts.screen,
+      screenId: opts.screenId,
       foreign: opts.foreign,
       actions: opts.actions?.length ? opts.actions : undefined,
       check: opts.check,

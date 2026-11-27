@@ -5,8 +5,10 @@ import { z } from 'zod';
 import type { DeviceAdb } from '../adb.js';
 import { parseScript, scriptsDir, type Script } from '../script/schema.js';
 import { runScript, type ScriptRunOptions } from '../script/run.js';
+import { appInfo } from '../app.js';
+import { needsRestart, scriptSetupChangesData, unmetVersionCondition, type PrevCaseRun } from './continuity.js';
 import { readJson, timestamp, writeJson } from '../workspace.js';
-import { CASE_ID, PLAN_ID, PRIORITIES, caseContentHash, type QaCase, type QaPlan } from './plan.js';
+import { CASE_ID, PLAN_ID, PRIORITIES, caseContentHash, caseTrack, type QaCase, type QaPlan, type QaTrack } from './plan.js';
 import type { ScenarioData } from '../scenario-view.js';
 import { QA_NOTE_CODES, qaNoteText, type QaNote } from '../qa-note.js';
 import { sha256 } from './sources.js';
@@ -213,12 +215,16 @@ export interface QaScriptRunResult {
   run: QaRun;
   /** 이번에 스크립트로 돌린 TC 결과 */
   ran: QaCaseResult[];
-  /** 스크립트가 없어 에이전트가 돌려야 할 TC (우선순위 순) */
+  /** 스크립트가 없거나, 이은 스크립트가 이은 뒤 바뀌어(scriptChanged) 에이전트가 돌려야 할 TC (우선순위 순) */
   pending: QaCase[];
   /** 다시 보기 표시가 있어 돌리지 않고 막힘으로 적은 TC (사람이 확인해야 함) */
   needsReview: QaCase[];
   /** 취소로 돌리지 못한 스크립트 TC */
   remaining: QaCase[];
+  /** 준비 단계에서 앱을 강제 종료하고 새로 띄운 횟수 (앞 TC 에 이어 간 TC 는 세지 않는다, #130) */
+  restarts: number;
+  /** 회차를 시작할 때 읽은 설치된 앱 versionName (스크립트 TC 가 있을 때만 읽는다. 에이전트 단계가 다시 쓴다) */
+  installed?: string;
 }
 
 /**
@@ -244,6 +250,8 @@ export async function runQaScripts(
   const ordered = selected.filter((c) => !c.review?.length);
   const scripted = ordered.filter((c) => c.script);
   const pending = ordered.filter((c) => !c.script);
+  // 이은 뒤 바뀐 스크립트의 TC. 돌리지 않고 막힘으로 적은 뒤 에이전트가 다시 확인하게 pending 뒤에 붙인다 (#140)
+  const changed: QaCase[] = [];
   for (const c of needsReview) {
     run = await recordQaResult(planId, run.id, {
       case: c.id,
@@ -253,25 +261,43 @@ export async function runQaScripts(
     }).catch(() => run);
   }
   const ran: QaCaseResult[] = [];
+  // 사전 조건의 앱 버전("13.9.0 미만")은 실행 전에 설치된 버전과 맞춰 본다. 모르면 검사하지 않는다 (#130)
+  const installed = scripted.length && plan.app ? (await appInfo(dev, plan.app).catch(() => undefined))?.versionName : undefined;
+  // 바로 앞에서 실제로 돌린 TC. 통과했고 조건이 같으면 앱을 끄지 않고 이어 간다 (#130)
+  let prev: PrevCaseRun | undefined;
+  let restarts = 0;
   let i = 0;
   for (; i < scripted.length; i++) {
     if (opts.signal?.aborted) break;
     const c = scripted[i];
     opts.onCase?.(c, i, scripted.length);
-    const s = await readCaseScript(planId, c);
+    const unmet = unmetVersionCondition(c.preconditions, installed);
+    const s = unmet ? undefined : await readCaseScript(planId, c);
     let result: Omit<QaCaseResult, 'at'>;
-    if ('error' in s) {
-      result = { case: c.id, status: 'blocked', mode: 'script', script: c.script, note: s.note };
+    if (unmet) {
+      result = { case: c.id, status: 'blocked', mode: 'script', script: c.script, note: { code: 'versionUnmet', args: { cond: unmet.text.slice(0, 200), installed: installed! } } };
+    } else if (!s || 'error' in s) {
+      result = { case: c.id, status: 'blocked', mode: 'script', script: c.script, note: s?.note ?? { code: 'scriptNone' } };
+    } else if (s.changed && c.scriptCase) {
+      // 이은 순간의 해시와 다르다: 누가(에이전트가 다른 TC 를 돌리다가 포함) 고쳤는지 모르므로 통과를 믿지 않는다 (#140).
+      // 같은 TC 안에서 고쳐 통과한 것은 MCP script_run 이 해시를 다시 잇는다. 해시를 모르는 옛 연결은 아래처럼 돌리되 누르지 않는다
+      result = { case: c.id, status: 'blocked', mode: 'script', script: c.script, note: { code: 'scriptChanged' } };
+      changed.push(c);
     } else {
       const t0 = Date.now();
+      const guardDanger = !(c.allowDanger && !s.changed);
+      const setupData = scriptSetupChangesData(s.script.setup);
+      const keepProcess = !needsRestart(prev, { preconditions: c.preconditions, changesData: setupData });
       try {
         const r = await runScript(dev, s.script, {
           sourcePath: s.path,
           signal: opts.signal,
           onStep: opts.onStep,
-          guardDanger: !(c.allowDanger && !s.changed),
+          guardDanger,
           qaRun: run.id,
+          keepProcess,
         });
+        if (r.restarted) restarts++;
         // 확인 필수 동작을 누르지 않은 까닭은 앱 메모(코드 값), 시나리오 요약은 에이전트·스크립트 글이라 그대로 뒤에 붙인다
         const summary = r.scenario.summary?.slice(0, 1500);
         const note: QaNote | undefined =
@@ -297,13 +323,15 @@ export async function runQaScripts(
           durationMs: Date.now() - t0,
         };
       }
+      // 확인 필수 동작은 guardDanger 가 꺼졌을 때만 실제로 누른다
+      prev = { status: result.status, preconditions: c.preconditions, changedData: setupData || (!guardDanger && !!c.danger) };
     }
     // 도중에 멈춘 TC 는 결과를 적지 않고 남은 것으로 둔다 (이미 실패를 본 경우만 남긴다)
     if (opts.signal?.aborted && result.status !== 'fail') break;
     run = await recordQaResult(planId, run.id, result);
     ran.push(run.results.find((x) => x.case === c.id)!);
   }
-  return { run, ran, pending, needsReview, remaining: scripted.slice(i) };
+  return { run, ran, pending: [...pending, ...changed], needsReview, remaining: scripted.slice(i), restarts, installed };
 }
 
 export interface QaRunRow {
@@ -315,6 +343,8 @@ export interface QaRunRow {
 export interface QaRunSummary {
   rows: QaRunRow[];
   counts: Record<QaStatus | 'not-run', number>;
+  /** 검증 갈래별 개수 (#129). 그 갈래에 TC 가 있을 때만 */
+  byTrack: Partial<Record<QaTrack, Record<QaStatus | 'not-run', number> & { total: number }>>;
   /** 요구사항별: 덮는 고른 TC 가 모두 통과면 pass, 하나라도 실패·막힘이면 fail, 아니면 not-run */
   requirements: { id: string; text: string; status: 'pass' | 'fail' | 'not-run'; cases: string[] }[];
 }
@@ -331,6 +361,13 @@ export function qaRunSummary(plan: QaPlan, run: QaRun): QaRunSummary {
   });
   const counts = { pass: 0, fail: 0, blocked: 0, skip: 0, 'not-run': 0 } as QaRunSummary['counts'];
   for (const r of rows) counts[r.status]++;
+  const byTrack: QaRunSummary['byTrack'] = {};
+  for (const r of rows) {
+    const t = caseTrack(r.case);
+    const b = (byTrack[t] ??= { total: 0, pass: 0, fail: 0, blocked: 0, skip: 0, 'not-run': 0 });
+    b.total++;
+    b[r.status]++;
+  }
   const status = new Map(rows.map((r) => [r.case.id, r.status]));
   const requirements = plan.requirements.map((req) => {
     const cases = ordered.filter((c) => c.requirements.includes(req.id)).map((c) => c.id);
@@ -342,7 +379,7 @@ export function qaRunSummary(plan: QaPlan, run: QaRun): QaRunSummary {
         : 'not-run';
     return { id: req.id, text: req.text, status: s, cases };
   });
-  return { rows, counts, requirements };
+  return { rows, counts, byTrack, requirements };
 }
 
 /**

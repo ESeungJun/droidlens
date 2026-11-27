@@ -11,7 +11,8 @@
 //   - 사용자의 ~/.droidlens 는 건드리지 않는다. DroidLens 홈은 <캡처 폴더>/F16-home 이나 .work/verify/F16-<시각>
 //
 // LLM 이 맡는 두 곳은 같은 결과를 내는 정해진 코드로 대신한다
-//   - droidlens-qa-planner 의 "TC 표 옮기기": 기획서의 `- 1.1 …` 줄을 요구사항으로, CSV 행을 TC 로
+//   - droidlens-qa-planner 의 "요구사항 잇기": 기획서의 `- 1.1 …` 줄을 요구사항으로, TC 표의 Spec 칸으로 TC 에 잇는다
+//     (TC 표는 넣는 순간 앱이 원문 그대로 가져온다, #129)
 //   - droidlens-verifier 가 통과 뒤 녹화하는 회귀 스크립트: TC 마다 아래 STEPS 를 저장하고 TC 에 잇는다
 //
 // 사용: node scripts/verify/F16-qa-example.mjs [캡처 폴더] [--serial <기기>] [--no-device]
@@ -66,7 +67,8 @@ const specText = await dl.readQaSourceText(created.id, md.source.id);
 const tableText = await dl.readQaSourceText(created.id, csv.source.id);
 if (!tableText.startsWith('| No | Title |')) fail('문서 읽기', 'CSV 가 마크다운 표로 읽힘', tableText.slice(0, 40));
 
-// 3. TC 뽑기: 기획서 줄마다 요구사항 하나, TC 표는 그대로 옮긴다(원래 번호는 notes)
+// 3. TC 뽑기: TC 표는 넣을 때 이미 원문 그대로 들어왔다(TC 문서 갈래). 기획서 줄마다 요구사항 하나를 만들고 Spec 칸으로 잇는다
+if (csv.tcImport?.cases !== 7) fail('TC 표 가져오기', 'TC 7개', String(csv.tcImport?.cases));
 const requirements = [...specText.matchAll(/^- (\d+\.\d+) (.+)$/gm)].map((m, i) => ({
   id: `R-${String(i + 1).padStart(2, '0')}`,
   text: m[2],
@@ -82,20 +84,12 @@ const col = (name) => {
 const cases = rows.map((r, i) => {
   const req = bySection.get(r[col('Spec')]);
   if (!req) fail('TC 뽑기', `${i + 2}행의 Spec 이 기획서 절 번호`, r[col('Spec')]);
-  return {
-    id: `TC-${String(i + 1).padStart(3, '0')}`,
-    title: r[col('Title')],
-    requirements: [req],
-    priority: r[col('Priority')],
-    kind: r[col('Type')],
-    preconditions: [r[col('Preconditions')]],
-    steps: r[col('Steps')].split('\n').map((s) => s.replace(/^\d+\.\s*/, '')),
-    expected: [r[col('Expected')]],
-    source: { source: csv.source.id, locator: `row ${i + 2}` },
-    notes: `원래 번호 ${r[col('No')]}`,
-  };
+  // TC 문서 TC 는 원문을 고칠 수 없어 번호와 요구사항만 적는다
+  return { id: `TC-${String(i + 1).padStart(3, '0')}`, requirements: [req] };
 });
 let plan = await dl.saveAgentQaPlan(created.id, { requirements, cases });
+const notVerbatim = plan.cases.filter((c, i) => c.track !== 'tc' || c.title !== rows[i][col('Title')]);
+if (notVerbatim.length) fail('TC 표 가져오기', '제목이 원문 그대로인 TC 문서 TC', notVerbatim.map((c) => c.id).join(', '));
 
 // 4. 검토: 요구사항마다 TC 가 있고, 확인 필수 동작이 없으니 모두 골라져 있어야 한다
 const cov = dl.qaCoverage(plan);

@@ -95,8 +95,8 @@ dependencyResolutionManagement {
 
 // app/build.gradle.kts — use the same release tag as the DroidLens app (network mocks need v0.10.0+)
 dependencies {
-    debugImplementation("com.github.ESeungJun.droidlens:sdk:v0.14.0")
-    releaseImplementation("com.github.ESeungJun.droidlens:sdk-noop:v0.14.0")
+    debugImplementation("com.github.ESeungJun.droidlens:sdk:v0.15.0")
+    releaseImplementation("com.github.ESeungJun.droidlens:sdk-noop:v0.15.0")
 }
 
 // Network inspector (if you use OkHttp)
@@ -187,7 +187,7 @@ steps:
 
 | Step | Description |
 | --- | --- |
-| `tap` / `longPress` | Waits for the element matching a selector (id · text · textContains · desc · descContains · className · index), then presses it. With `optional: true`, skipped if absent |
+| `tap` / `longPress` | Waits for the element matching a selector (id · text · textContains · desc · descContains · className · index), then presses it. `inWeb: true` limits it to text inside a WebView page, `false` to everything outside. With `optional: true`, skipped if absent |
 | `type` | Text input (`into` targets an input field, `clear` replaces). Supports non-ASCII text (e.g. Korean) when the agent is running |
 | `swipe` | `up/down/left/right`; with `until`, scrolls until the element appears |
 | `wait` | Until an element appears (with `gone: true`, until it disappears) |
@@ -250,7 +250,7 @@ The agent runs with the same Instrumentation privileges as UI testing tools (App
 
 - Network, DB, and SharedPreferences work only in debug builds with the SDK (not available for third-party apps)
 - The network inspector records only OkHttp-based requests (including Retrofit)
-- WebView, Flutter, and game-engine screens expose few accessibility nodes, so analysis is limited
+- Flutter and game-engine screens expose few accessibility nodes, so analysis is limited. WebView text on screen is readable (`inWeb` selector), and apps with WebView debugging on (debug builds, or `DroidLens.enableWebViewDebugging()`) also expose console errors, requests, and off-screen page text through `webview_inspect`
 - Can't run alongside other UiAutomation tools such as Appium (turn off the agent from the top bar)
 
 ## Development

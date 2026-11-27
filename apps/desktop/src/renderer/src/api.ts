@@ -15,11 +15,14 @@ import type {
   QaCase,
   QaPlan,
   QaPlanSummary,
+  QaPlanDeleteInfo,
+  QaPlanDeleteResult,
   QaRun,
   QaRunSummary,
   QaRunIndexItem,
   DesignRunSummary,
   ScenarioData,
+  ScreenCheck,
   StartupResult,
   hierarchyStats,
   qaCoverage,
@@ -147,6 +150,10 @@ export interface QaSourceAdded {
   duplicate?: boolean;
   warnings?: string[];
   error?: string;
+  /** TC 표를 알아보고 원문 그대로 가져온 결과 (#129) */
+  tcImport?: { cases: number; warnings: string[] };
+  /** 머리글을 못 알아본 표: 열 고르기 후보 */
+  tcTables?: { sheet: string; headerRow: number; headers: string[]; guess: Record<string, number | undefined> }[];
 }
 export type QaJobKind = 'extract' | 'run';
 export type QaEvent =
@@ -202,6 +209,8 @@ export const api = {
   logcatStart: (s: string, pkg: string | undefined, id: number) => call<number | null>('logcatStart', s, pkg, id),
   logcatStop: (id?: number) => call<void>('logcatStop', id),
   graphGet: (pkg: string) => call<GraphData>('graphGet', pkg),
+  /** 화면 id → 그 화면을 지난 기록·TC (#131) */
+  graphChecks: (pkg: string) => call<Record<string, ScreenCheck>>('graphChecks', pkg),
   graphImage: (pkg: string, file: string) => call<string>('graphImage', pkg, file),
   graphRecord: (s: string, pkg: string, action: GraphAction) =>
     call<{ recorded: false; skipped?: boolean } | { recorded: true; from: string; to: string; isNew: boolean }>('graphRecord', s, pkg, action),
@@ -274,10 +283,15 @@ export const api = {
   qaPlanCreate: (name: string, app?: string) => call<QaPlan>('qaPlanCreate', name, app),
   qaPlanGet: (id: string) => call<QaPlanView>('qaPlanGet', id),
   qaPlanRename: (id: string, name: string, app?: string) => call<QaPlan>('qaPlanRename', id, name, app),
+  qaPlanDeleteInfo: (id: string) => call<QaPlanDeleteInfo>('qaPlanDeleteInfo', id),
+  /** 계획 폴더를 지운다. withRecords 면 이 계획의 TC 기록·스크립트도 (#133) */
+  qaPlanDelete: (id: string, withRecords: boolean) => call<QaPlanDeleteResult>('qaPlanDelete', id, withRecords),
   /** 파일 대화상자를 띄워 고른 문서를 넣는다 (취소하면 빈 목록) */
   qaSourcePick: (id: string) => call<QaSourceAdded[]>('qaSourcePick', id),
   qaSourceLink: (id: string, url: string) => call<QaSourceAdded>('qaSourceLink', id, url),
-  qaCaseUpdate: (id: string, caseId: string, patch: Partial<QaCase>) => call<QaPlan>('qaCaseUpdate', id, caseId, patch),
+  qaTcImport: (id: string, source: string, pick: { sheet: string; headerRow: number; map: Record<string, number> }) =>
+    call<{ cases: number; warnings: string[] }>('qaTcImport', id, source, pick),
+  qaCaseUpdate: (id: string, caseId: string, patch: Partial<Omit<QaCase, 'suggested'>> & { suggested?: boolean }) => call<QaPlan>('qaCaseUpdate', id, caseId, patch),
   qaSelect: (id: string, caseIds: string[], on: boolean) => call<QaPlan>('qaSelect', id, caseIds, on),
   /** shown: 사람이 보고 허용한 TC 내용 (그사이 바뀌었으면 허용하지 않는다) */
   qaCaseAllow: (id: string, caseId: string, allow: boolean, shown?: QaCase) => call<QaPlan>('qaCaseAllow', id, caseId, allow, shown),
@@ -294,6 +308,6 @@ export const api = {
   onQaEvent: (fn: (e: QaEvent) => void) => window.dl.on('qa:event', (p) => fn(p as QaEvent)),
 };
 
-export type { ApkAnalysis, AppInfo, CurrentScreen, DeviceInfo, DeviceSummary, GraphAction, GraphData, Hierarchy, Interaction, LogLine, PackageSummary, ScenarioData };
-export type { QaCase, QaPlan, QaPlanSummary, QaRun, QaRunSummary, QaRunIndexItem, DesignRunSummary };
+export type { ApkAnalysis, AppInfo, CurrentScreen, DeviceInfo, DeviceSummary, GraphAction, GraphData, Hierarchy, Interaction, LogLine, PackageSummary, ScenarioData, ScreenCheck };
+export type { QaCase, QaPlan, QaPlanSummary, QaPlanDeleteInfo, QaRun, QaRunSummary, QaRunIndexItem, DesignRunSummary };
 export type { ViewNode, ScreenNode, NetworkEntry, NetworkDetail, MockRule, PrefsFile, DbInfo, QueryResult, SdkEvent, SdkInfo, PerfSample, StartupResult } from '@droidlens/core';

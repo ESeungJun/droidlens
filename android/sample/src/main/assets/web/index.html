@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>웹뷰 샘플 본문</title>
+<style>body{font-family:sans-serif;padding:16px;line-height:1.5}button{font-size:16px;padding:8px 12px}</style>
+</head>
+<body>
+<h1>이번 주 모임 안내</h1>
+<p id="intro">토요일 오후 두 시에 도서관 앞에서 만나요.</p>
+<ul>
+  <li>준비물: 읽고 있는 책 한 권</li>
+  <li>참가비 없음</li>
+</ul>
+<a href="second.html">다음 페이지로</a>
+<p><button id="join" onclick="document.getElementById('result').textContent='신청이 접수됐어요'">참가 신청</button></p>
+<p id="result"></p>
+<div style="height:2400px"></div>
+<p id="footer">맨 아래 안내: 우천 시 모임은 다음 주로 미뤄요. 이 문장은 화면 아래에 있어 스크롤해야 보이고, 덤프가 화면 밖 웹 글자까지 읽는지 확인하려고 일부러 길게 썼어요.</p>
+<script>
+  // 검증 도구가 콘솔 오류·실패한 요청·잡히지 않은 예외를 보는지 확인하려고 일부러 낸다
+  console.error('샘플 콘솔 오류: 모임 목록을 불러오지 못했어요');
+  console.log('샘플 로그');
+  fetch('http://127.0.0.1:8099/api/meetups?token=sample-secret').catch(function (e) { console.warn('요청 실패', e.message); });
+  setTimeout(function () { undefinedFunctionForSample(); }, 50);
+</script>
+</body>
+</html>

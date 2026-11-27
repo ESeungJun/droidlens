@@ -11,7 +11,7 @@ import { agentsSrc, dev, getWindow, mcpScript, send, type Handle } from '../cont
  */
 
 /** 화면에서 사람이 고칠 수 있는 TC 칸. 실제로 누르기 허용은 qaCaseAllow, 스크립트·다시 보기 표시는 고치지 않는다 */
-const HUMAN_CASE_FIELDS = ['title', 'priority', 'kind', 'preconditions', 'steps', 'expected', 'data', 'notes', 'selected'] as const;
+const HUMAN_CASE_FIELDS = ['title', 'priority', 'kind', 'preconditions', 'steps', 'expected', 'data', 'notes', 'selected', 'suggested'] as const;
 
 const claudeCtx = () => ({ execPath: process.execPath, mcpScript: mcpScript(), agentsDir: agentsSrc() });
 const emit = (e: unknown) => send('qa:event', e);
@@ -22,6 +22,12 @@ export function register(handle: Handle): void {
   handle('qaPlanGet', async (id: string) => {
     const plan = await dl.loadQaPlan(id);
     return { plan, coverage: dl.qaCoverage(plan), review: dl.qaReviewList(plan), runs: await dl.listQaRunIds(id) };
+  });
+  // 지우기 (#133): 사람이 확인한 뒤에만. 이 계획의 작업(TC 뽑기·회차)이 돌고 있으면 막는다
+  handle('qaPlanDeleteInfo', async (id: string) => dl.qaPlanDeleteInfo(id));
+  handle('qaPlanDelete', async (id: string, withRecords?: boolean) => {
+    if (qaJob()?.plan === id) throw new Error('이 계획의 작업이 돌고 있어 지울 수 없습니다. 멈추거나 끝난 뒤에 지워 주세요');
+    return dl.deleteQaPlan(id, { withRecords: withRecords === true });
   });
   handle('qaPlanRename', async (id: string, name: string, app?: string) => {
     const plan = await dl.loadQaPlan(id);
@@ -40,7 +46,14 @@ export function register(handle: Handle): void {
     for (const f of r.filePaths) {
       try {
         const a = await dl.addQaSource(id, f);
-        out.push({ id: a.source.id, title: a.source.title ?? a.source.ref, duplicate: a.duplicate, warnings: a.warnings });
+        out.push({
+          id: a.source.id,
+          title: a.source.title ?? a.source.ref,
+          duplicate: a.duplicate,
+          warnings: a.warnings,
+          tcImport: a.tcImport && { cases: a.tcImport.cases, warnings: a.tcImport.warnings },
+          tcTables: a.tcTables,
+        });
       } catch (e) {
         out.push({ title: f.split(/[\\/]/).pop() ?? f, error: (e as Error).message });
       }
@@ -54,6 +67,12 @@ export function register(handle: Handle): void {
     return { id: a.source.id, title: a.source.ref, duplicate: a.duplicate, warnings: a.warnings };
   });
 
+  // 사람이 열 고르기 화면에서 고른 열로 TC 표를 가져온다 (#129). 문서는 이미 넣은 사본만 읽는다
+  handle('qaTcImport', async (id: string, source: string, pick: { sheet: string; headerRow: number; map: Record<string, number> }) => {
+    if (!pick || typeof pick !== 'object' || typeof pick.sheet !== 'string' || !pick.map || typeof pick.map !== 'object') throw new Error('잘못된 요청입니다');
+    const r = await dl.importQaTcTable(String(id), String(source), { sheet: pick.sheet, headerRow: Number(pick.headerRow), map: pick.map });
+    return { cases: r.cases, warnings: r.warnings };
+  });
   handle('qaCaseUpdate', async (id: string, caseId: string, patch: Record<string, unknown>) => {
     const extra = Object.keys(patch ?? {}).filter((k) => !(HUMAN_CASE_FIELDS as readonly string[]).includes(k));
     if (extra.length) throw new Error(`이 화면에서 고칠 수 없는 칸입니다: ${extra.join(', ')}`);

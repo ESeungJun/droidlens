@@ -5,7 +5,12 @@ import { homedir } from 'node:os';
 import { basename, dirname, extname, join, resolve } from 'node:path';
 import { z } from 'zod';
 import * as dl from '@droidlens/core';
-import { device, text, serialArg, acts, readOnly, recorder, allowDangerArg, dangerAllowed, within, isProjectDir } from '../common.js';
+import { device, text, serialArg, acts, readOnly, recorder, allowDangerArg, dangerAllowed, within, isProjectDir, pathSee } from '../common.js';
+
+/** 시나리오를 마칠 때 그 경로로 지금 화면을 한 번 더 본다 (recorder.path 를 비운 뒤라 pathSee 대신) */
+async function pathSeeWith(path: dl.TcPath): Promise<void> {
+  await path.look(recorder.seq).catch(() => path.forget());
+}
 
 const isYaml = (p: string) => ['.yaml', '.yml'].includes(extname(p).toLowerCase());
 
@@ -116,6 +121,9 @@ export function register(server: McpServer): void {
         // 새 시나리오 시작이 실패해도 앞 TC 의 녹화·허용 상태가 남지 않게 먼저 비운다
         recorder.active = false;
         recorder.tc = undefined;
+        recorder.relink = undefined;
+        await recorder.path?.finish(prevTc, 'blocked').catch(() => undefined);
+        recorder.path = undefined;
         const html = await prev.finish('blocked', '끝내지 않은 채 다음 시나리오를 시작해 중단됨', recorder.actions).catch(() => undefined);
         if (prevTc?.run)
           await dl
@@ -136,9 +144,13 @@ export function register(server: McpServer): void {
       recorder.steps = [];
       recorder.mocks = new Map();
       recorder.actions = [];
+      recorder.relink = undefined;
       recorder.tc = tc && tcCase ? { plan: tc.plan, case: tc.case, fingerprint: dl.dangerFingerprint(tcCase), ...(tc.run ? { run: tc.run } : {}) } : undefined;
       // 온디바이스 에이전트를 지금 띄워 둔다. 단계 도중에 처음 설치되면 Play 프로텍트 창이 앱을 가린 채 스크린샷에 찍힌다
-      await dl.ensureAgent(dev).catch(() => undefined);
+      const agent = await dl.ensureAgent(dev).catch(() => undefined);
+      // tap 으로 지난 화면 이동을 앱 지도에 남긴다 (#131). 에이전트가 없으면 화면 확인이 느려 만들지 않는다
+      recorder.path = agent && packageName ? await dl.ScreenGraph.open(packageName).then((g) => new dl.TcPath(g, dev), () => undefined) : undefined;
+      await pathSee(dev);
       const top = await dl.currentScreen(dev).catch(() => undefined);
       const warn = dl.isBlockingPackage(top?.packageName)
         ? `\n⚠ 시스템 창(${top!.packageName} ${top!.activity})이 화면을 가리고 있습니다. 기기에서 닫은 뒤 진행하세요 (그대로 두면 판정과 스크린샷이 이 창을 기준으로 남습니다)`
@@ -204,10 +216,13 @@ export function register(server: McpServer): void {
       // 바로 찍으면 전환 중간이 찍히므로 멈출 때까지 기다린다. 실패한 검사는 실패한 그 순간을 남긴다
       if (screenshot !== false && finalStatus !== 'fail') await dl.waitScreenSettled(dev);
       // Fragment 조회는 기기에 따라 1~7초 걸려서 스크린샷과 같이 보낸다
-      const [png, screen] = await Promise.all([
+      const [png, screen, tree] = await Promise.all([
         screenshot === false ? Promise.resolve(undefined) : dl.screenshot(dev),
         dl.currentScreen(dev, { fragments: true }).catch(() => undefined),
+        // 지도 경로가 있으면 단계 화면을 지도 화면 id 로 남긴다 (#131, 지도와 같은 시그니처)
+        recorder.path ? dl.dumpHierarchy(dev).catch(() => undefined) : Promise.resolve(undefined),
       ]);
+      const mapped = tree && screen ? await pathSee(dev, tree, screen) : undefined;
       const foreign = png ? dl.foreignPackage(screen, recorder.app ?? scenario.data.packageName) : undefined;
       // 직전 단계 이후 한 조작을 이 단계에 붙이고 비운다
       const actions = recorder.actions;
@@ -221,6 +236,7 @@ export function register(server: McpServer): void {
         check,
         corrects,
         screen: screen ? `${screen.activity}${screen.fragments.length ? ' / ' + screen.fragments.join(', ') : ''}` : undefined,
+        screenId: mapped?.id,
       });
       const foreignNote = foreign
         ? `\n⚠ 스크린샷 순간 앞 화면이 대상 앱이 아닙니다: ${foreign}${dl.isBlockingPackage(foreign) ? ' (시스템 창이 가림 — 기기에서 닫고 이 단계를 다시 확인하세요)' : ''}`
@@ -261,6 +277,16 @@ export function register(server: McpServer): void {
       // TC 를 pass 로 끝냈어도 DroidLens 가 검사한 통과 근거가 없으면 TC 결과는 막힘으로 적고 스크립트도 잇지 않는다
       const noEvidence = tc && verdict === 'pass' ? dl.missingPassEvidence(d) : undefined;
       if (noEvidence) lines.push(`${tc!.case} 는 통과로 보지 않았습니다: ${noEvidence}. 기대 결과마다 scenario_step(assert=…) 로 판정하세요`);
+      // 마지막 탭의 도착 화면까지 잇고, 지난 연결에 TC 와 판정을 붙인다 (#131)
+      if (recorder.path) {
+        const path = recorder.path;
+        recorder.path = undefined;
+        await pathSeeWith(path);
+        const lead = await path
+          .finish(tc, noEvidence ? 'blocked' : verdict)
+          .then(() => (tc && path.edges.size ? `화면 지도: ${tc.case} 가 지난 연결 ${path.edges.size}개에 결과를 붙였습니다` : ''), () => '');
+        if (lead) lines.push(lead);
+      }
       // 녹화 중 켠 목은 재실행 때도 같은 조건이 되도록 setup 에서 켜고 끝나면 지우게 한다
       const mocks = [...recorder.mocks.values()].map(({ id: _id, enabled: _enabled, hits: _hits, delayMs, fail, ...m }) => ({
         ...m,
@@ -295,6 +321,7 @@ export function register(server: McpServer): void {
             const linked = await dl.linkQaCaseScript(tc.plan, tc.case, basename(p, '.yaml'), { hash, fingerprint: tc.fingerprint }).then(
               () => {
                 savedScript = basename(p, '.yaml');
+                recorder.relink = { plan: tc.plan, case: tc.case, script: savedScript, fingerprint: tc.fingerprint };
                 return `${tc.case} 에 스크립트를 이었습니다`;
               },
               (e) => `${tc.case} 에 스크립트를 잇지 못했습니다: ${(e as Error).message.split('\n')[0]}`,
@@ -393,7 +420,9 @@ export function register(server: McpServer): void {
       const allowAll = await dangerAllowed(allowDanger, true, 'script_run');
       const dev = await device(serial);
       const p = await scriptPath(script, true);
-      const loaded = await dl.loadScript(p);
+      // 다시 이을 때 돌린 내용과 같은 바이트로 해시를 만든다 (돌리는 사이에 파일이 바뀌어도 그 내용을 잇지 않게)
+      const bytes = await readFile(p);
+      const loaded = dl.parseScript(bytes.toString('utf8'));
       // TC 에 이은 스크립트의 확인 필수 동작은 사람 허용과 스크립트 해시를 보는 qa_run_scripts 로만 누른다
       if (allowAll && loaded.tc)
         throw new Error(`${loaded.tc.case} 의 스크립트입니다. 확인 필수 동작까지 돌리려면 qa_run_scripts(plan: "${loaded.tc.plan}") 를 쓰세요 (사람이 그 TC 에 허용했을 때만 누른다)`);
@@ -406,6 +435,21 @@ export function register(server: McpServer): void {
           if (e.status !== 'running') lines.push(`${e.index + 1}/${e.total} ${e.status.toUpperCase()} ${e.title}${e.detail && e.status === 'fail' ? `\n    ${e.detail.replace(/\n/g, '\n    ')}` : ''}`);
         },
       });
+      // 방금 끝낸 TC 의 스크립트를 같은 TC 안에서 고쳐 통과하면 다시 잇는다 (#140). 다른 TC·시나리오 중이면 잇지 않는다
+      const rl = recorder.relink;
+      if (
+        r.verdict === 'pass' && rl && !recorder.active && loaded.tc?.plan === rl.plan && loaded.tc.case === rl.case &&
+        p === (await scriptPath(rl.script, true)) // 같은 이름의 다른 폴더 파일이 아니라 스크립트 폴더의 그 파일
+      )
+        lines.push(
+          await dl.linkQaCaseScript(rl.plan, rl.case, rl.script, { hash: dl.sha256(bytes), fingerprint: rl.fingerprint, relink: true }).then(
+            () => `${rl.case} 에 고친 스크립트를 다시 이었습니다`,
+            (e) => `${rl.case} 에 고친 스크립트를 다시 잇지 못했습니다: ${(e as Error).message.split('\n')[0]}`,
+          ).finally(
+            // 다시 잇기는 한 번만 한다
+            () => (recorder.relink = undefined),
+          ),
+        );
       return text([`판정: ${r.verdict.toUpperCase()} (${r.passed} 통과 · ${r.failed} 실패 · ${r.skipped} 건너뜀, ${(r.durationMs / 1000).toFixed(1)}초)`, ...lines, `리포트: ${r.report}`].join('\n'));
     },
   );

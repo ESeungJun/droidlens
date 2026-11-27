@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { api, type QaCase, type QaPlanSummary, type QaPlanView, type QaRunView } from '../api';
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { api, type QaCase, type QaPlanSummary, type QaPlanDeleteInfo, type QaPlanView, type QaRunView, type QaSourceAdded } from '../api';
 import { AuthHelp } from '../AuthHelp';
 import { useApp } from '../App';
 import { useI18n, useT } from '../i18n';
@@ -17,6 +17,17 @@ type Step = 'docs' | 'review' | 'run';
 const PLAN_KEY = 'droidlens.qa.plan';
 
 const KIND_LABEL: Record<QaCase['kind'], string> = { normal: '정상', exception: '예외', boundary: '경계', design: '디자인' };
+/** 검증 갈래 (#129): 문서 종류마다 검증하는 방식. 화면에는 TC 문서 → 기획 흐름 → 디자인 가이드 순으로 놓는다 */
+type Track = 'flow' | 'design' | 'tc';
+const TRACKS: Track[] = ['tc', 'flow', 'design'];
+const TRACK_LABEL: Record<Track, string> = { flow: '기획 흐름', design: '디자인 가이드', tc: 'TC 문서' };
+const TRACK_HINT: Record<Track, string> = {
+  tc: '넣은 TC 표의 원문 그대로',
+  flow: '기획서의 사용자 흐름',
+  design: 'Figma 프레임과 화면 차이',
+};
+/** track 이 없는 옛 TC 는 디자인 TC 면 디자인 가이드, 아니면 기획 흐름 (core caseTrack 과 같다) */
+const trackOf = (c: Pick<QaCase, 'track' | 'kind'>): Track => c.track ?? (c.kind === 'design' ? 'design' : 'flow');
 const AUTO_LABEL: Record<QaCase['automatable'], string> = { yes: '자동', partial: '일부 자동', manual: '수동' };
 const STATUS_LABEL = { pass: '통과', fail: '실패', blocked: '막힘', skip: '건너뜀', 'not-run': '안 돌림' } as const;
 const STATUS_TONE = { pass: 'pass', fail: 'fail', blocked: 'warn', skip: 'mute', 'not-run': 'mute' } as const;
@@ -139,6 +150,28 @@ export function QaTab() {
     setPlans((await run(api.qaPlans())) ?? []);
   };
 
+  // 계획 지우기 확인 (#133). 기록·스크립트는 기본으로 남긴다
+  const [deleting, setDeleting] = useState<QaPlanDeleteInfo | null>(null);
+  const [withRecords, setWithRecords] = useState(false);
+  const askDelete = async (id: string) => {
+    const info = await run(api.qaPlanDeleteInfo(id));
+    if (!info) return;
+    setWithRecords(false);
+    setDeleting(info);
+  };
+  // 다른 계획을 고르면 확인 창을 닫는다
+  useEffect(() => setDeleting(null), [sel]);
+  const doDelete = async () => {
+    const d = deleting;
+    if (!d) return;
+    setDeleting(null); // 먼저 닫아 두 번 누르지 않게
+    const r = await run(api.qaPlanDelete(d.id, withRecords));
+    if (!r) return;
+    toast(t('"{name}" 계획을 지웠습니다', { name: d.name }));
+    if (sel === r.id) setSel(null);
+    setPlans((await run(api.qaPlans())) ?? []);
+  };
+
   const busy = qa.job !== null;
   const plan = view?.plan;
   const byApp = useMemo(() => {
@@ -185,8 +218,8 @@ export function QaTab() {
               <span className="n">{items.length}</span>
             </div>
             {items.map((p) => (
+              <Fragment key={p.id}>
               <div
-                key={p.id}
                 className={`scen-item ${sel === p.id && !showNew ? 'sel' : ''}`}
                 onClick={() => {
                   setCreating(false);
@@ -199,8 +232,46 @@ export function QaTab() {
                     {t('문서 {s}개 · TC {c}개 (고름 {k})', { s: p.sources, c: p.cases, k: p.selected })}
                     {qa.job?.plan === p.id && <span className="qa-live"> · {qa.job.kind === 'extract' ? t('뽑는 중') : t('실행 중')}</span>}
                   </div>
+                  {sel === p.id && !showNew && !deleting && (
+                    <button
+                      className="btn sm danger"
+                      style={{ marginTop: 6 }}
+                      disabled={qa.job?.plan === p.id}
+                      title={qa.job?.plan === p.id ? t('작업이 돌고 있어 지울 수 없습니다') : undefined}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        void askDelete(p.id);
+                      }}
+                    >
+                      {t('계획 지우기')}
+                    </button>
+                  )}
                 </div>
               </div>
+              {deleting?.id === p.id && (
+                <div className="qa-ask" style={{ margin: '0 10px 10px' }}>
+                  <b>{t('"{name}" 계획을 지울까요?', { name: deleting.name })}</b>
+                  <div className="faint" style={{ marginTop: 4 }}>
+                    {t('문서와 회차 {n}개의 결과가 함께 지워집니다. 되돌릴 수 없습니다.', { n: deleting.runs })}
+                  </div>
+                  {deleting.records + deleting.scripts > 0 && (
+                    <label style={{ display: 'flex', gap: 6, marginTop: 8 }}>
+                      <input type="checkbox" checked={withRecords} onChange={(e) => setWithRecords(e.target.checked)} />
+                      <span>{t('TC 기록 {r}개와 스크립트 {s}개도 지우기', { r: deleting.records, s: deleting.scripts })}</span>
+                    </label>
+                  )}
+                  {deleting.running && <div className="v-blocked" style={{ marginTop: 6 }}>{t('이 계획의 회차가 돌고 있어 지울 수 없습니다')}</div>}
+                  <div className="qa-row" style={{ marginTop: 8 }}>
+                    <button className="btn sm danger" disabled={deleting.running} onClick={() => void doDelete()}>
+                      {t('삭제')}
+                    </button>
+                    <button className="btn sm" onClick={() => setDeleting(null)}>
+                      {t('취소')}
+                    </button>
+                  </div>
+                </div>
+              )}
+              </Fragment>
             ))}
           </div>
         ))}
@@ -332,15 +403,22 @@ function DocsStep({ view, reload, onNext }: { view: QaPlanView; reload: () => Pr
   const busy = qa.job !== null;
   const lastHere = qa.last?.plan === plan.id && qa.last.job === 'extract' ? qa.last : null;
 
-  const report = (added: { title: string; duplicate?: boolean; warnings?: string[]; error?: string }[]) => {
+  // 머리글을 못 알아본 표: 사람이 열을 골라 TC 로 가져온다 (#129)
+  const [pending, setPending] = useState<{ source: string; title: string; tables: NonNullable<QaSourceAdded['tcTables']> }[]>([]);
+  const report = (added: QaSourceAdded[]) => {
     for (const a of added) {
       if (a.error) toast(t('{name}: {error}', { name: a.title, error: a.error }), true);
       else if (a.duplicate) toast(t('이미 들어 있는 문서입니다: {name}', { name: a.title }));
       for (const w of a.warnings ?? []) toast(`⚠ ${a.title}: ${w}`, true);
+      if (a.tcImport) toast(t('{name}: TC 표에서 TC {n}개를 원문 그대로 가져왔어요', { name: a.title, n: a.tcImport.cases }));
+      for (const w of a.tcImport?.warnings ?? []) toast(`⚠ ${a.title}: ${w}`, true);
     }
+    const asks = added.filter((a) => a.id && a.tcTables?.length).map((a) => ({ source: a.id!, title: a.title, tables: a.tcTables! }));
+    if (asks.length) setPending((p) => [...p.filter((x) => !asks.some((a) => a.source === x.source)), ...asks]);
     const ok = added.filter((a) => !a.error && !a.duplicate).length;
     if (ok) toast(t('문서 {n}개를 넣었습니다', { n: ok }));
   };
+  const tcCount = (sid: string) => plan.cases.filter((c) => c.track === 'tc' && c.source?.source === sid).length;
 
   return (
     <div className="qa-scroll">
@@ -359,6 +437,9 @@ function DocsStep({ view, reload, onNext }: { view: QaPlanView; reload: () => Pr
                     </td>
                     <td className="qa-src-name" title={s.ref}>
                       <span className="qa-ellipsis">{s.title ?? (isLink ? linkName(s.ref) : s.ref)}</span>
+                    </td>
+                    <td className="qa-nowrap">
+                      {tcCount(s.id) > 0 && <span className="rv-chip info">{t('TC {n}개 가져옴', { n: tcCount(s.id) })}</span>}
                     </td>
                     <td className="faint qa-nowrap">{shortTime(s.addedAt)}</td>
                   </tr>
@@ -409,11 +490,30 @@ function DocsStep({ view, reload, onNext }: { view: QaPlanView; reload: () => Pr
         </div>
       </div>
 
+      {pending.map((p) => (
+        <TcColumnPicker
+          key={p.source}
+          planId={plan.id}
+          source={p.source}
+          title={p.title}
+          tables={p.tables}
+          onDone={async () => {
+            setPending((x) => x.filter((y) => y.source !== p.source));
+            await reload();
+          }}
+        />
+      ))}
+
       <div className="card">
         <h5>{t('TC 뽑기')}</h5>
         {plan.sources.some((s) => s.kind === 'confluence' || s.kind === 'figma') && (
           <p className="faint" style={{ marginTop: 0 }}>
             {t('링크는 Claude Code 의 Confluence·Figma 커넥터로 읽습니다. 없으면 PDF 로 넣으세요.')}
+          </p>
+        )}
+        {plan.cases.some((c) => c.track === 'tc') && (
+          <p className="faint" style={{ marginTop: 0 }}>
+            {t('TC 표는 이미 원문 그대로 들어왔어요. TC 뽑기는 요구사항을 잇고, TC 표가 덮지 못한 것만 추가 제안으로 냅니다.')}
           </p>
         )}
         <textarea
@@ -455,6 +555,98 @@ function DocsStep({ view, reload, onNext }: { view: QaPlanView; reload: () => Pr
           )}
         </div>
         {(mine || lastHere) && <QaLog lines={qa.log} />}
+      </div>
+    </div>
+  );
+}
+
+const TC_PICK_FIELDS = [
+  ['title', '제목'],
+  ['steps', '단계'],
+  ['expected', '기대 결과'],
+  ['id', '번호'],
+  ['preconditions', '사전 조건'],
+  ['priority', '우선순위'],
+  ['kind', '유형'],
+  ['notes', '비고'],
+] as const;
+
+/** 머리글을 못 알아본 표에서 사람이 열을 골라 TC 로 가져온다 (#129) */
+function TcColumnPicker({
+  planId,
+  source,
+  title,
+  tables,
+  onDone,
+}: {
+  planId: string;
+  source: string;
+  title: string;
+  tables: NonNullable<QaSourceAdded['tcTables']>;
+  onDone: () => Promise<void>;
+}) {
+  const { run, toast } = useApp();
+  const t = useT();
+  const [at, setAt] = useState(0);
+  const table = tables[at];
+  const [map, setMap] = useState<Record<string, number | undefined>>(() => ({ ...tables[0]?.guess }));
+  const ready = map.title !== undefined || map.steps !== undefined;
+  return (
+    <div className="card">
+      <h5>{t('TC 표 열 고르기')}</h5>
+      <p className="faint" style={{ marginTop: 0 }}>
+        {t('{name} 의 머리글을 알아보지 못했어요. TC 표라면 칸마다 맞는 열을 골라 주세요. 고른 열의 글은 바꾸지 않고 그대로 가져옵니다.', { name: title })}
+      </p>
+      {tables.length > 1 && (
+        <label className="chk" style={{ marginBottom: 8 }}>
+          {t('시트')}
+          <select className="input" value={at} onChange={(e) => (setAt(Number(e.target.value)), setMap({ ...tables[Number(e.target.value)]?.guess }))}>
+            {tables.map((x, i) => (
+              <option key={i} value={i}>
+                {x.sheet || t('(CSV)')}
+              </option>
+            ))}
+          </select>
+        </label>
+      )}
+      <div className="qa-colpick">
+        {TC_PICK_FIELDS.map(([f, label]) => (
+          <label key={f} className="chk">
+            <span className="qa-colpick-k">{t(label)}</span>
+            <select
+              className="input"
+              value={map[f] ?? ''}
+              onChange={(e) => setMap((m) => ({ ...m, [f]: e.target.value === '' ? undefined : Number(e.target.value) }))}
+            >
+              <option value="">{t('(없음)')}</option>
+              {table.headers.map((h, i) => (
+                <option key={i} value={i}>
+                  {h.trim() || t('{n}열', { n: i + 1 })}
+                </option>
+              ))}
+            </select>
+          </label>
+        ))}
+      </div>
+      <div className="qa-row" style={{ marginTop: 10 }}>
+        <button
+          className="btn primary"
+          disabled={!ready}
+          onClick={async () => {
+            const clean = Object.fromEntries(Object.entries(map).filter(([, v]) => v !== undefined)) as Record<string, number>;
+            const r = await run(api.qaTcImport(planId, source, { sheet: table.sheet, headerRow: table.headerRow, map: clean }));
+            if (!r) return;
+            toast(t('TC {n}개를 원문 그대로 가져왔어요', { n: r.cases }));
+            for (const w of r.warnings) toast(`⚠ ${w}`, true);
+            await onDone();
+          }}
+        >
+          {t('이 열로 TC 가져오기')}
+        </button>
+        <button className="btn" onClick={() => onDone()}>
+          {t('TC 표가 아니에요')}
+        </button>
+        {!ready && <span className="faint">{t('제목이나 단계 열은 꼭 골라 주세요')}</span>}
       </div>
     </div>
   );
@@ -513,9 +705,50 @@ function ReviewStep({ view, setView, onNext }: { view: QaPlanView; setView: (v: 
     if ((await run(p)) === undefined) return;
     setView(await api.qaPlanGet(plan.id));
   };
-  const cases = plan.cases.filter((c) => kind === 'all' || c.kind === kind);
+  const cases = plan.cases.filter((c) => (kind === 'all' || c.kind === kind) && !c.suggested);
+  const suggested = plan.cases.filter((c) => (kind === 'all' || c.kind === kind) && c.suggested);
   const selectable = cases.filter((c) => !c.danger).map((c) => c.id);
   const selected = plan.cases.filter((c) => c.selected).length;
+  // 갈래별로 묶는다. 갈래가 하나뿐이면 묶음 머리를 그리지 않는다 (예전 계획은 지금처럼 보인다)
+  const groups = TRACKS.map((tr) => ({ track: tr, cases: cases.filter((c) => trackOf(c) === tr) })).filter((g) => g.cases.length);
+  const grouped = groups.length > 1 || groups.some((g) => g.track === 'tc');
+  const accept = (ids: string[]) =>
+    apply(
+      (async () => {
+        let last: unknown;
+        for (const id of ids) {
+          const c = plan.cases.find((x) => x.id === id);
+          last = await api.qaCaseUpdate(plan.id, id, { suggested: false, selected: !c?.danger });
+        }
+        return last;
+      })(),
+    );
+  const row = (c: QaCase, suggest = false) => (
+    <CaseRow
+      key={c.id}
+      c={c}
+      open={open === c.id}
+      locked={locked}
+      onToggle={() => setOpen(open === c.id ? null : c.id)}
+      onSelect={(on) => apply(api.qaCaseUpdate(plan.id, c.id, { selected: on }))}
+      onAccept={suggest ? () => accept([c.id]) : undefined}
+      onSave={(patch) => apply(api.qaCaseUpdate(plan.id, c.id, patch))}
+      onAllow={(allow) => apply(api.qaCaseAllow(plan.id, c.id, allow, allow ? c : undefined))}
+    />
+  );
+  const caseHead = (suggest = false) => (
+    <thead>
+      <tr>
+        <th style={{ width: suggest ? 56 : 28 }} />
+        <th style={{ width: 70 }}>{t('번호')}</th>
+        <th style={{ width: 54 }}>{t('종류')}</th>
+        <th style={{ width: 40 }}>{t('우선')}</th>
+        <th>{t('제목')}</th>
+        <th style={{ width: 110 }}>{t('요구사항')}</th>
+        <th style={{ width: 150 }}>{t('표시')}</th>
+      </tr>
+    </thead>
+  );
 
   if (!plan.cases.length)
     return (
@@ -529,7 +762,7 @@ function ReviewStep({ view, setView, onNext }: { view: QaPlanView; setView: (v: 
   return (
     <div className="qa-scroll">
       {locked && <div className="qa-banner">{t('이 계획으로 작업이 돌고 있어 고치기를 잠갔습니다.')}</div>}
-      {(review.length > 0 || coverage.uncovered.length > 0 || coverage.unselected.length > 0 || coverage.missingKinds.length > 0) && (
+      {(review.length > 0 || coverage.uncovered.length > 0 || coverage.unselected.length > 0 || coverage.missingKinds.length > 0 || suggested.length > 0) && (
         <section className="rv-attn">
           <b>{t('확인할 것')}</b>
           <ul style={{ margin: 0, paddingLeft: 18 }}>
@@ -541,6 +774,14 @@ function ReviewStep({ view, setView, onNext }: { view: QaPlanView; setView: (v: 
                 — {r.reasons.map((x) => t(REVIEW_LABEL[x])).join(' / ')}
               </li>
             ))}
+            {suggested.length > 0 && (
+              <li>
+                <button className="rv-link" onClick={() => document.getElementById('qa-suggest')?.scrollIntoView({ block: 'start' })}>
+                  {t('추가 제안 {n}개', { n: suggested.length })}
+                </button>{' '}
+                — {t('TC 문서에 없는 TC 예요. 넣을 것만 골라 주세요')}
+              </li>
+            )}
             {coverage.uncovered.length > 0 && <li>{t('TC 가 없는 요구사항: {ids}', { ids: coverage.uncovered.join(', ') })}</li>}
             {coverage.unselected.length > 0 && <li>{t('고른 TC 가 없는 요구사항: {ids}', { ids: coverage.unselected.join(', ') })}</li>}
             {coverage.missingKinds.length > 0 && (
@@ -591,6 +832,9 @@ function ReviewStep({ view, setView, onNext }: { view: QaPlanView; setView: (v: 
                           </button>
                         </span>
                       ))}
+                  {grouped && r.tracks?.length > 0 && (
+                    <div className="faint qa-sans">{r.tracks.map((x) => t(TRACK_LABEL[x])).join(', ')}</div>
+                  )}
                 </td>
               </tr>
             ))}
@@ -635,33 +879,69 @@ function ReviewStep({ view, setView, onNext }: { view: QaPlanView; setView: (v: 
           </button>
         </div>
         <table className="qa-table qa-cases" style={{ marginTop: 8 }}>
-          <thead>
-            <tr>
-              <th style={{ width: 28 }} />
-              <th style={{ width: 70 }}>{t('번호')}</th>
-              <th style={{ width: 54 }}>{t('종류')}</th>
-              <th style={{ width: 40 }}>{t('우선')}</th>
-              <th>{t('제목')}</th>
-              <th style={{ width: 110 }}>{t('요구사항')}</th>
-              <th style={{ width: 150 }}>{t('표시')}</th>
-            </tr>
-          </thead>
-          <tbody>
-            {cases.map((c) => (
-              <CaseRow
-                key={c.id}
-                c={c}
-                open={open === c.id}
-                locked={locked}
-                onToggle={() => setOpen(open === c.id ? null : c.id)}
-                onSelect={(on) => apply(api.qaCaseUpdate(plan.id, c.id, { selected: on }))}
-                onSave={(patch) => apply(api.qaCaseUpdate(plan.id, c.id, patch))}
-                onAllow={(allow) => apply(api.qaCaseAllow(plan.id, c.id, allow, allow ? c : undefined))}
-              />
-            ))}
-          </tbody>
+          {caseHead()}
+          {grouped ? (
+            groups.map((g) => {
+              const on = g.cases.filter((c) => c.selected).length;
+              const pick = g.cases.filter((c) => !c.danger).map((c) => c.id);
+              return (
+                <tbody key={g.track}>
+                  <tr className="qa-group">
+                    <td colSpan={7}>
+                      <div className="qa-row">
+                        <b>{t(TRACK_LABEL[g.track])}</b>
+                        <span className="faint">
+                          {t('{n}개 · 고름 {k}개', { n: g.cases.length, k: on })} ({t(TRACK_HINT[g.track])})
+                        </span>
+                        <div className="spacer" />
+                        <button className="btn sm" disabled={locked || !pick.length} onClick={() => apply(api.qaSelect(plan.id, pick, true))}>
+                          {t('이 갈래 고르기')}
+                        </button>
+                        <button
+                          className="btn sm"
+                          disabled={locked || !on}
+                          onClick={() =>
+                            apply(
+                              api.qaSelect(
+                                plan.id,
+                                g.cases.map((c) => c.id),
+                                false,
+                              ),
+                            )
+                          }
+                        >
+                          {t('이 갈래 빼기')}
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                  {g.cases.map((c) => row(c))}
+                </tbody>
+              );
+            })
+          ) : (
+            <tbody>{cases.map((c) => row(c))}</tbody>
+          )}
         </table>
       </div>
+      {suggested.length > 0 && (
+        <div className="card qa-suggest" id="qa-suggest">
+          <div className="qa-row">
+            <b>{t('추가 제안 {n}개', { n: suggested.length })}</b>
+            <div className="spacer" />
+            <button className="btn sm" disabled={locked} onClick={() => accept(suggested.map((c) => c.id))}>
+              {t('모두 넣기')}
+            </button>
+          </div>
+          <p className="faint" style={{ margin: '4px 0 0' }}>
+            {t('TC 문서가 덮지 못한 요구사항에 에이전트가 더 제안한 TC 예요. 넣기 전까지는 실행하지 않습니다.')}
+          </p>
+          <table className="qa-table qa-cases" style={{ marginTop: 8 }}>
+            {caseHead(true)}
+            <tbody>{suggested.map((c) => row(c, true))}</tbody>
+          </table>
+        </div>
+      )}
       <div className="qa-row">
         <div className="spacer" />
         <button className="btn primary" disabled={!selected} onClick={onNext}>
@@ -678,6 +958,7 @@ function CaseRow({
   locked,
   onToggle,
   onSelect,
+  onAccept,
   onSave,
   onAllow,
 }: {
@@ -686,6 +967,8 @@ function CaseRow({
   locked: boolean;
   onToggle: () => void;
   onSelect: (on: boolean) => void;
+  /** 추가 제안이면 체크 상자 대신 "넣기" (#129) */
+  onAccept?: () => void;
   onSave: (patch: Partial<QaCase>) => void;
   onAllow: (allow: boolean) => void;
 }) {
@@ -694,13 +977,19 @@ function CaseRow({
     <>
       <tr className={`qa-case ${open ? 'open' : ''} ${c.review?.length ? 'qa-warn' : ''}`} onClick={onToggle}>
         <td onClick={(e) => e.stopPropagation()}>
-          <input
-            type="checkbox"
-            checked={!!c.selected}
-            disabled={locked}
-            onChange={(e) => onSelect(e.target.checked)}
-            aria-label={t('{id} 고르기', { id: c.id })}
-          />
+          {onAccept ? (
+            <button className="btn sm" disabled={locked} onClick={onAccept} title={t('{id} 를 계획에 넣고 고릅니다', { id: c.id })}>
+              {t('넣기')}
+            </button>
+          ) : (
+            <input
+              type="checkbox"
+              checked={!!c.selected}
+              disabled={locked}
+              onChange={(e) => onSelect(e.target.checked)}
+              aria-label={t('{id} 고르기', { id: c.id })}
+            />
+          )}
         </td>
         <td className="mono">{c.id}</td>
         <td>{t(KIND_LABEL[c.kind])}</td>
@@ -974,6 +1263,7 @@ function RunStep({ view }: { view: QaPlanView }) {
   const manual = ready.filter((c) => !c.script && c.automatable === 'manual');
   const agent = ready.filter((c) => !c.script && c.automatable !== 'manual');
   const armed = ready.filter((c) => c.danger && c.allowDanger);
+  const selTracks = TRACKS.map((tr) => [tr, sel.filter((c) => trackOf(c) === tr).length] as const).filter(([, n]) => n);
 
   const start = async () => {
     setAsking(false);
@@ -1013,6 +1303,11 @@ function RunStep({ view }: { view: QaPlanView }) {
             </span>
           )}
         </div>
+        {(selTracks.length > 1 || selTracks.some(([tr]) => tr === 'tc')) && (
+          <div className="faint" style={{ marginTop: 6 }}>
+            {t('갈래')}: {selTracks.map(([tr, n]) => `${t(TRACK_LABEL[tr])} ${n}`).join(', ')}
+          </div>
+        )}
         <div className="qa-row" style={{ marginTop: 10 }}>
           <label className="chk">
             <input type="checkbox" checked={recheck} disabled={busy} onChange={(e) => setRecheck(e.target.checked)} />
@@ -1153,6 +1448,8 @@ function RunStep({ view }: { view: QaPlanView }) {
           </div>
         ) : (
           <RunResult
+            // 회차를 바꾸면 갈래 거르기도 처음으로 (새 회차에 없는 갈래로 걸린 채 남지 않게)
+            key={result.run.id}
             view={view}
             result={result}
             // 보고 있는 회차가 지금 도는 회차일 때만 진행 중인 TC 를 표에 표시한다 (#97)
@@ -1212,9 +1509,18 @@ function RunResult({
   const c = summary.counts;
   const reqs = summary.requirements;
   const [onlyBad, setOnlyBad] = useState(false);
+  const [track, setTrack] = useState<'all' | Track>('all');
+  // 갈래별 개수 (#129). 옛 회차 요약(byTrack 없음)은 갈래를 그리지 않는다
+  const byTrack = TRACKS.filter((tr) => summary.byTrack?.[tr]).map((tr) => [tr, summary.byTrack![tr]!] as const);
+  const multi = byTrack.length > 1 || byTrack.some(([tr]) => tr === 'tc');
   const rows = useMemo(
-    () => summary.rows.filter((r) => !onlyBad || r.status === 'fail' || r.status === 'blocked' || r.case.id === running?.case),
-    [summary.rows, onlyBad, running?.case],
+    () =>
+      summary.rows.filter(
+        (r) =>
+          (track === 'all' || trackOf(r.case) === track) &&
+          (!onlyBad || r.status === 'fail' || r.status === 'blocked' || r.case.id === running?.case),
+      ),
+    [summary.rows, onlyBad, track, running?.case],
   );
   return (
     <div style={{ display: 'grid', gap: 10, marginTop: 10 }}>
@@ -1229,6 +1535,23 @@ function RunResult({
           {t('요구사항 {n}개 중 통과 {p}', { n: reqs.length, p: reqs.filter((r) => r.status === 'pass').length })}
         </span>
       </div>
+      {multi && (
+        <div className="qa-tracks">
+          {byTrack.map(([tr, b]) => (
+            <button
+              key={tr}
+              className={`qa-track ${track === tr ? 'on' : ''}`}
+              onClick={() => setTrack(track === tr ? 'all' : tr)}
+              title={t('이 갈래만 보기')}
+            >
+              <b>{t(TRACK_LABEL[tr])}</b>
+              <span>{t('통과 {p}/{n}', { p: b.pass, n: b.total })}</span>
+              {b.fail + b.blocked > 0 && <span className="v-fail">{t('실패·막힘 {n}', { n: b.fail + b.blocked })}</span>}
+              {b['not-run'] > 0 && <span className="faint">{t('안 돌림 {n}', { n: b['not-run'] })}</span>}
+            </button>
+          ))}
+        </div>
+      )}
       {reqs.length > 0 && (
         <details>
           <summary className="muted">{t('요구사항별 결과')}</summary>
@@ -1256,6 +1579,16 @@ function RunResult({
       )}
       <div className="qa-row">
         <b>{t('TC 별 결과')}</b>
+        {multi && (
+          <select className="input" value={track} onChange={(e) => setTrack(e.target.value as typeof track)}>
+            <option value="all">{t('모든 갈래')}</option>
+            {byTrack.map(([tr]) => (
+              <option key={tr} value={tr}>
+                {t(TRACK_LABEL[tr])}
+              </option>
+            ))}
+          </select>
+        )}
         <div className="spacer" />
         <label className="chk">
           <input type="checkbox" checked={onlyBad} onChange={(e) => setOnlyBad(e.target.checked)} />
@@ -1266,6 +1599,7 @@ function RunResult({
         <thead>
           <tr>
             <th style={{ width: 70 }}>{t('번호')}</th>
+            {multi && <th style={{ width: 96 }}>{t('갈래')}</th>}
             <th style={{ width: '24%' }}>{t('제목')}</th>
             <th style={{ width: 70 }}>{t('결과')}</th>
             <th style={{ width: 80 }}>{t('방식')}</th>
@@ -1280,6 +1614,7 @@ function RunResult({
             return (
               <tr key={r.case.id} className={live ? 'qa-now' : undefined}>
                 <td className="mono">{r.case.id}</td>
+                {multi && <td className="faint">{t(TRACK_LABEL[trackOf(r.case)])}</td>}
                 <td className="qa-wrap">{r.case.title}</td>
                 <td>
                   {live ? (
