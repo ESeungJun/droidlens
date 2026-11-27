@@ -33,3 +33,13 @@ test('계획을 바꾸거나 허용을 켜는 도구는 회차 에이전트에 �
   assert.ok(dl.qaRunAllowedTools().every((t) => /^mcp__droidlens__[a-z0-9_]+$/.test(t)));
   assert.equal(dl.qaRunAllowedTools().length, dl.QA_RUN_TOOLS.length);
 });
+
+test('회차 에이전트는 TC 통과 뒤 스크립트를 다시 돌리거나 고치지 않는다 (#148)', async () => {
+  const { readFileSync } = await import('node:fs');
+  const { join } = await import('node:path');
+  for (const n of ['script_run', 'script_write']) assert.ok(dl.QA_RUN_DENIED_TOOLS.includes(n), n);
+  // 에이전트 안내에도 다시 돌리기 단계가 없다
+  const doc = readFileSync(join(import.meta.dirname, '..', '..', '..', 'agents', 'droidlens-verifier.md'), 'utf8');
+  const tcMode = doc.slice(doc.indexOf('## QA 계획의 TC 실행'));
+  assert.ok(!/저장한 스크립트를 한 번 다시 돌린다/.test(tcMode), 'TC 모드에 다시 돌리기 단계가 남아 있다');
+});
