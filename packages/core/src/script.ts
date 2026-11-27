@@ -41,7 +41,7 @@ export {
   type Script,
   type ScriptStep,
 } from './script/schema.js';
-export { describeAssertion, describeStep, selectorLabel } from './script/describe.js';
+export { describeAssertion, describeStep, selectorLabel, stepKeepsScreen } from './script/describe.js';
 export { waitScreenSettled } from './script/common.js';
 export { evaluateAssertion } from './script/assert.js';
 export { volatileChecks, volatileWarning, type VolatileCheck } from './script/volatile.js';
