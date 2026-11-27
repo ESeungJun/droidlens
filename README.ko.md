@@ -95,8 +95,8 @@ dependencyResolutionManagement {
 
 // app/build.gradle.kts — 버전은 DroidLens 앱과 같은 릴리스 태그를 쓴다 (네트워크 목은 v0.10.0 부터)
 dependencies {
-    debugImplementation("com.github.ESeungJun.droidlens:sdk:v0.14.0")
-    releaseImplementation("com.github.ESeungJun.droidlens:sdk-noop:v0.14.0")
+    debugImplementation("com.github.ESeungJun.droidlens:sdk:v0.15.0")
+    releaseImplementation("com.github.ESeungJun.droidlens:sdk-noop:v0.15.0")
 }
 
 // 네트워크 인스펙터 (OkHttp를 쓰는 경우)

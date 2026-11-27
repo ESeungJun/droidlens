@@ -8,7 +8,7 @@ on:
   pull_request:
 
 env:
-  DROIDLENS_VERSION: v0.14.0
+  DROIDLENS_VERSION: v0.15.0
 
 jobs:
   droidlens:
