@@ -73,6 +73,7 @@ public class MainActivity extends Activity {
         root.addView(button("DB에 메모 추가", "btn_db", this::insertNote));
         root.addView(button("Prefs 저장", "btn_prefs", this::savePrefs));
         root.addView(button("웹뷰 화면", "btn_web", () -> startActivity(new android.content.Intent(this, WebActivity.class))));
+        root.addView(button("Compose 화면", "btn_compose", () -> startActivity(new android.content.Intent(this, ComposeActivity.class))));
         root.addView(button("커스텀 이벤트", "btn_event", () -> {
             try {
                 DroidLens.event("button_clicked", new JSONObject().put("screen", "main").put("count", 1));

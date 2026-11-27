@@ -324,7 +324,7 @@ export function structureSignature(root: ViewNode, maxDepth = 6): string {
     const kids = [...new Set(n.children.map((c) => skel(c, base)))].join(',');
     return `${n.className.split('.').pop()}#${n.resourceId.split(':id/')[1] ?? ''}(${kids})`;
   };
-  return createHash('sha1').update(skel(root) + webPages(root, skel) + drawers(root, skel)).digest('hex').slice(0, 12);
+  return createHash('sha1').update(skel(root) + webPages(root, skel) + drawers(root, skel) + composeTrees(root, skel)).digest('hex').slice(0, 12);
 }
 
 /**
@@ -351,6 +351,26 @@ function drawers(root: ViewNode, skel: (n: ViewNode, base: number) => string): s
   return panels.length ? `|drawer:${panels.join('|')}` : '';
 }
 
+/**
+ * Compose 화면의 뼈대 (#126). Compose 는 ComposeView 아래가 이름 없는 View 몇 겹이라, ComposeView 가 화면 틀 몇 겹 아래(깊이 4 언저리)에
+ * 있으면 내용이 maxDepth 에서 잘려 Compose 화면 안에서 무엇이 바뀌어도(ModalNavigationDrawer 를 열어도) 시그니처가 그대로였다.
+ * ComposeView 마다(가장 바깥 것만) 그 아래를 ComposeView 깊이부터 다시 세어 붙인다.
+ * ComposeView 가 없으면 빈 문자열이라 View 로 만든 화면의 시그니처는 바뀌지 않는다
+ */
+function composeTrees(root: ViewNode, skel: (n: ViewNode, base: number) => string): string {
+  const trees: string[] = [];
+  const visit = (n: ViewNode) => {
+    if (isComposeView(n)) {
+      trees.push([...new Set(n.children.map((c) => skel(c, n.depth)))].join(','));
+      return;
+    }
+    for (const c of n.children) visit(c);
+  };
+  visit(root);
+  return trees.length ? `|compose:${trees.join('|')}` : '';
+}
+
+const isComposeView = (n: ViewNode) => /(^|\.)(Android)?ComposeView$/.test(n.className);
 const isWebView = (n: ViewNode) => n.className.endsWith('WebView');
 const area = ({ bounds: [l, t, r, b] }: ViewNode) => Math.max(0, r - l) * Math.max(0, b - t);
 
@@ -396,7 +416,7 @@ export function screenSignature(root: ViewNode, maxDepth = 6): string {
   };
   walkSelected(root, false);
   const extra = deepSelected.size ? `|${[...deepSelected].sort().join(',')}` : '';
-  return createHash('sha1').update(skel(root) + extra + webPages(root, skel) + drawers(root, skel)).digest('hex').slice(0, 12);
+  return createHash('sha1').update(skel(root) + extra + webPages(root, skel) + drawers(root, skel) + composeTrees(root, skel)).digest('hex').slice(0, 12);
 }
 
 /** 깊이별 노드 수 등 뷰 계층 통계 (오버드로/과도한 중첩 진단용) */

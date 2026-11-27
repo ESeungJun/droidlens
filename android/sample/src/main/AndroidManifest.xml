@@ -9,6 +9,7 @@
             </intent-filter>
         </activity>
         <activity android:name=".WebActivity" android:exported="true" />
+        <activity android:name=".ComposeActivity" android:exported="true" android:theme="@android:style/Theme.Material.Light.NoActionBar" />
         <activity android:name=".DesignActivity" android:exported="true" android:theme="@android:style/Theme.Material.Light.NoActionBar" />
     </application>
 </manifest>
