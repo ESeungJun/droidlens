@@ -41,6 +41,9 @@ test('tap 전후 화면을 연결로 잇고, 누른 요소 글자를 붙인다',
   p.note({ type: 'tap', x: 100, y: 150 }, 1);
   const e = await p.see(snap(pkg, 'edit', EDIT(pkg)), 1);
   assert.ok(e);
+  // 도착 화면은 다음 행동을 적을 때나 TC 가 끝날 때 잇는다 (#147: 그 사이 더 나중에 본 화면이 도착 화면)
+  assert.equal(g.edges.size, 0);
+  await p.finish(undefined, undefined);
   const edges = [...g.edges.values()];
   assert.equal(edges.length, 1);
   assert.equal(edges[0].from, h.id);
@@ -215,4 +218,47 @@ test('파일에서 읽은 연결의 TC 도 형식이 틀리면 버린다', async
   writeFileSync(join(dir, 'graph.json'), JSON.stringify({ packageName: pkg, createdAt: t0, updatedAt: t0, nodes: [], edges: [edge] }));
   const g = await ScreenGraph.open(pkg);
   assert.deepEqual(g.edges.get(edge.id).tcs.map((x) => x.case), ['TC-001']);
+});
+
+// #147: 실기기에서 "탭 → wait_for → 단계 기록" 순서로는 연결이 생기지 않았고, 전환 중인 같은 Activity 화면으로 엉뚱한 연결이 생겼다
+test('탭 뒤 여러 번 본 화면 중 마지막 화면을 도착 화면으로 잇는다 (전환 중인 같은 Activity 화면은 잇지 않는다)', async () => {
+  const pkg = 'com.example.k';
+  const g = await ScreenGraph.open(pkg);
+  const p = new TcPath(g);
+  const h = await p.see(snap(pkg, 'home', HOME(pkg)), 0);
+  p.note({ type: 'tap', x: 100, y: 150 }, 1);
+  // 탭 직후: 아직 홈 Activity 인데 눌린 상태라 서명이 다른 화면
+  const pressed = { ...HOME(pkg), buttons: [{ id: 'btn_new', text: '새 메모', bounds: [0, 100, 500, 200] }] };
+  await p.see(snap(pkg, 'home-pressed', pressed), 1);
+  // 대기 뒤 도착한 화면
+  const e = await p.see(snap(pkg, 'edit', EDIT(pkg)), 1);
+  await p.see(snap(pkg, 'edit', EDIT(pkg)), 1);
+  await p.finish(TC, 'pass');
+  const edges = [...g.edges.values()];
+  assert.equal(edges.length, 1, '연결은 홈 → 편집 하나');
+  assert.equal(edges[0].from, h.id);
+  assert.equal(edges[0].to, e.id);
+  assert.equal(edges[0].tcs[0].case, 'TC-001');
+});
+
+test('다음 탭 직전에 본 화면이 앞 탭의 도착 화면이 된다', async () => {
+  const pkg = 'com.example.l';
+  const g = await ScreenGraph.open(pkg);
+  const p = new TcPath(g);
+  const h = await p.see(snap(pkg, 'home', HOME(pkg)), 0);
+  p.note({ type: 'tap', x: 100, y: 150 }, 1);
+  const e = await p.see(snap(pkg, 'edit', EDIT(pkg)), 1);
+  p.note({ type: 'tap', x: 10, y: 400 }, 2);
+  const d = await p.see(snap(pkg, 'detail', DETAIL(pkg)), 2);
+  await p.finish(TC, 'pass');
+  const pairs = [...g.edges.values()].map((x) => `${x.from}>${x.to}`).sort();
+  assert.deepEqual(pairs, [`${h.id}>${e.id}`, `${e.id}>${d.id}`].sort());
+});
+
+test('대기·검사 단계는 화면을 바꾸지 않는 조작으로 본다', async () => {
+  const { stepKeepsScreen } = await import('../dist/script.js');
+  for (const s of [{ wait: { text: 'a' } }, { assert: { visible: { text: 'a' } } }, { screenshot: null }, { matchScreenshot: 'x' }, { sleep: 100 }])
+    assert.equal(stepKeepsScreen(s), true, JSON.stringify(s));
+  for (const s of [{ tap: { text: 'a' } }, { tapAt: { x: 1, y: 1 } }, { key: 'back' }, { launch: null }, { swipe: 'up' }, { type: { text: 'a' } }, { deeplink: 'x://y' }, { startup: null }])
+    assert.equal(stepKeepsScreen(s), false, JSON.stringify(s));
 });

@@ -272,9 +272,12 @@ export const recorder: {
   seq: number;
 } = { active: false, steps: [], mocks: new Map(), actions: [], seq: 0 };
 
-/** 시나리오 진행 중이면 조작 로그를 남긴다 (스크립트로 녹화되지 않는 조작도 포함: 좌표 스와이프·앱 종료·목·Prefs 변경 등) */
-export function logAction(text: string): void {
-  recorder.seq++;
+/**
+ * 시나리오 진행 중이면 조작 로그를 남긴다 (스크립트로 녹화되지 않는 조작도 포함: 좌표 스와이프·앱 종료·목·Prefs 변경 등).
+ * keepsScreen: 대기·검사처럼 화면을 바꾸지 않는 조작. 조작 번호를 올리지 않아 탭과 그 도착 화면 사이를 끊지 않는다 (#147)
+ */
+export function logAction(text: string, opts: { keepsScreen?: boolean } = {}): void {
+  if (!opts.keepsScreen) recorder.seq++;
   if (recorder.active) recorder.actions.push({ at: Date.now(), text });
 }
 
@@ -303,7 +306,7 @@ export function pathNote(action: dl.TcPathAction): void {
 export function recordStep(step: dl.ScriptStep, label?: string): void {
   if (!recorder.active) return;
   recorder.steps.push(step);
-  logAction(label ?? dl.describeStep(step));
+  logAction(label ?? dl.describeStep(step), { keepsScreen: dl.stepKeepsScreen(step) });
 }
 
 /** 요소를 사람이 읽는 짧은 말로: "상점정보/후기" (#tab_store) */
